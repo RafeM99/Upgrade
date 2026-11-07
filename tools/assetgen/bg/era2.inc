@@ -158,11 +158,12 @@ static void e2_bush(Scene& sc, float x, float y, float w, int seed, int hue, boo
     }
 }
 
-// A stepped cloud in 2-px blocks, each one its own shape (puff count, sizes and spread from
-// seed). White top, warm peach underside in the morning light.
+// A cloud drawn at the stage's one pixel density (1 px), each one its own shape (puff count,
+// sizes and spread from seed). White top, a warm peach underside in the morning light, and a
+// lavender shadow line along the flat bottom.
 static void e2_cloud(Scene& sc, float cx, float cy, float size, int seed, float stretch)
 {
-    const int b = 2;
+    const int b = 1;
     struct P { float x, y, r; };
     std::vector<P> puffs;
     int n = 2 + (int)(rnd(seed, 1, 91) * 4);
@@ -170,7 +171,8 @@ static void e2_cloud(Scene& sc, float cx, float cy, float size, int seed, float 
     int big = (int)(rnd(seed, 2, 91) * n);
     for (int i = 0; i < n; ++i) {
         float t = n == 1 ? 0 : (float)i / (n - 1) * 2 - 1;
-        float r = size * (0.45f + 0.35f * rnd(seed, 10 + i, 91)) * (i == big ? 1.4f : 1.0f);
+        // puffs shrink toward the ends, so a long cloud tapers instead of reading as a row of balls
+        float r = size * (0.45f + 0.35f * rnd(seed, 10 + i, 91)) * (i == big ? 1.4f : 1.0f) * (1.0f - 0.4f * std::fabs(t));
         puffs.push_back({cx + t * span + (rnd(seed, 20 + i, 91) - 0.5f) * size * 0.5f, cy + size * 0.35f - r * 0.75f, r});
     }
     float bottom = cy + size * 0.4f;
@@ -186,8 +188,9 @@ static void e2_cloud(Scene& sc, float cx, float cy, float size, int seed, float 
     for (int gy = gy0; gy <= gy1; ++gy)
         for (int gx = gx0; gx <= gx1; ++gx) {
             if (!in(gx, gy)) continue;
-            bool under = !in(gx, gy + 1) || (!in(gx, gy + 2) && (gx + seed) % 3 != 0);
-            e2_block(sc, gx * b, gy * b, b, under ? e2::C_PEACH : e2::C_WHITE);
+            bool base = !in(gx, gy + 1) && (gy + 1) * b > bottom - 1;
+            bool under = !in(gx, gy + 2) || !in(gx, gy + 3) || (!in(gx, gy + 4) && (gx + gy) % 2 == 0);
+            e2_block(sc, gx * b, gy * b, b, base ? e2::C_LAVENDER : under ? e2::C_PEACH : e2::C_WHITE);
         }
 }
 
@@ -212,50 +215,66 @@ static void e2_text(Scene& sc, int x, int y, const char* t, uint32_t c)
 
 static void e2_rect(Scene& sc, int x, int y, int w, int h, uint32_t c) { sc.rect((float)x, (float)y, (float)w, (float)h, hex(c)); }
 
-// Gran's house on the school road: peach walls, red stepped roof, chimney, flower box.
+// Gran's house on the school road: white rendered walls with a lilac-grey shaded end, a red
+// tiled roof shaded plum, a chimney, a green door and a flower box. Shadows lean purple.
 static void e2_granHouse(Scene& sc, int x, int g)
 {
     using namespace e2;
     int w = 52, h = 30;
-    e2_rect(sc, x, g - h, w, h, C_PEACH);
-    e2_rect(sc, x + w - 10, g - h, 10, h, C_ORANGE);                 // shaded side wall
+    e2_rect(sc, x, g - h, w, h, C_WHITE);
+    e2_rect(sc, x + w - 10, g - h, 10, h, C_GREY);                   // shaded end wall
+    e2_rect(sc, x, g - h, w - 10, 2, C_GREY);                        // shadow under the eaves
+    e2_rect(sc, x, g - 3, w - 10, 3, C_LAVENDER);                    // plinth
+    e2_rect(sc, x + w - 10, g - 3, 10, 3, C_SLATE);
     for (int r = 0; r < 12; ++r) {                                  // stepped gable roof
         int inset = r * 2;
         e2_rect(sc, x - 4 + inset, g - h - 2 * r - 2, w + 8 - 2 * inset, 2, (r % 3 == 2) ? C_PLUM : C_RED);
         e2_rect(sc, x + w / 2 + 2, g - h - 2 * r - 2, std::max(0, w / 2 + 2 - inset), 2, C_PLUM);
     }
-    e2_rect(sc, x + 36, g - h - 22, 6, 12, C_BROWN);                  // chimney
+    e2_rect(sc, x + 36, g - h - 22, 6, 12, C_BROWN);                 // chimney
+    e2_rect(sc, x + 39, g - h - 22, 3, 12, C_PLUM);
     e2_rect(sc, x + 35, g - h - 24, 8, 2, C_SLATE);
-    for (int k = 0; k < 3; ++k) e2_rect(sc, x + 38 + k, g - h - 28 - k * 3, 2, 2, C_GREY);   // smoke
-    e2_rect(sc, x + 6, g - 22, 12, 10, C_WHITE);                      // windows with a cross frame
+    for (int k = 0; k < 3; ++k) e2_rect(sc, x + 38 + k, g - h - 28 - k * 3, 2, 2, C_WHITE);   // smoke
+    e2_rect(sc, x + 6, g - 22, 12, 10, C_SLATE);                     // window: frame, glass, glint
     e2_rect(sc, x + 7, g - 21, 10, 8, C_BLUE);
     e2_rect(sc, x + 12, g - 21, 1, 8, C_WHITE); e2_rect(sc, x + 7, g - 17, 10, 1, C_WHITE);
-    e2_rect(sc, x + 7, g - 21, 3, 3, C_WHITE);                        // glint
-    e2_rect(sc, x + 5, g - 12, 14, 3, C_BROWN);                       // flower box
-    for (int k = 0; k < 6; ++k) sc.put(x + 6 + k * 2, g - 13, hex(k % 2 ? C_PINK : C_RED));
-    e2_rect(sc, x + 24, g - 18, 10, 18, C_BROWN);                     // door
-    e2_rect(sc, x + 25, g - 17, 8, 7, C_PLUM);
-    sc.put(x + 31, g - 9, hex(C_YELLOW));
-    e2_rect(sc, x + 22, g - 1, 14, 1, C_GREY);                        // step
+    e2_rect(sc, x + 13, g - 16, 4, 3, C_NAVY);
+    e2_rect(sc, x + 7, g - 21, 2, 2, C_WHITE);
+    e2_rect(sc, x + 5, g - 12, 14, 3, C_BROWN);                      // flower box
+    for (int k = 0; k < 6; ++k) sc.put(x + 6 + k * 2, g - 13, hex(k % 2 ? C_PINK : C_YELLOW));
+    e2_rect(sc, x + 24, g - 18, 10, 18, C_SLATE);                    // door frame and door
+    e2_rect(sc, x + 25, g - 17, 8, 17, C_GREEN);
+    e2_rect(sc, x + 25, g - 17, 1, 17, C_LIME);
+    e2_rect(sc, x + 27, g - 15, 4, 5, C_NAVY);
+    sc.put(x + 31, g - 8, hex(C_YELLOW));
+    e2_rect(sc, x + 22, g - 1, 14, 1, C_GREY);                       // step
 }
 
-// The school: two floors of windows, a clock tower with a bell, a flag, a double door.
+// The school: a long two-storey block in peach render with a lavender shaded end, a slate
+// cornice, a clock tower with a plum roof, a flag and a double door. No brickwork.
 static void e2_school(Scene& sc, int x, int g)
 {
     using namespace e2;
     int w = 120, h = 44;
     e2_rect(sc, x, g - h, w, h, C_PEACH);
-    for (int y = g - h + 3; y < g; y += 4)                          // brick courses
-        for (int bx = x + ((y / 4) % 2) * 3; bx < x + w; bx += 6) sc.put(bx, y, hex(C_ORANGE));
-    e2_rect(sc, x + w - 8, g - h, 8, h, C_ORANGE);
-    e2_rect(sc, x - 3, g - h - 4, w + 6, 4, C_RED);                   // flat roof edge
-    e2_rect(sc, x - 3, g - h - 1, w + 6, 1, C_PLUM);
+    e2_rect(sc, x + w - 8, g - h, 8, h, C_LAVENDER);                 // shaded end
+    e2_rect(sc, x, g - h + 20, w - 8, 1, C_PINK);                    // string course between floors
+    e2_rect(sc, x, g - 5, w - 8, 5, C_LAVENDER);                     // plinth
+    e2_rect(sc, x + w - 8, g - 5, 8, 5, C_SLATE);
+    e2_rect(sc, x - 3, g - h - 4, w + 6, 3, C_SLATE);                // flat roof: cornice and shadow
+    e2_rect(sc, x - 3, g - h - 4, w + 6, 1, C_GREY);
+    e2_rect(sc, x - 3, g - h - 1, w + 6, 1, C_NAVY);
     int tx = x + w / 2 - 12;                                        // clock tower
     e2_rect(sc, tx, g - h - 26, 24, 22, C_PEACH);
-    e2_rect(sc, tx + 18, g - h - 26, 6, 22, C_ORANGE);
-    for (int r = 0; r < 7; ++r) e2_rect(sc, tx - 2 + r * 2, g - h - 28 - r * 2, 28 - r * 4, 2, r % 2 ? C_PLUM : C_RED);
+    e2_rect(sc, tx + 18, g - h - 26, 6, 22, C_LAVENDER);
+    for (int r = 0; r < 7; ++r) {                                   // stepped roof, lit on the left
+        int rx = tx - 2 + r * 2, rw = 28 - r * 4;
+        e2_rect(sc, rx, g - h - 28 - r * 2, rw, 2, C_PLUM);
+        e2_rect(sc, rx, g - h - 28 - r * 2, std::max(1, rw / 3), 2, C_PINK);
+    }
     e2_rect(sc, tx + 5, g - h - 22, 12, 12, C_WHITE);                 // clock face
     e2_rect(sc, tx + 6, g - h - 23, 10, 14, C_WHITE);
+    e2_rect(sc, tx + 15, g - h - 21, 1, 11, C_GREY);
     e2_rect(sc, tx + 10, g - h - 20, 2, 5, C_INK); e2_rect(sc, tx + 11, g - h - 16, 4, 1, C_INK);
     e2_rect(sc, tx + 23, g - h - 52, 1, 24, C_SLATE);                 // flag pole and flag
     e2_rect(sc, tx + 24, g - h - 52, 10, 6, C_RED);
@@ -269,11 +288,15 @@ static void e2_school(Scene& sc, int x, int g)
             e2_rect(sc, wx + 4, wy + 1, 1, 8, C_WHITE);
             e2_rect(sc, wx + 1, wy + 1, 2, 2, C_WHITE);
             e2_rect(sc, wx + 5, wy + 6, 3, 3, C_NAVY);
+            e2_rect(sc, wx, wy + 10, 9, 1, C_LAVENDER);             // sill shadow
         }
     int dx = x + w / 2 - 10;                                        // double door with a porch
-    e2_rect(sc, dx - 3, g - 22, 26, 3, C_RED);
-    e2_rect(sc, dx, g - 19, 20, 19, C_NAVY);
-    e2_rect(sc, dx + 9, g - 19, 2, 19, C_BLUE);
+    e2_rect(sc, dx - 3, g - 23, 26, 3, C_SLATE);
+    e2_rect(sc, dx - 3, g - 23, 26, 1, C_GREY);
+    e2_rect(sc, dx, g - 20, 20, 20, C_NAVY);
+    e2_rect(sc, dx + 9, g - 20, 2, 20, C_BLUE);
+    e2_rect(sc, dx + 2, g - 18, 5, 6, C_BLUE);
+    e2_rect(sc, dx + 13, g - 18, 5, 6, C_BLUE);
     e2_rect(sc, dx - 4, g - 2, 28, 2, C_GREY);
     e2_rect(sc, dx - 2, g - 4, 24, 2, C_GREY);
 }
@@ -293,13 +316,12 @@ bool bgEra2(Scene& sc, int layer)
         int sx = (int)(W * 0.80f), sy = (int)(H * 0.27f);
         for (int y = -10; y <= 10; ++y)
             for (int x = -10; x <= 10; ++x) {
-                int bx = x / 2 * 2, by = y / 2 * 2;
-                float d = std::sqrt((float)(bx * bx + by * by));
-                if (d < 9) sc.put(sx + x, sy + y, hex(d < 6 ? C_WHITE : C_YELLOW));
+                float d = std::sqrt((float)(x * x + y * y));
+                if (d < 8.5f) sc.put(sx + x, sy + y, hex(d < 6.2f ? C_WHITE : C_YELLOW));
             }
         // clouds kept below the top ~13% (the HUD), every one a different shape
-        const float cl[6][4] = {{0.08f, 0.21f, 8, 0.8f}, {0.27f, 0.17f, 5, 2.2f}, {0.45f, 0.26f, 7, 0.3f},
-                                {0.62f, 0.19f, 4, 1.4f}, {0.93f, 0.25f, 6, 0.6f}, {0.36f, 0.33f, 3.5f, 2.8f}};
+        const float cl[6][4] = {{0.08f, 0.24f, 8, 0.8f}, {0.27f, 0.21f, 5, 2.2f}, {0.47f, 0.29f, 7, 0.3f},
+                                {0.63f, 0.22f, 4, 1.4f}, {0.94f, 0.27f, 6, 0.6f}, {0.37f, 0.35f, 3.5f, 2.8f}};
         int ci = 0;
         for (auto& c : cl) e2_cloud(sc, W * c[0], H * c[1], c[2] * sc.s, 17 + 11 * ci++, c[3]);
         const int birds[4][2] = {{180, 40}, {188, 36}, {196, 42}, {420, 34}};
@@ -310,15 +332,16 @@ bool bgEra2(Scene& sc, int layer)
         return true;
     }
     if (layer == 1) {
-        // far mountains: lavender, faces turned to the morning sun catch a warm peach light
-        auto mtop = [&](int x) { int sx = ((x % W) + W) % W / 4 * 4; return (int)(H * 0.47f + ridge((float)sx, W, 5, 9, 4, 2)) / 2 * 2; };
+        // far mountains: lavender, faces turned to the morning sun catch a pale rim of light
+        auto mtop = [&](int x) { int sx = ((x % W) + W) % W; return (int)std::lround(H * 0.47f + ridge((float)sx, W, 5, 9, 4, 1.2f)); };
         for (int x = 0; x < W; ++x) {
             int t1 = mtop(x);
-            bool lit = mtop(x + 8) < mtop(x - 8);   // rising to the right: facing the sun (left)
-            for (int y = t1; y < H; ++y) sc.put(x, y, hex(lit && y < t1 + 6 ? C_PEACH : C_LAVENDER));
+            bool lit = mtop(x + 3) < mtop(x - 3);   // rising to the right: facing the sun (left)
+            // the sunny slopes catch a pale lilac rim; peach would melt into the sky behind
+            for (int y = t1; y < H; ++y) sc.put(x, y, hex(lit && y < t1 + 2 ? C_GREY : C_LAVENDER));
         }
         // nearer hills: slate-purple distance, with clean round woods along the crest
-        auto htop = [&](int x) { int sx = ((x % W) + W) % W / 2 * 2; return (int)(H * 0.6f + ridge((float)sx, W, 2, 6, 3, 1.5f)) / 2 * 2; };
+        auto htop = [&](int x) { int sx = ((x % W) + W) % W; return (int)std::lround(H * 0.6f + ridge((float)sx, W, 2, 6, 3, 1.5f)); };
         for (int x = 0; x < W; ++x)
             for (int y = htop(x); y < H; ++y) sc.put(x, y, hex(C_SLATE));
         for (int i = 0; i < 60; ++i) {
@@ -451,6 +474,17 @@ bool bgEra2(Scene& sc, int layer)
         sc.put(x, g, hex(C_GREEN));
         if (rnd(x / 2, 1, 77) < 0.3f) sc.put(x, g - 1, hex(C_GREEN));
     }
+    // the verge carries on behind the ground tiles: green, with clumps of blue-shadowed grass
+    // and a few lit blades, so the gaps between the tiles never show a flat block
     e2_rect(sc, 0, g + 1, W, H - g - 1, C_GREEN);
+    for (int i = 0; i < 44; ++i) {
+        int cx = (int)(rnd(i, 1, 88) * W), cy = g + 5 + (int)(rnd(i, 2, 88) * (H - g - 8));
+        int cw = 2 + (int)(rnd(i, 3, 88) * 4);
+        for (int k = -cw; k <= cw; ++k) {
+            int bh = 1 + (std::abs(k) < cw / 2 ? 1 : 0) + ((k + i) % 3 == 0 ? 1 : 0);
+            for (int j = 0; j < bh; ++j) sc.put(cx + k, cy - j, hex(C_NAVY));
+            if ((k + i) % 4 == 1) sc.put(cx + k, cy - bh, hex(C_LIME));
+        }
+    }
     return true;
 }
