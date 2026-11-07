@@ -398,7 +398,7 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
         }
 }
 
-const int SUPER[ERA_COUNT] = {1, 2, 2, 4};
+const int SUPER[ERA_COUNT] = {1, 2, 2, 4, 4};   // era 4 is drawn by Era4Art.cpp, not here
 
 // Builds a one-row sheet of `frames` frames, each fw x fh tiles.
 Image makeSheet(int frames, float fw, float fh, bool outline, const std::function<void(Canvas&, int)>& draw)
@@ -1402,7 +1402,8 @@ int generateSprites(const std::string& dir)
         UnloadImage(img);
         ++n;
     };
-    for (int era = 0; era < ERA_COUNT; ++era) {
+    // eras 0..3 only: era 4 ("modern day") art comes from Era4Art.cpp, so it is never overwritten here
+    for (int era = 0; era <= ERA_25D; ++era) {
         g_era = era;
         g_era3Look = era == 3;
         std::string d = eraDir(dir, era);

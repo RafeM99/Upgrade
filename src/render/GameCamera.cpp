@@ -23,17 +23,20 @@ void GameCamera::update(float targetX, float spread, float minLeft, float dt)
 Camera3D GameCamera::camera3D(float& nearPlane, float& farPlane) const
 {
     float s = swing * swing * (3 - 2 * swing);   // ease
+    float m = modern * modern * (3 - 2 * modern);   // ease
     float fov = 1.0f + (40.0f - 1.0f) * s;
-    float halfH = viewH / 2;
+    fov += (30.0f - fov) * m * s;                    // modern: a longer lens, less distortion
+    float vh = viewH * (1.0f - 0.06f * m);           // and a touch closer
+    float halfH = vh / 2;
     float dist = halfH / std::tan(fov * 0.5f * DEG2RAD);
     // bottom of the view stays on the floor: centre y in 3D (y up, floor at 0)
     float cy = halfH + (LEVEL_H - viewH) * 0.0f;
-    if (viewH > LEVEL_H) cy = viewH / 2;
+    if (vh > LEVEL_H) cy = vh / 2;
     else cy = LEVEL_H - halfH + 0.0f;
-    cy -= s * 1.2f;
-    float yaw = -0.30f * s, pitch = 0.22f * s;
+    cy -= s * (1.2f - 0.5f * m);
+    float yaw = -0.30f * s * (1.0f - 0.45f * m), pitch = 0.22f * s * (1.0f - 0.35f * m);
     Camera3D c{};
-    c.target = {x + shakeX - s * 1.5f, cy + shakeY, 0};
+    c.target = {x + shakeX - s * (1.5f - 0.6f * m), cy + shakeY, 0};
     c.position = {c.target.x + std::sin(yaw) * std::cos(pitch) * dist, c.target.y + std::sin(pitch) * dist,
                   std::cos(yaw) * std::cos(pitch) * dist};
     c.up = {0, 1, 0};

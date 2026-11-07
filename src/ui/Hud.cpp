@@ -47,7 +47,7 @@ void memoryBar(Game& g)
 {
     const int era = g.era;
     float k = std::max(0.0f, std::min(1.0f, g.bar / 100.0f));
-    float x = 390, y = 18, w = 500, h = era == 3 ? 26 : 24;
+    float x = 390, y = 18, w = 500, h = era == 3 ? 26 : (era >= 4 ? 14 : 24);
     if (era == 0) {
         DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xc6cbb7));
         DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(0x1e2321));
@@ -67,6 +67,23 @@ void memoryBar(Game& g)
             DrawRectangleGradientH((int)(OX + x * S), (int)(OY + y * S), (int)(w * k * S), (int)(h * S), hexc(0xe8506a), hexc(0xf7d73a));
             DrawRectangleRec(R(x, y + 3, w * k, 5), fade(WHITE, 0.35f));
         }
+    } else if (era >= 4) {
+        // modern day: a slim frosted-glass pill, cool-to-warm fill (the evening sky to the sun)
+        y += 6;
+        DrawRectangleRounded(R(x - 10, y - 9, w + 20, h + 18), 1.0f, 16, fade(hexc(0x0b1020), 0.38f));
+        DrawRectangleRounded(R(x, y, w, h), 1.0f, 16, fade(hexc(0xdfe6ff), 0.16f));
+        if (k > 0.01f) {
+            float fw = std::max(h, w * k);
+            BeginScissorMode((int)(OX + x * S), (int)(OY + (y - 2) * S), (int)(fw * S), (int)((h + 4) * S));
+            DrawRectangleGradientH((int)(OX + x * S), (int)(OY + y * S), (int)(w * S), (int)(h * S), hexc(0x8fb8ff), hexc(0xffd6a0));
+            EndScissorMode();
+            DrawRectangleRounded(R(x, y, fw, h), 1.0f, 16, fade(hexc(0xffe8c8), 0.25f));
+            DrawRectangleRounded(R(x + 3, y + 2, std::max(0.0f, fw - 6), h * 0.3f), 1.0f, 8, fade(WHITE, 0.35f));
+            float pulse = 0.5f + 0.5f * std::sin(g.time * 2.4f);
+            DrawCircleGradient((int)(OX + (x + fw) * S), (int)(OY + (y + h / 2) * S), (10 + 4 * pulse) * S,
+                               fade(hexc(0xfff1dc), 0.55f), fade(hexc(0xffd6a0), 0.0f));
+        }
+        DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 16, 1.2f * S, fade(WHITE, 0.45f));
     } else {
         DrawRectangleRounded(R(x - 8, y - 8, w + 16, h + 16), 1.0f, 12, fade(hexc(0x100818), 0.65f));
         DrawRectangleRounded(R(x, y, w, h), 1.0f, 12, fade(hexc(0x3a2a4a), 0.9f));
@@ -92,7 +109,7 @@ void playerPanel(Game& g, int p)
     const Player& pl = g.players[p];
     float x = p == 0 ? 20 : 1280 - 290, y = 14, w = 270, h = 74;
     Color col = g.era == 0 ? hexc(0xc6cbb7) : P_COL[p];
-    Color bg = fade(hexc(0x0f0d1a), g.era == 3 ? 0.55f : 0.8f);
+    Color bg = fade(hexc(0x0f0d1a), g.era >= 4 ? 0.4f : (g.era == 3 ? 0.55f : 0.8f));
     if (g.era >= 2) DrawRectangleRounded(R(x, y, w, h), 0.25f, 6, bg);
     else DrawRectangleRec(R(x, y, w, h), bg);
     DrawRectangleRec(R(x, y, 8, h), col);

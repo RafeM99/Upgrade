@@ -5,7 +5,7 @@
 // Test options:
 //   --autoplay        bots play (P1 only, add --two for both players)
 //   --two             start with Player 2 joined
-//   --era N           start in era N (0..3)
+//   --era N           start in era N (0..4; 4 = modern day), also --start-era N
 //   --fill            the Memory Bar fills fast (to see every era quickly)
 //   --frames N        quit after N frames      --shot FILE   save the last frame
 //   --shot-every N PREFIX  save a frame every N frames as PREFIX_00000.png
@@ -25,7 +25,7 @@ int main(int argc, char** argv)
         if (is("--autoplay")) o.autoplay = true;
         else if (is("--two")) o.twoPlayers = true;
         else if (is("--fill")) o.fill = true;
-        else if (is("--era")) o.startEra = std::atoi(next());
+        else if (is("--era") || is("--start-era")) o.startEra = std::atoi(next());
         else if (is("--frames")) o.maxFrames = std::atoi(next());
         else if (is("--shot")) o.shot = next();
         else if (is("--shot-every")) { o.shotEvery = std::atoi(next()); o.shotPrefix = next(); }
