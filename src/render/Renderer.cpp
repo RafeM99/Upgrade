@@ -199,6 +199,13 @@ void Renderer::shutdown()
 Rectangle Renderer::screenRect() const
 {
     float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+    int e = std::max(0, std::min(LAST_ERA, renderEra_));
+    if (lowRes(e) && rtW_[e] > 0) {
+        // pixel stages: scale the native buffer by a whole number, so every pixel is the same size
+        int k = std::max(1, (int)std::min(sw / rtW_[e], sh / rtH_[e]));
+        float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
+        return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
+    }
     float w = sw, h = sw * 9.0f / 16.0f;
     if (h > sh) { h = sh; w = sh * 16.0f / 9.0f; }
     return Rectangle{(sw - w) / 2, (sh - h) / 2, w, h};
@@ -215,6 +222,7 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
         float tw = t.width * scale;
         float off = std::fmod(camX * pxPerTile * parallax[l], tw);
         if (off < 0) off += tw;
+        off = std::floor(off);   // whole pixels only
         for (float x = -off; x < w; x += tw)
             DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, tw + 1, (float)h}, {0, 0}, 0,
                            Color{255, 255, 255, (unsigned char)(alpha * 255)});
@@ -282,6 +290,14 @@ void Renderer::drawEra(Game& g, int era, float swing)
     g.cam.swing = swing;
     Camera3D c3 = g.cam.camera3D(nearP, farP);
     g.cam.swing = savedSwing;
+    if (lowRes(era) && c3.projection == CAMERA_ORTHOGRAPHIC) {
+        // snap the camera to the native pixel grid, so sprites never land between pixels
+        float tp = (float)TILE_PX[era];
+        c3.target.x = std::round(c3.target.x * tp) / tp;
+        c3.target.y = std::round(c3.target.y * tp) / tp;
+        c3.position.x = c3.target.x;
+        c3.position.y = c3.target.y;
+    }
     rlDrawRenderBatchActive();
     rlSetClipPlanes(nearP, farP);
     BeginMode3D(c3);

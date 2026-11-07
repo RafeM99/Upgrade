@@ -109,6 +109,8 @@ void Game::startRun()
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();
     cam.x = 12;
+    cam.top = LEVEL_H - art::VIEW_TILES_H;
+    cam.pixelLock = art::lowRes(era);
     cam.swing = art::SWING[era];
     wallX = -10;
     bestX = players[0].x;
@@ -291,7 +293,8 @@ void Game::updatePlaying(float dt)
             float k = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
             cam.swing = art::SWING[transFromEra] + (art::SWING[era] - art::SWING[transFromEra]) * k;
         }
-        cam.update(cam.x, 0, wallX - 3, dt);
+        cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
+        cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
         if (transT >= transLen) { transActive = false; cam.swing = art::SWING[era]; }
         return;
     }
@@ -574,7 +577,15 @@ void Game::updatePlaying(float dt)
     for (auto& pl : players)
         if (pl.joined) { minX = std::min(minX, pl.cx()); maxX = std::max(maxX, pl.cx()); }
     float target = (minX + maxX) / 2 + 2.0f;
-    cam.update(target, maxX - minX, wallX - 3.0f, dt);
+    // up and down: keep the highest player (and the boss) comfortably inside the view
+    float highest = 1e9f;
+    for (auto& pl : players)
+        if (pl.joined) highest = std::min(highest, pl.y);
+    float wantTop = highest - 3.0f;
+    if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
+    cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
+    // never show past the start of the level: no empty strip at the left edge
+    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt);
 
     // ---- endless level: keep ~3 chunks ahead, drop what is far behind the wall
     unsigned mask = 0;
