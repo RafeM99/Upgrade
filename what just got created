@@ -104,3 +104,5 @@ Still rough:
 The 1-bit and 8-bit backgrounds only got a quick pass.
 The 16-bit stage still has a thin bar top and bottom.
 I couldn’t confirm in a screenshot that the 3D lamp no longer pokes through the platform.
+the black borders betweeen the 3d models is too jarring get rid of the black borders in era 6
+
