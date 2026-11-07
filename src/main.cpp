@@ -33,6 +33,7 @@ int main(int argc, char** argv)
         else if (is("--ending")) o.ending = true;
         else if (is("--play")) o.startOnTitle = false;
         else if (is("--no-story")) o.story = false;
+        else if (is("--difficulty")) o.difficulty = difficultyFromString(next(), 0);
         else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
     }
     Game game;

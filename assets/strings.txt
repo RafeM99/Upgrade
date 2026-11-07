@@ -62,6 +62,27 @@ memory_lost_sub_solo = You faded. The memory slips a little further away.
 
 boss_hint = NOW! Jump on it!
 boss_hint_short = Jump on it when it lands!
+# Each boss's power over time: the warning shown first, then the name when it lands.
+power_warn_0 = TICK... TOCK... it is winding up!
+power_name_0 = TIME STOP! You are frozen!
+power_name_1 = IT REWINDS! Hit it again quickly!
+power_warn_2 = The bell is about to ring...
+power_name_2 = HURRY! Time runs fast!
+power_warn_3 = The rain is coming...
+power_name_3 = HEAVY RAIN! Time drags!
+power_name_4 = ECHOES of the last train!
+power_warn_5 = The sun is sinking fast...
+power_name_5 = HARVEST RUSH! The crows fly fast!
+power_warn_6 = It is pulling you back...
+power_name_6 = PULLED BACK! It took your last few seconds!
+
+difficulty_label = DIFFICULTY
+difficulty_0 = GENTLE
+difficulty_1 = MEDIUM
+difficulty_2 = HARD
+difficulty_desc_0 = Boss powers are short and clearly announced. Up / Down to change
+difficulty_desc_1 = Boss powers can hurt you if you ignore them. Up / Down to change
+difficulty_desc_2 = Strong, frequent powers, and every boss takes one more hit. Up / Down to change
 # One boss for each memory: the Forgetting takes the shape of something in it.
 boss_name_0 = THE 3 A.M. CLOCK
 boss_name_1 = THE EMPTY SHIRT

@@ -543,6 +543,12 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 solidQuad(x0, b.toY + b.h / 2 - 0.15f, x1 - x0, 0.12f, 0.3f, wc);
             }
         }
+        if (g.powers.warning()) {   // a power is coming: the boss pulses like a ticking clock
+            float k = std::fmod(g.time * 2.5f, 1.0f);
+            Color pc = era == 0 ? Color{235, 235, 225, (unsigned char)(255 * (1 - k))} : Color{200, 150, 255, (unsigned char)(255 * (1 - k))};
+            ring(b.x, b.y, 1.6f + k * 2.6f, pc);
+            ring(b.x, b.y, 1.6f + std::fmod(k + 0.5f, 1.0f) * 2.6f, pc);
+        }
         if (full3D) models_.drawBoss(g);
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
@@ -550,6 +556,13 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
         const Texture2D& bossTex = A.storyBoss.id ? A.storyBoss : A.boss;   // each memory's own boss
         if (!full3D) sprite(bossTex, frameRect(bossTex, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        // the Last Train's echoes: see-through copies running its last charge again
+        for (const auto& e : g.powers.echoes) {
+            if (!e.active() || full3D) continue;
+            Vector2 c = e.pos();
+            sprite(bossTex, frameRect(bossTex, XF_FLOAT0, BOSS_FS, BOSS_FS, era), c.x - BOSS_FS / 2, c.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS,
+                   0.01f, Color{200, 220, 255, 110}, true);
+        }
     }
 
     // ---- players
@@ -565,11 +578,14 @@ void Renderer::drawEra(Game& g, int era, float swing)
             tint = era == 0 ? Color{255, 255, 255, 120} : Color{150, 150, 165, 130};
             ox = std::sin(g.time * 6 + p) * 0.05f;
         }
+        const bool held = !pl.faded && (g.powers.freezeT > 0 || g.powers.pullT > 0);   // time stopped / pulled back
+        if (held && era > 0) tint = g.powers.pullT > 0 ? Color{215, 185, 255, 255} : Color{185, 215, 255, 255};
         const Texture2D& t = A.player[p];
         if (full3D) models_.drawPlayer(g, p);
         else sprite(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox,
                     pl.bottom() - PLAYER_FH + (era == 0 ? 0.0f : 0.03f), PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
         if (pl.shield) ring(pl.cx(), pl.cy(), 0.95f, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
+        if (held) ring(pl.cx(), pl.cy(), 1.05f, era == 0 ? Color{235, 235, 225, 255} : Color{170, 200, 255, 230});
         if (pl.faded && pl.reviveProgress > 0) ring(pl.cx(), pl.cy(), 1.1f * (1 - pl.reviveProgress / 0.6f) + 0.3f, Color{255, 255, 255, 230});
         if (pl.attackTime > 0) {
             float ax = pl.cx() + pl.facing * 1.0f;
