@@ -3,6 +3,14 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (late night): backgrounds repainted from raf's reference pictures
+
+- Merged claude-camilla (boss powers, difficulty) after PR #5 went to main.
+- Each stage's background painter now lives in tools/assetgen/bg/eraN.inc (included into
+  SpriteGen.cpp before bgLayer). New scenes in the cluster-tree / treehouse style raf sent:
+  0 winter night street, 1 garden and washing line, 2 school street with chunky trees,
+  3 treehouse woodland (camping trip), 4 railway town and viaduct, 5 hay meadow, 6 morning hills.
+
 ## 2026-11-07 (night): story merge undone at raf's request
 
 raf asked to go back to before the Maren storyline. I reverted (no force push, no history
