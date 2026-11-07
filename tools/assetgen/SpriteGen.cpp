@@ -2201,7 +2201,7 @@ void groundDeep(GroundPx& g, const EarthCols& k, int v, bool features = true)
         else gSpecks(g, r, r.i(3, W - 4), r.i(bMax + 2, N - 3), std::max(2, N / 5), 3, k.earth, k.deep);
         break;
     case 1:   // a stone settled in the deep
-        gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(bMax + 2, N - 3), std::max(3.0f, N * 0.22f), bMax + 1, N - 2);
+        gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(bMax + 2, N - 3), std::max(3.0f, N * 0.17f), bMax + 1, N - 2);
         break;
     case 2:   // a pebble sitting on the line between the layers
         gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)bMin + 0.5f, std::max(3.0f, std::round(N * 0.14f)), std::max(2.0f, std::round(N * 0.08f)));
@@ -2240,8 +2240,8 @@ void groundUnder(GroundPx& g, const EarthCols& k, int v)
     const int N = g.N, W = g.W;
     g.fill(k.earth);
     gClods(g, r, 2, k.earthL, k.earthD, k.earth, 2, N / 2);
-    auto b = strataLine(g, 0.62f, 0.1f, r);
-    Col rock = g_era <= 2 ? k.edge : k.deep;
+    auto b = strataLine(g, g_era <= 2 ? 0.7f : 0.62f, 0.08f, r);
+    Col rock = g_era == 1 ? k.edge : k.deep;   // (8-bit: grey rock round light stones)
     for (int x = 0; x < W; ++x)
         for (int y = std::max(0, b[x]); y < N; ++y) g.set(x, y, rock);
     // the stones of the band: uneven sizes, lit on top (the light comes from above), shaded below
@@ -2254,12 +2254,14 @@ void groundUnder(GroundPx& g, const EarthCols& k, int v)
         if (bot - top < 1) top = bot - 1;
         for (int yy = top; yy <= bot; ++yy)
             for (int xx = x; xx < x + w; ++xx) {
-                bool corner = (xx == x || xx == x + w - 1) && (yy == top || yy == bot);
-                if (corner) continue;
+                // round the corners: one pixel off each, two in the 64 px stages
+                int cr = N >= 48 ? 2 : 1, ex = std::min(xx - x, x + w - 1 - xx), ey = std::min(yy - top, bot - yy);
+                if (ex + ey < cr) continue;
                 Col c = yy == top ? k.stone : k.stoneD;
                 if (g_era >= 3 && yy == top && xx == x + 1) c = k.stoneL;
                 if (g_era >= 3 && yy == bot) c = mixc(k.stoneD, k.edge, 0.4f);
                 if (g_era == 1) c = yy == top ? tone(2) : tone(1);
+                if (g_era == 2) c = yy == bot ? k.edge : k.stone;
                 g.set(xx, yy, c);
             }
         x += w + (r.p(0.3f) ? 2 : 1);

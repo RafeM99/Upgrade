@@ -514,7 +514,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
                     return x == start && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1);
                 };
                 auto pairAt = [&](int x) {   // does a boulder start at column x (bottom row)?
-                    return (x & 1) == 0 && hashXY(x, 4441) % 7 == 0 && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1) &&
+                    return (x & 1) == 0 && hashXY(x, 4441) % 11 == 0 && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1) &&
                            !featAt(x) && !featAt(x - 1) && !featAt(x + 1);
                 };
                 // a mass is ground when its column stands on the bottom row; else it floats
