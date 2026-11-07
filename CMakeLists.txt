@@ -44,6 +44,7 @@ add_custom_command(TARGET upgrade POST_BUILD
 add_executable(assetgen tools/assetgen/main.cpp tools/assetgen/SpriteGen.cpp tools/assetgen/SoundGen.cpp)
 target_include_directories(assetgen PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(assetgen PRIVATE raylib)
+target_sources(assetgen PRIVATE tools/assetgen/Era4Sound.cpp)
 if(APPLE)
   target_link_libraries(assetgen PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 endif()
