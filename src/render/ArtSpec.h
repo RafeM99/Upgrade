@@ -86,9 +86,25 @@ enum TileFrame {
     T_GROUND_TOP1, T_GROUND_TOP2, T_GROUND_TOP3,
     T_GROUND1, T_GROUND2, T_GROUND3,
     T_FEAT_L, T_FEAT_R,
+    // more ground: four more variants of the grass cap and the earth, the deep stratum along the
+    // bottom row, rocky undersides (solid above, air below), stony earth inside floating masses,
+    // a boulder two tiles wide in the deep stratum, and overlays drawn in the air next to the
+    // ground: grass tufts standing on a grass cap, grass hanging over a cliff edge (L: the air
+    // tile left of the edge, R: right of it)
+    T_GROUND_TOP4, T_GROUND_TOP5, T_GROUND_TOP6, T_GROUND_TOP7,
+    T_GROUND4, T_GROUND5, T_GROUND6, T_GROUND7,
+    T_DEEP0, T_DEEP1, T_DEEP2, T_DEEP3,
+    T_UNDER0, T_UNDER1, T_UNDER2, T_UNDER3,
+    T_ROCK0, T_ROCK1, T_ROCK2, T_ROCK3,
+    T_PAIR_L, T_PAIR_R,
+    T_TUFT0, T_TUFT1, T_TUFT2, T_TUFT3,
+    T_CAP_L, T_CAP_R,
     T_COUNT
 };
-constexpr int GROUND_VARIANTS = 4;   // T_GROUND_TOP + 3, T_GROUND + 3
+constexpr int GROUND_VARIANTS = 8;   // grass caps and earth: frame 0, frames 1..3, frames 4..7
+constexpr int DEEP_VARIANTS = 4, UNDER_VARIANTS = 4, ROCK_VARIANTS = 4, TUFT_VARIANTS = 4;
+constexpr int groundTopFrame(int v) { return v == 0 ? T_GROUND_TOP : (v < 4 ? T_GROUND_TOP1 + v - 1 : T_GROUND_TOP4 + v - 4); }
+constexpr int groundFrame(int v) { return v == 0 ? T_GROUND : (v < 4 ? T_GROUND1 + v - 1 : T_GROUND4 + v - 4); }
 
 // ---- Forgetting Wall texture: wall.png, 2 x 4 tiles, tiles vertically.
 constexpr float WALL_TEX_W = 2.0f, WALL_TEX_H = 4.0f;

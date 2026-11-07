@@ -134,15 +134,17 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
         float d;
         const Player* p = nearest(players, e.cx(), e.cy(), d);
         float mx = 0;
+        e.stateTime = std::max(0.0f, e.stateTime - dt);   // flyer: time left climbing over a wall
         if (p && d < 12) {
             float dx = p->cx() - e.cx();
             if (std::fabs(dx) > 0.2f) e.dir = dx < 0 ? -1 : 1;
             mx = e.dir * tu.flyerSpeed * eraK * dt;
-            e.baseY += (std::min(p->y - 1.5f, 10.0f) - e.baseY) * 0.3f * dt;
+            if (e.stateTime <= 0) e.baseY += (std::min(p->y - 1.5f, 10.0f) - e.baseY) * 0.3f * dt;
         }
         e.baseY = std::max(0.5f, e.baseY);
-        // fly around the terrain, never through it: blocked sideways, it rises over the obstacle
-        if (mx != 0 && enemyMove(e, level, mx, 0)) e.baseY -= 1.5f * dt;
+        // fly around the terrain, never through it: blocked sideways, it climbs over the obstacle
+        // (and stops sinking towards the player until it is over)
+        if (mx != 0 && enemyMove(e, level, mx, 0)) { e.baseY -= 3.0f * dt; e.stateTime = 0.6f; }
         float wantY = std::max(0.5f, e.baseY + std::sin(e.t * 2.4f) * 1.1f);
         if (enemyMove(e, level, 0, wantY - e.y)) {
             // the sine wave hit a floor or a ceiling: move the centre of the wave away from it
@@ -181,7 +183,14 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
         float bx, by, bw, bh;
         enemyTerrainBox(e, bx, by, bw, bh);
         float ahead = e.dir > 0 ? bx + bw + std::fabs(e.vx * dt) + 0.02f : bx - std::fabs(e.vx * dt) - 0.02f;
-        if (!level.solidFor((int)std::floor(ahead), (int)std::floor(e.y + e.h + 0.1f), -1, false)) { turn(); e.vx = -e.vx; }
+        float behind = e.dir > 0 ? bx - std::fabs(e.vx * dt) - 0.02f : bx + bw + std::fabs(e.vx * dt) + 0.02f;
+        int fy = (int)std::floor(e.y + e.h + 0.1f);
+        if (!level.solidFor((int)std::floor(ahead), fy, -1, false)) {
+            // a ledge ahead: turn round, or stand still if there is a ledge behind too (a pillar
+            // no wider than the enemy), instead of flipping every frame
+            if (level.solidFor((int)std::floor(behind), fy, -1, false)) { turn(); e.vx = -e.vx; }
+            else e.vx = 0;
+        }
     }
     if (enemyMove(e, level, e.vx * dt, 0)) turn();
     bool wasGround = e.onGround;

@@ -121,7 +121,7 @@ struct Gen {
     int diff;
     int x = 0;
     int ground = G;
-    struct Flat { int x0, x1, g; };
+    struct Flat { int x0, x1, g; bool lowRoof = false; };   // lowRoof: only a blob fits under it
     std::vector<Flat> flats;   // flat floor stretches, for the enemies
     std::vector<int> top;      // ground top per column (-1 = pit), filled as columns are made
 
@@ -273,7 +273,7 @@ struct Gen {
         flat(1, false);
         int rx = x;
         flat(len, false);
-        flats.push_back({rx, x - 1, ground});   // room for a blob (not a clock: the roof is low)
+        flats.push_back({rx, x - 1, ground, true});   // room for a blob (not a clock: the roof is low)
         for (int i = 0; i < len; ++i) { set(rx + i, ground - 3, '#'); set(rx + i, ground - 4, '#'); }
         coinLine(rx + 1, rx + len - 2, ground);
         mark(rx + len / 2, ground - 5, 'F');
@@ -297,19 +297,6 @@ struct Gen {
             ++x;
         }
         (void)vx;
-        flat(2);
-    }
-    void pieceWallClimb()
-    {
-        // wall jump: a chimney of two walls hanging over the path (its foot two tiles above the
-        // floor, so everyone walks under it), with fragments at the top. Only the fragments need
-        // the wall jump; the path never does.
-        if (!has(AB_WALL_JUMP) || room() < 8 || ground - 9 < 1) { pieceRun(); return; }
-        flat(1, false);
-        int wx = x;
-        flat(5, false);
-        for (int y = ground - 9; y <= ground - 3; ++y) { set(wx, y, '|'); set(wx + 4, y, '|'); }
-        for (int y = ground - 8; y <= ground - 6; y += 2) mark(wx + 2, y, 'F');
         flat(2);
     }
     void pieceGlideGap()
@@ -355,7 +342,6 @@ Chunk generateChunk(std::mt19937& rng, int era, unsigned mask, int difficulty)
             {5, 2},                                  // hill
             {6, era >= 1 ? 2 : 0},                   // tunnel
             {7, g.has(AB_GROUND_POUND) ? 2 : 0},     // vault
-            {8, g.has(AB_WALL_JUMP) ? 1 : 0},        // wall climb
             {9, g.has(AB_GLIDE) ? 2 : 0},            // glide gap
         };
         int total = 0;
@@ -376,7 +362,6 @@ Chunk generateChunk(std::mt19937& rng, int era, unsigned mask, int difficulty)
         case 5: g.pieceHill(); break;
         case 6: g.pieceTunnel(); break;
         case 7: g.pieceVault(); break;
-        case 8: g.pieceWallClimb(); break;
         case 9: g.pieceGlideGap(); break;
         }
     }
@@ -407,8 +392,8 @@ Chunk generateChunk(std::mt19937& rng, int era, unsigned mask, int difficulty)
         if (enemies <= 0) break;
         if (f.x0 < 5) continue;   // never right at the entry, where the last chunk's enemy may stand
         int cx = (f.x0 + f.x1 + 1) / 2;
-        bool brute = era >= 1 && f.x1 - f.x0 >= 5 && g.chance(0.2f + 0.08f * difficulty);
-        if (brute && sameFloor(cx - 1, cx + 1, f.g) && clear(cx - 1, cx + 1, f.g - 2, f.g - 1)) {
+        bool brute = era >= 1 && !f.lowRoof && f.x1 - f.x0 >= 5 && g.chance(0.2f + 0.08f * difficulty);
+        if (brute && sameFloor(cx - 1, cx + 1, f.g) && clear(cx - 1, cx + 1, f.g - 4, f.g - 1)) {   // room to jump over it too
             c.rows[f.g - 1][cx] = 'B';
         } else if (sameFloor(cx - 1, cx + 1, f.g) && clear(cx, cx, f.g - 1, f.g - 1)) {
             c.rows[f.g - 1][cx] = 'S';
