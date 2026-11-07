@@ -32,6 +32,13 @@ unsigned hashi(int x, int s)
 }
 float rndf(int x, int s) { return (hashi(x, s) & 0xffff) / 65535.0f; }
 
+const Color kInk = {30, 22, 34, 255};   // outline colour
+const float kOutline = 0.0028f;         // outline width per unit of camera distance: about 2 px at 720p
+
+// Gran's cottage stands just behind the start and comes back every COTTAGE_EVERY tiles.
+constexpr float COTTAGE_X0 = 10.0f, COTTAGE_EVERY = 72.0f;
+inline float nearestCottage(float x) { return COTTAGE_X0 + std::round((x - COTTAGE_X0) / COTTAGE_EVERY) * COTTAGE_EVERY; }
+
 }  // namespace
 
 void Models3D::init()
@@ -41,6 +48,8 @@ void Models3D::init()
     sh_.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(sh_, "matNormal");
     locView_ = GetShaderLocation(sh_, "viewPos");
     locEmissive_ = GetShaderLocation(sh_, "emissive");
+    locOutline_ = GetShaderLocation(sh_, "outlineW");
+    locHull_ = GetShaderLocation(sh_, "hullMode");
     locLightPos_ = GetShaderLocation(sh_, "lightPos");
     locLightCol_ = GetShaderLocation(sh_, "lightCol");
     locLightRad_ = GetShaderLocation(sh_, "lightRad");
@@ -50,32 +59,47 @@ void Models3D::init()
     set3("sunCol", {1.0f, 0.93f, 0.8f});
     set3("skyCol", {0.95f, 0.97f, 1.0f});
     set3("groundCol", {0.7f, 0.68f, 0.6f});
-    set3("fogCol", {0.93f, 0.9f, 0.86f});
-    set1("fogStart", 30.0f);
-    set1("fogEnd", 90.0f);
+    (void)set1;
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
     sphere_ = LoadModelFromMesh(GenMeshSphere(1, 7, 10));   // low-poly
     cyl_ = LoadModelFromMesh(GenMeshCylinder(1, 1, 8));
     torus_ = LoadModelFromMesh(GenMeshTorus(0.12f, 2.0f, 28, 10));
-    for (Model* m : {&cube_, &sphere_, &cyl_, &torus_}) m->materials[0].shader = sh_;
+    cone_ = LoadModelFromMesh(GenMeshCone(1, 1, 8));
+    for (Model* m : {&cube_, &sphere_, &cyl_, &torus_, &cone_}) m->materials[0].shader = sh_;
     ready_ = sh_.id > 0;
 }
 
 void Models3D::shutdown()
 {
-    for (Model* m : {&cube_, &sphere_, &cyl_, &torus_}) {
+    for (Model* m : {&cube_, &sphere_, &cyl_, &torus_, &cone_}) {
         m->materials[0].shader = Shader{rlGetShaderIdDefault(), rlGetShaderLocsDefault()};
         UnloadModel(*m);
     }
     UnloadShader(sh_);
 }
 
-void Models3D::part(Model& m, Matrix t, Color c, float emissive)
+void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool outline)
 {
     SetShaderValue(sh_, locEmissive_, &emissive, SHADER_UNIFORM_FLOAT);
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, c);
+    if (!outline || c.a < 250) return;
+    // tiny parts (eyes, buttons, glasses) stay as they are: an outline would swallow them
+    float sx = Vector3Length({t.m0, t.m1, t.m2}), sy = Vector3Length({t.m4, t.m5, t.m6}), sz = Vector3Length({t.m8, t.m9, t.m10});
+    if (std::max(sx, std::max(sy, sz)) < 0.075f) return;
+    int hull = &m == &cube_ ? 1 : ((&m == &cyl_ || &m == &cone_) ? 2 : 0);
+    float one = 1.0f, w = kOutline;
+    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
+    rlEnableBackfaceCulling();
+    rlSetCullFace(RL_CULL_FACE_FRONT);
+    DrawModel(m, {0, 0, 0}, 1.0f, kInk);
+    rlSetCullFace(RL_CULL_FACE_BACK);
+    rlDisableBackfaceCulling();
+    float zero = 0.0f;
+    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::begin(Game& g, const Camera3D& cam)
@@ -98,57 +122,255 @@ void Models3D::begin(Game& g, const Camera3D& cam)
 }
 
 // ------------------------------------------------------------------ the street
+// One tree, picked and sized by its seed: round, tall oval, pine (stacked cones) or a bush.
+void Models3D::tree(float x, float z, int seed, int kind)
+{
+    if (kind < 0) kind = (int)(hashi(seed, 21) % 4);
+    float sc = 0.8f + rndf(seed, 22) * 0.5f, rot = rndf(seed, 23) * 2 * PI;
+    Matrix root = then(then(S(sc, sc, sc), MatrixRotateY(rot)), T(x, 2, z));
+    auto at = [&](Matrix m) { return then(m, root); };
+    float v = rndf(seed, 24);
+    Color trunk = hexc(0x6a4430);
+    if (kind == 0) {   // round: a cluster of three balls
+        float h = 1.3f + rndf(seed, 25) * 0.5f;
+        Color leaf = mixc(hexc(0x4f9a3e), hexc(0x74b24c), v);
+        part(cyl_, at(then(S(0.17f, h + 0.3f, 0.17f), T(0, 0, 0))), trunk);
+        part(sphere_, at(then(S(0.95f, 0.85f, 0.95f), T(0, h + 0.55f, 0))), leaf);
+        part(sphere_, at(then(S(0.62f, 0.58f, 0.62f), T(0.62f, h + 0.15f, 0.25f))), mixc(leaf, WHITE, 0.08f));
+        part(sphere_, at(then(S(0.55f, 0.5f, 0.55f), T(-0.55f, h + 0.25f, -0.2f))), mixc(leaf, BLACK, 0.1f));
+    } else if (kind == 1) {   // tall oval, like a poplar
+        Color leaf = mixc(hexc(0x5c9c44), hexc(0x7cb456), v);
+        part(cyl_, at(then(S(0.14f, 1.0f, 0.14f), T(0, 0, 0))), trunk);
+        part(sphere_, at(then(S(0.62f, 1.55f, 0.62f), T(0, 2.3f, 0))), leaf);
+    } else if (kind == 2) {   // pine: three stacked cones
+        Color leaf = mixc(hexc(0x2e7a4c), hexc(0x449058), v);
+        part(cyl_, at(then(S(0.15f, 0.7f, 0.15f), T(0, 0, 0))), hexc(0x5a3a28));
+        for (int i = 0; i < 3; ++i) {
+            float r = 1.0f - i * 0.25f, y = 0.5f + i * 0.75f;
+            part(cone_, at(then(S(r, 1.25f, r), T(0, y, 0))), i % 2 ? mixc(leaf, WHITE, 0.06f) : leaf);
+        }
+    } else {   // a low bush of two or three balls
+        Color leaf = mixc(hexc(0x4a8f3c), hexc(0x66a84a), v);
+        part(sphere_, at(then(S(0.6f, 0.45f, 0.55f), T(0, 0.3f, 0))), leaf);
+        part(sphere_, at(then(S(0.45f, 0.36f, 0.42f), T(0.55f, 0.22f, 0.1f))), mixc(leaf, WHITE, 0.07f));
+        if (hashi(seed, 26) % 2)
+            part(sphere_, at(then(S(0.4f, 0.32f, 0.4f), T(-0.5f, 0.2f, -0.05f))), mixc(leaf, BLACK, 0.08f));
+    }
+}
+
+// A plain street house further back.
+void Models3D::house(float x, float z, int seed)
+{
+    float w = 3.0f, h = 2.4f + rndf(seed, 5) * 0.7f, d = 2.8f;
+    Color wall = mixc(hexc(0xe8d4b8), hexc(0xc89a80), rndf(seed, 6));
+    Color roof = hashi(seed, 8) % 2 ? hexc(0xa0503e) : hexc(0x6a6a88);
+    part(cube_, then(S(w, h, d), T(x, 2 + h / 2, z)), wall);
+    float a = d / std::sqrt(2.0f);   // gable: a square turned 45 degrees, its top half above the walls
+    part(cube_, then(then(S(w - 0.02f, a, a), MatrixRotateX(PI / 4)), T(x, 2 + h, z)), wall);
+    for (int sgn = -1; sgn <= 1; sgn += 2) {
+        float L = d / std::sqrt(2.0f) + 0.4f;
+        Vector3 c = {x, 2 + h + d / 4 + 0.06f, z + sgn * (d / 4 + 0.06f)};
+        part(cube_, then(then(S(w + 0.4f, 0.14f, L), MatrixRotateX(sgn * PI / 4)), T(c.x, c.y, c.z)), roof);
+    }
+    part(cube_, then(S(0.6f, 1.1f, 0.06f), T(x, 2.55f, z + d / 2 + 0.03f)), hexc(0x6a3a2a));
+    for (int wi = 0; wi < 2; ++wi)
+        part(cube_, then(S(0.55f, 0.5f, 0.06f), T(x + (wi ? 0.9f : -0.9f), 2 + h * 0.6f, z + d / 2 + 0.03f)), hexc(0xffe2a0), 0.7f);
+    part(cube_, then(S(0.35f, 0.9f, 0.35f), T(x + 0.8f, 2 + h + 0.8f, z - 0.4f)), hexc(0x8a5a4a));
+}
+
+// Gran's cottage: the hero landmark. Bigger and closer than the street houses.
+void Models3D::cottage(float x, float z)
+{
+    const float w = 4.8f, h = 2.7f, d = 3.6f, fz = z + d / 2;   // fz: the front wall
+    const Color wall = hexc(0xf4e6c8), trim = hexc(0xfaf6ee), roof = hexc(0xb4483a), wood = hexc(0x7a4a32);
+    part(cube_, then(S(w + 0.1f, 0.3f, d + 0.1f), T(x, 2.15f, z)), hexc(0x9a948a));   // stone footing
+    part(cube_, then(S(w, h, d), T(x, 2 + h / 2 + 0.1f, z)), wall);
+    const float top = 2 + h + 0.1f;
+    float a = d / std::sqrt(2.0f);
+    part(cube_, then(then(S(w - 0.02f, a, a), MatrixRotateX(PI / 4)), T(x, top, z)), wall);
+    for (int sgn = -1; sgn <= 1; sgn += 2) {
+        float L = d / std::sqrt(2.0f) + 0.6f;
+        part(cube_, then(then(S(w + 0.6f, 0.18f, L), MatrixRotateX(sgn * PI / 4)), T(x, top + d / 4 + 0.08f, z + sgn * (d / 4 + 0.08f))), roof);
+    }
+    part(cube_, then(S(w + 0.7f, 0.14f, 0.2f), T(x, top + d / 2 + 0.12f, z)), mixc(roof, BLACK, 0.2f));   // ridge
+    // chimney
+    part(cube_, then(S(0.55f, 1.5f, 0.55f), T(x + 1.4f, top + 1.2f, z - 0.6f)), hexc(0xa0604a));
+    part(cube_, then(S(0.7f, 0.15f, 0.7f), T(x + 1.4f, top + 2.0f, z - 0.6f)), hexc(0x7a4a3a));
+    // door with a frame and a knob
+    part(cube_, then(S(1.0f, 1.65f, 0.08f), T(x, 2.1f + 0.82f, fz + 0.03f)), trim);
+    part(cube_, then(S(0.78f, 1.5f, 0.08f), T(x, 2.1f + 0.75f, fz + 0.07f)), hexc(0x3f7f5a));
+    part(sphere_, then(S(0.05f, 0.05f, 0.05f), T(x + 0.26f, 2.9f, fz + 0.13f)), hexc(0xf7d73a));
+    // two windows each side of the door: frame, lit glass, a cross of bars, shutters and a sill box
+    for (int s = -1; s <= 1; s += 2) {
+        float wx = x + s * 1.55f, wy = 2.1f + h * 0.55f;
+        part(cube_, then(S(1.0f, 0.9f, 0.08f), T(wx, wy, fz + 0.03f)), trim);
+        part(cube_, then(S(0.8f, 0.7f, 0.08f), T(wx, wy, fz + 0.06f)), hexc(0xffe2a0), 0.7f, false);
+        part(cube_, then(S(0.06f, 0.7f, 0.08f), T(wx, wy, fz + 0.09f)), trim, 0, false);
+        part(cube_, then(S(0.8f, 0.06f, 0.08f), T(wx, wy, fz + 0.09f)), trim, 0, false);
+        for (int k = -1; k <= 1; k += 2)
+            part(cube_, then(S(0.28f, 0.9f, 0.06f), T(wx + k * 0.66f, wy, fz + 0.04f)), hexc(0x3f7f5a));
+        part(cube_, then(S(0.9f, 0.18f, 0.25f), T(wx, wy - 0.55f, fz + 0.14f)), wood);
+        for (int f = 0; f < 3; ++f)
+            part(sphere_, then(S(0.09f, 0.09f, 0.09f), T(wx - 0.28f + f * 0.28f, wy - 0.4f, fz + 0.14f)), f % 2 ? hexc(0xf28cb4) : hexc(0xe8364f));
+    }
+    // a little window in the gable
+    part(cube_, then(S(0.6f, 0.5f, 0.08f), T(x, top + 0.55f, fz - 0.5f)), trim);
+    part(cube_, then(S(0.42f, 0.34f, 0.08f), T(x, top + 0.55f, fz - 0.46f)), hexc(0xffe2a0), 0.7f, false);
+    // porch: a deck, two posts and a little roof over the door
+    part(cube_, then(S(2.2f, 0.18f, 1.1f), T(x, 2.12f, fz + 0.55f)), hexc(0xb07a50));
+    for (int s = -1; s <= 1; s += 2)
+        part(cube_, then(S(0.12f, 1.9f, 0.12f), T(x + s * 1.0f, 2.2f + 0.95f, fz + 1.0f)), trim);
+    part(cube_, then(then(S(2.5f, 0.12f, 1.35f), MatrixRotateX(0.3f)), T(x, 4.2f, fz + 0.6f)), roof);
+    // stepping stones out to the gate
+    for (int i = 0; i < 2; ++i)
+        part(cube_, then(S(0.6f, 0.06f, 0.4f), T(x + (i % 2 ? 0.1f : -0.1f), 2.02f, fz + 1.35f + i * 0.5f)), hexc(0xb8b0a0));
+    // garden fence along both sides of the front yard, up to the street fence
+    for (int s = -1; s <= 1; s += 2) {
+        float fx = x + s * (w / 2 + 0.5f);
+        for (float zz = z - 0.6f; zz < -3.6f; zz += 0.45f)
+            part(cube_, then(S(0.08f, 0.6f, 0.1f), T(fx, 2.3f, zz)), trim);
+        part(cube_, then(S(0.05f, 0.07f, -3.6f - (z - 0.6f)), T(fx, 2.45f, (z - 0.6f - 3.6f) / 2)), trim, 0, false);
+    }
+    // mailbox by the gate
+    float mx = x + 1.5f, mz = -3.85f;
+    part(cube_, then(S(0.1f, 1.0f, 0.1f), T(mx, 2.5f, mz)), wood);
+    part(cube_, then(S(0.5f, 0.32f, 0.3f), T(mx, 3.12f, mz)), hexc(0x3c6cb0));
+    part(cube_, then(S(0.04f, 0.3f, 0.06f), T(mx + 0.27f, 3.3f, mz + 0.08f)), hexc(0xe8364f));
+    // flowers along the front wall
+    for (int f = 0; f < 8; ++f) {
+        float px = x - w / 2 + 0.3f + f * 0.6f;
+        if (std::fabs(px - x) < 0.7f) continue;
+        part(sphere_, then(S(0.22f, 0.18f, 0.2f), T(px, 2.12f, fz + 0.3f)), hexc(0x4a8f3c));
+        part(sphere_, then(S(0.08f, 0.08f, 0.08f), T(px + 0.05f, 2.32f, fz + 0.36f)), f % 2 ? hexc(0xf7d73a) : hexc(0xf28cb4));
+    }
+}
+
 void Models3D::drawScenery(Game& g)
 {
     float l = g.cam.left() - 16, r = g.cam.right() + 36, mid = (l + r) / 2, wdt = r - l;
-    // lawn behind the path and in front of it
-    part(cube_, then(S(wdt, 0.1f, 40), T(mid, 1.95f, -23.0f)), hexc(0x5aa04a));
-    part(cube_, then(S(wdt, 0.1f, 10), T(mid, -0.05f, 6.0f)), hexc(0x4a9040));
-    // a low picket fence along the back of the path
+    // lawns. In front of the path the lawn lies at the foot of the path (pits are ditches down to
+    // it); behind it, at path height, in flat bands that step lighter towards the horizon.
+    part(cube_, then(S(wdt + 300, 0.4f, 18), T(mid, -0.2f, 6.0f)), hexc(0x4a9040), 0, false);
+    part(cube_, then(S(wdt + 300, 1.9f, 4), T(mid, 0.95f, -5.0f)), hexc(0x6a4a34), 0, false);   // bank behind the ditches
+    const float bandZ[5] = {-3.0f, -14.0f, -30.0f, -55.0f, -120.0f};
+    const unsigned bandC[4] = {0x5aa04a, 0x68ab54, 0x79b764, 0x8cc378};
+    for (int i = 0; i < 4; ++i) {
+        float z0 = bandZ[i + 1], z1 = bandZ[i];
+        part(cube_, then(S(wdt + 300, 0.1f, z1 - z0), T(mid, 1.95f, (z0 + z1) / 2)), hexc(bandC[i]), 0, false);
+    }
+    float cot = nearestCottage(mid);
+    bool cotOn = cot > l - 8 && cot < r + 8;
+    auto nearCot = [&](float x, float m) { return cotOn && std::fabs(x - cot) < m; };
+
+    // a low picket fence along the back of the path, with a gate at the cottage
     for (int x = (int)std::floor(l); x < (int)r; ++x) {
+        if (nearCot(x + 0.5f, 0.8f)) continue;
         part(cube_, then(S(0.12f, 0.7f, 0.08f), T(x + 0.5f, 2.35f, -3.5f)), hexc(0xf4f0e6));
     }
-    part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.5f, -3.46f)), hexc(0xe8e2d6));
-    part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.2f, -3.46f)), hexc(0xe8e2d6));
+    part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.5f, -3.46f)), hexc(0xe8e2d6), 0, false);
+    part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.2f, -3.46f)), hexc(0xe8e2d6), 0, false);
+    if (cotOn) cottage(cot, -7.0f);
 
-    // trees, houses and lamps on slots four tiles apart, picked by a hash so they stay put
-    for (int k = (int)std::floor(l / 4); k <= (int)(r / 4); ++k) {
-        float x = k * 4.0f + 2.0f;
-        int kind = (int)(hashi(k, 7) % 7);
-        if (kind <= 1) {   // tree
-            float z = -5.5f - rndf(k, 1) * 3.0f, h = 1.6f + rndf(k, 2) * 0.8f;
-            part(cyl_, then(S(0.18f, h, 0.18f), T(x, 2, z)), hexc(0x6a4430));
-            Color leaf = mixc(hexc(0x3a8a3a), hexc(0x6ab04a), rndf(k, 3));
-            part(sphere_, then(S(1.0f, 0.9f, 1.0f), T(x, 2 + h + 0.5f, z)), leaf);
-            part(sphere_, then(S(0.7f, 0.65f, 0.7f), T(x + 0.6f, 2 + h + 0.1f, z + 0.3f)), mixc(leaf, WHITE, 0.08f));
-            part(sphere_, then(S(0.6f, 0.55f, 0.6f), T(x - 0.55f, 2 + h + 0.2f, z - 0.2f)), mixc(leaf, BLACK, 0.1f));
-        } else if (kind == 2 || kind == 3) {   // house with a gable roof and lit windows
-            float z = -9.5f - rndf(k, 4) * 2.0f, w = 3.2f, h = 2.6f + rndf(k, 5) * 0.8f, d = 3.0f;
-            Color wall = mixc(hexc(0xe8d4b8), hexc(0xc89a80), rndf(k, 6));
-            part(cube_, then(S(w, h, d), T(x, 2 + h / 2, z)), wall);
-            // roof: a box turned 45 degrees, half of it sticking out above the walls
-            part(cube_, then(then(S(w + 0.4f, d * 0.72f, d * 0.72f), MatrixRotateX(PI / 4)), T(x, 2 + h, z)), hexc(0xa0503e));
-            part(cube_, then(S(0.6f, 1.1f, 0.06f), T(x, 2.55f, z + d / 2 + 0.02f)), hexc(0x6a3a2a));
-            for (int wi = 0; wi < 2; ++wi)
-                part(cube_, then(S(0.6f, 0.55f, 0.06f), T(x + (wi ? 0.95f : -0.95f), 2 + h * 0.62f, z + d / 2 + 0.02f)),
-                     hexc(0xffe2a0), 0.9f);
-            part(cube_, then(S(0.35f, 0.9f, 0.35f), T(x + 0.9f, 2 + h + 0.9f, z - 0.4f)), hexc(0x8a5a4a));   // chimney
-        } else if (kind == 4) {   // street lamp
-            float z = -4.4f;
+    // near row: bushes, flower beds and lamps, just behind the fence
+    for (int k = (int)std::floor(l / 3); k <= (int)(r / 3); ++k) {
+        float x = k * 3.0f + 1.5f + (rndf(k, 31) - 0.5f) * 1.2f;
+        if (nearCot(x, 4.5f)) continue;
+        int kind = (int)(hashi(k, 32) % 6);
+        if (kind == 0) {   // street lamp
+            float z = -4.3f;
             part(cyl_, then(S(0.07f, 2.6f, 0.07f), T(x, 2, z)), hexc(0x2a2a36));
-            part(sphere_, then(S(0.22f, 0.22f, 0.22f), T(x, 4.75f, z)), hexc(0xfff0c0), 1.0f);
-        } else if (kind == 5) {   // flower bed
+            part(cube_, then(S(0.3f, 0.32f, 0.3f), T(x, 4.75f, z)), hexc(0xfff0c0), 1.0f);
+            part(cube_, then(S(0.42f, 0.08f, 0.42f), T(x, 4.95f, z)), hexc(0x2a2a36));
+        } else if (kind == 1) {   // flower bed
             for (int f = 0; f < 6; ++f) {
                 float fx = x - 1 + f * 0.4f, fz = -4.2f + std::sin(f * 2.1f) * 0.3f;
-                part(cyl_, then(S(0.03f, 0.35f, 0.03f), T(fx, 2, fz)), hexc(0x3a7a3a));
-                part(sphere_, then(S(0.12f, 0.12f, 0.12f), T(fx, 2.4f, fz)), f % 2 ? hexc(0xf28cb4) : hexc(0xf7d73a), 0.2f);
+                part(cyl_, then(S(0.03f, 0.35f, 0.03f), T(fx, 2, fz)), hexc(0x3a7a3a), 0, false);
+                part(sphere_, then(S(0.12f, 0.12f, 0.12f), T(fx, 2.4f, fz)), f % 2 ? hexc(0xf28cb4) : hexc(0xf7d73a));
             }
+        } else if (kind <= 3) {
+            tree(x, -4.4f - rndf(k, 33) * 0.6f, k * 7 + 3, 3);   // a bush
         }
-        // a second, further row of trees
-        if (hashi(k, 11) % 2 == 0) {
-            float z = -16.0f - rndf(k, 12) * 6.0f;
-            part(cyl_, then(S(0.25f, 2.2f, 0.25f), T(x + 1.3f, 2, z)), hexc(0x5a3a2a));
-            part(sphere_, then(S(1.5f, 1.4f, 1.5f), T(x + 1.3f, 4.8f, z)), hexc(0x3a7a4a));
+    }
+    // middle row: trees of every kind
+    for (int k = (int)std::floor(l / 3.5f); k <= (int)(r / 3.5f); ++k) {
+        if (hashi(k, 41) % 5 >= 3) continue;
+        float x = k * 3.5f + (rndf(k, 42) - 0.5f) * 1.6f;
+        if (nearCot(x, 4.0f)) continue;
+        tree(x, -6.0f - rndf(k, 43) * 2.5f, k * 13 + 1);
+    }
+    // houses along the back of the street
+    for (int k = (int)std::floor(l / 8); k <= (int)(r / 8); ++k) {
+        if (hashi(k, 51) % 3 == 0) continue;
+        float x = k * 8.0f + 4.0f + (rndf(k, 52) - 0.5f) * 1.5f;
+        if (nearCot(x, 6.0f)) continue;
+        house(x, -11.5f - rndf(k, 53) * 1.5f, k);
+    }
+    // far rows of trees
+    for (int k = (int)std::floor((l - 10) / 2.5f); k <= (int)((r + 20) / 2.5f); ++k) {
+        if (hashi(k, 61) % 3 == 0) continue;
+        float x = k * 2.5f + (rndf(k, 62) - 0.5f) * 1.5f;
+        tree(x, -15.0f - rndf(k, 63) * 9.0f, k * 17 + 5);
+    }
+}
+
+// ------------------------------------------------------------------ the ground
+// The solid tiles of the path as blocks: earth under a grass cap with a clear lip. Each row
+// of ground is merged into long boxes; floating blocks stay single so they read as blocks.
+void Models3D::drawGround(Game& g)
+{
+    const float zf = 1.0f, zb = -3.0f, zc = (zf + zb) / 2, dz = zf - zb;
+    int x0 = (int)std::floor(g.cam.left()) - 6, x1 = (int)std::ceil(g.cam.right()) + 18;
+    // left of the level's first column the level reports solid rock; show plain ground there
+    auto tileAt = [&](int x, int y) { return x < g.level.firstCol() ? (y >= LEVEL_H - 2 ? '#' : '.') : g.level.tile(x, y); };
+    auto solid = [&](int x, int y) { return y >= LEVEL_H || g.level.isSolidChar(tileAt(x, y)); };
+    auto groundDepth = [&](int x, int y) {   // rows of solid above this one
+        int d = 0;
+        while (d < 3 && y - d - 1 >= 0 && solid(x, y - d - 1)) ++d;
+        return d;
+    };
+    for (int ty = 0; ty < LEVEL_H; ++ty) {
+        int x = x0;
+        while (x <= x1) {
+            char ch = tileAt(x, ty);
+            if (!modelsTile(ch) && ch != '1' && ch != '2') { ++x; continue; }
+            bool floating = !solid(x, ty + 1) && ty < LEVEL_H - 1;
+            if (ch != '#' || floating) {   // a single block
+                Color c = ch == '=' ? hexc(0xa08a74) : (ch == '|' ? hexc(0x8a8aa4) : hexc(0xb89a7a));
+                if (ch == '1' || ch == '2') {   // memory blocks only one of the two can stand on
+                    c = mixc(ch == '1' ? hexc(0xf09a40) : hexc(0x4a94f0), WHITE, 0.12f + 0.12f * std::sin(g.time * 3 + x));
+                    part(cube_, then(S(0.9f, 0.9f, dz * 0.6f), T(x + 0.5f, Y3(ty + 0.5f), zc)), c, 0.25f);
+                    ++x;
+                    continue;
+                }
+                part(cube_, then(S(0.96f, 0.96f, dz), T(x + 0.5f, Y3(ty + 0.5f), zc)), c);
+                if (ch == '=') part(cube_, then(S(0.5f, 0.06f, 0.06f), T(x + 0.45f, Y3(ty + 0.45f), zf + 0.02f)), hexc(0x4a3a30), 0, false);
+                if (!solid(x, ty - 1) && ch == '#')
+                    part(cube_, then(S(1.0f, 0.22f, dz + 0.08f), T(x + 0.5f, Y3(ty + 0.09f), zc)), hexc(0x62c24a));
+                ++x;
+                continue;
+            }
+            // a run of ground with the same depth below the surface
+            int dep = groundDepth(x, ty), e = x;
+            while (e + 1 <= x1 && tileAt(e + 1, ty) == '#' && solid(e + 1, ty + 1) == solid(x, ty + 1) &&
+                   groundDepth(e + 1, ty) == dep)
+                ++e;
+            float w = (float)(e - x + 1), cx = x + w / 2;
+            Color dirt = dep == 0 ? hexc(0x8a5a3a) : (dep == 1 ? hexc(0x74482e) : hexc(0x5e3a26));
+            if (dep == 0)   // stops under the grass cap, so the two tops never fight
+                part(cube_, then(S(w, 0.9f, dz), T(cx, Y3(ty + 0.55f), zc)), dirt);
+            else
+                part(cube_, then(S(w, 1.0f, dz), T(cx, Y3(ty + 0.5f), zc)), dirt, 0, false);
+            if (dep == 0) {   // grass cap with a lip that overhangs the earth a little
+                // its top sits flush with the path (y 0) so drop shadows lie on it cleanly
+                part(cube_, then(S(w + 0.08f, 0.26f, dz + 0.1f), T(cx, Y3(ty + 0.13f), zc)), hexc(0x62c24a));
+            }
+            for (int i = x; i <= e; ++i)   // pebbles in the earth face
+                for (int k = 0; k < 2; ++k)
+                    if (hashi(i * 2 + k, ty + 90) % 2 == 0)
+                        part(cube_, then(S(0.16f, 0.09f, 0.04f), T(i + 0.2f + rndf(i * 2 + k, 91) * 0.6f,
+                                                                    Y3(ty + (dep == 0 ? 0.4f : 0.15f) + rndf(i * 2 + k, 92) * 0.5f), zf + 0.01f)),
+                             mixc(dirt, WHITE, 0.3f), 0, false);
+            x = e + 1;
         }
     }
 }

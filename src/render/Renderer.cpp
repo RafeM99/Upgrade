@@ -144,6 +144,9 @@ void Renderer::init()
 {
     post_ = LoadShader(nullptr, assetPath("shaders/post.fs").c_str());
     world_ = LoadShader(nullptr, assetPath("shaders/world.fs").c_str());
+    haze_ = LoadShader(nullptr, assetPath("shaders/haze.fs").c_str());
+    locHazeCol_ = GetShaderLocation(haze_, "hazeCol");
+    locHazeAmt_ = GetShaderLocation(haze_, "hazeAmt");
     locEra_ = GetShaderLocation(post_, "era");
     locTime_ = GetShaderLocation(post_, "time");
     locSize_ = GetShaderLocation(post_, "texSize");
@@ -194,6 +197,7 @@ void Renderer::shutdown()
     models_.shutdown();
     UnloadShader(post_);
     UnloadShader(world_);
+    UnloadShader(haze_);
 }
 
 Rectangle Renderer::screenRect() const
@@ -212,11 +216,11 @@ Rectangle Renderer::screenRect() const
 }
 
 // ------------------------------------------------------------------ background
-void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
+void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha, int layers)
 {
     const float parallaxByStyle[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
     const float* parallax = parallaxByStyle[STYLE[era]];
-    for (int l = 0; l < BG_LAYERS; ++l) {
+    for (int l = 0; l < std::min(layers, BG_LAYERS); ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
         float scale = (float)h / t.height;
         float tw = t.width * scale;
@@ -227,6 +231,76 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
             DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, tw + 1, (float)h}, {0, 0}, 0,
                            Color{255, 255, 255, (unsigned char)(alpha * 255)});
     }
+}
+
+// The 2.5D and 3D stages: only the sky is a flat picture. The other backdrop layers stand in
+// the scene as big cut-outs at real depths, on the lawn, so everything shares one perspective
+// and parallax comes from the camera itself. Further layers are hazed towards the horizon.
+void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
+{
+    struct Layer { int l; float z, height, baseFrac, haze; };
+    // baseFrac: how far up the picture its ground line sits (that part goes below the lawn)
+    const Layer dusk[3] = {{1, -64.0f, 24.0f, 0.0f, 0.6f}, {2, -38.0f, 11.0f, 0.16f, 0.45f}, {3, -20.0f, 6.5f, 0.14f, 0.3f}};
+    const Layer day[1] = {{1, -100.0f, 40.0f, 0.0f, 0.35f}};
+    const Layer* L = era == LAST_ERA ? day : dusk;
+    int n = era == LAST_ERA ? 1 : 3;
+    Vector3 horizon = era == LAST_ERA ? Vector3{0.86f, 0.92f, 0.97f} : Vector3{0.97f, 0.76f, 0.58f};
+    rlDrawRenderBatchActive();
+    BeginShaderMode(haze_);
+    SetShaderValue(haze_, locHazeCol_, &horizon, SHADER_UNIFORM_VEC3);
+    const float ground = 2.0f;   // 3D y of the path top
+    for (int i = 0; i < n; ++i) {
+        const Texture2D& t = g.art.era[era].bg[L[i].l];
+        if (t.id == 0) continue;
+        rlDrawRenderBatchActive();
+        SetShaderValue(haze_, locHazeAmt_, &L[i].haze, SHADER_UNIFORM_FLOAT);
+        float h = L[i].height, tw = h * t.width / t.height;
+        float half = (cam.position.z - L[i].z) * 1.1f + 12.0f;
+        float y0 = ground - 0.2f - L[i].baseFrac * h;   // world-down y of the picture top below
+        // quad() takes the top-left in level tiles (y down)
+        float top = (float)LEVEL_H - (y0 + h);
+        float start = std::floor((cam.target.x - half) / tw) * tw;
+        for (float x = start; x < cam.target.x + half; x += tw)
+            quad(t, Rectangle{0, 0, (float)t.width, (float)t.height}, x, top, tw + 0.02f, h, L[i].z, WHITE);
+    }
+    rlDrawRenderBatchActive();
+    EndShaderMode();
+}
+
+// 2.5D: flat lawn in front of and behind the path, out to the backdrop, in flat bands that step
+// towards the dusk sky colour with distance. A ditch floor under the pits and a bank behind them.
+void Renderer::drawLawns25D(Game& g)
+{
+    auto mix = [](unsigned a, unsigned b, float t) {
+        auto ch = [&](int s) { return (unsigned char)(((a >> s) & 255) + ((((int)(b >> s) & 255) - (int)((a >> s) & 255)) * t)); };
+        return Color{ch(16), ch(8), ch(0), 255};
+    };
+    const unsigned grass = 0x4f8a42, dusk = 0xf0b48a;
+    float l = g.cam.left() - 80, r = g.cam.right() + 80;
+    auto flat = [&](float z0, float z1, float y3, Color c) {   // a horizontal quad at 3D height y3
+        rlSetTexture(rlGetTextureIdDefault());
+        rlBegin(RL_QUADS);
+        rlColor4ub(c.r, c.g, c.b, c.a);
+        rlTexCoord2f(0, 0); rlVertex3f(l, y3, z0);
+        rlTexCoord2f(0, 1); rlVertex3f(l, y3, z1);
+        rlTexCoord2f(1, 1); rlVertex3f(r, y3, z1);
+        rlTexCoord2f(1, 0); rlVertex3f(r, y3, z0);
+        rlEnd();
+    };
+    flat(40.0f, -1.5f, 0.0f, mix(grass, 0x203018, 0.25f));                 // the low lawn in front, and the ditch floor
+    // the bank behind the ditches: a vertical face at the back of the path
+    rlSetTexture(rlGetTextureIdDefault());
+    rlBegin(RL_QUADS);
+    Color bank = hexc(0x5e3a2a);
+    rlColor4ub(bank.r, bank.g, bank.b, 255);
+    rlTexCoord2f(0, 0); rlVertex3f(l, 2.0f, -1.5f);
+    rlTexCoord2f(0, 1); rlVertex3f(l, 0.0f, -1.5f);
+    rlTexCoord2f(1, 1); rlVertex3f(r, 0.0f, -1.5f);
+    rlTexCoord2f(1, 0); rlVertex3f(r, 2.0f, -1.5f);
+    rlEnd();
+    const float bandZ[5] = {-1.5f, -8.0f, -20.0f, -36.0f, -70.0f};
+    for (int i = 0; i < 4; ++i) flat(bandZ[i], bandZ[i + 1], 1.98f, mix(grass, dusk, 0.12f + 0.16f * i));
+    rlSetTexture(0);
 }
 
 void Renderer::drawTitleBackground(Game& g, float t)
@@ -283,7 +357,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     BeginTextureMode(rt);
     ClearBackground(era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(SHADES4[3]) : BLACK));
     // the 1-bit background is drawn at full strength: its ordered patterns are the shading
-    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
+    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f, smooth(era) ? 1 : BG_LAYERS);
 
     float nearP, farP;
     float savedSwing = g.cam.swing;
@@ -305,16 +379,28 @@ void Renderer::drawEra(Game& g, int era, float swing)
     if (depth > 0.02f) rlEnableDepthTest(); else rlDisableDepthTest();
     rlDisableBackfaceCulling();
 
+    if (smooth(era)) {
+        drawBackdrop3D(g, era, c3);
+        BeginShaderMode(world_);
+        if (!full3D) drawLawns25D(g);
+    }
+
     // ---- tiles
+    auto tileAt = [&](int x, int y) {
+        if (x < g.level.firstCol() && smooth(era)) return y >= LEVEL_H - 2 && y < LEVEL_H ? '#' : '.';
+        return g.level.tile(x, y);
+    };
     int x0 = (int)std::floor(g.cam.left()) - 3, x1 = (int)std::ceil(g.cam.right()) + 3 + (int)(swing * 6);
     for (int tx = x0; tx <= x1; ++tx) {
-        if (tx < g.level.firstCol()) continue;
+        // left of the first column: nothing in the flat stages, plain ground once the camera turns
+        if (tx < g.level.firstCol() && !smooth(era)) continue;
         for (int ty = 0; ty < LEVEL_H; ++ty) {
-            char ch = g.level.tile(tx, ty);
+            char ch = tileAt(tx, ty);
             if (ch == '.') continue;
+            if (full3D) continue;   // the 3D stage models its blocks (Models3D::drawGround)
             int frame = T_GROUND;
-            bool above = g.level.isSolidChar(g.level.tile(tx, ty - 1));
-            bool below = g.level.isSolidChar(g.level.tile(tx, ty + 1));
+            bool above = g.level.isSolidChar(tileAt(tx, ty - 1));
+            bool below = g.level.isSolidChar(tileAt(tx, ty + 1));
             if (ch == '#') frame = !above ? (below || ty >= LEVEL_H - 2 ? T_GROUND_TOP : T_BLOCK) : T_GROUND;
             else if (ch == '=') frame = T_CRACKED;
             else if (ch == '1') frame = T_P1;
@@ -327,11 +413,19 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 tint = Color{255, 255, 255, a};
             }
             auto open = [&](int dx, int dy) {
-                char n = g.level.tile(tx + dx, ty + dy);
+                char n = tileAt(tx + dx, ty + dy);
                 return !(g.level.isSolidChar(n) || n == '1' || n == '2');
             };
             float d = (ch == '1' || ch == '2') ? depth * 0.6f : depth;
             tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            // pixel stages: a solid tile over empty space gets a dark underside, two native
+            // pixels deep (the lower one darkest), so floating platforms read as solid objects
+            if (lowRes(era) && ch != '1' && ch != '2' && ty + 1 < LEVEL_H && open(0, 1)) {
+                float px = 1.0f / TILE_PX[era];
+                Color dark = era == 1 ? hexc(SHADES4[0]) : (era == 0 ? Color{16, 18, 22, 255} : hexc(0x1a1424));
+                solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
+                solidQuad((float)tx, ty + 1 - px, 1.0f, px, 0.02f, dark);
+            }
         }
     }
 
@@ -340,6 +434,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
         rlDrawRenderBatchActive();
         models_.begin(g, c3);
         models_.drawScenery(g);
+        models_.drawGround(g);
         rlDrawRenderBatchActive();
     }
 
