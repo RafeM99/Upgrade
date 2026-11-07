@@ -1060,11 +1060,10 @@ void drawTile(Canvas& c, int t)
     case T_GROUND_TOP:
     case T_GROUND: {
         if (g_era == 0) {
-            // 1-bit: black earth, a solid white surface line on top, a few placed pebbles
+            // 1-bit: plain black earth under one solid white surface line, exactly 1 px thick.
+            // (A pebble here would repeat every 8 px and read as a dotted rail, so none.)
             c.rect(0, 0, 1, 1, solid(ONEBIT_DARK));
-            c.dot(0.25f, 0.62f, ONEBIT_LIGHT);
-            c.dot(0.75f, 0.87f, ONEBIT_LIGHT);
-            if (t == T_GROUND_TOP) c.rect(0, 0, 1, 0.13f, solid(ONEBIT_LIGHT));
+            if (t == T_GROUND_TOP) stamp(c, {"########"}, 0, 0);
             break;
         }
         // hand-placed earth: a base colour, a darker wavy layer low down, two pebbles and a root
@@ -1446,39 +1445,55 @@ void bgLayer(Px& p, int layer)
     sc.fade = g_era == 0 ? 0 : fades[layer];
     const Col L = ONEBIT_LIGHT, D = ONEBIT_DARK;
 
-    // ---------------- 1-bit: a black night, white outlines, very little else
+    // ---------------- 1-bit: a black night with a few dotted outlines that sit back
+    // The scenery recedes: every line is dotted (every other pixel), there is very little of it,
+    // and nothing is filled, so Gran, Sam, enemies, platforms and fragments (solid white with a
+    // black halo) always read in front of it.
     if (g_era == 0) {
+        // a dotted line: Bresenham, lighting every other step
+        auto dl = [&](int x0, int y0, int x1, int y1) {
+            int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy, n = 0;
+            for (;;) {
+                if ((n++ & 1) == 0) sc.put(((x0 % W) + W) % W, y0, L);
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+        };
         if (layer == 0) {
             sc.rect(0, 0, (float)W, (float)H, D);
-            const int stars[8][2] = {{12, 8}, {40, 20}, {71, 6}, {103, 15}, {150, 10}, {190, 22}, {231, 7}, {268, 17}};
+            const int stars[6][2] = {{12, 8}, {71, 5}, {150, 11}, {190, 21}, {231, 7}, {290, 15}};
             for (auto& st : stars) sc.put(st[0] % W, st[1], L);
             sc.disc(W * 0.3f, 14, 6, 6, L, L, false);    // the moon, a crescent
             sc.disc(W * 0.3f + 3, 12, 6, 6, D, D, false);
         } else if (layer == 1) {
-            // one ridge line, with an ordered (Bayer) dither only on the big hill area under it
-            for (int x = 0; x < W; ++x) {
-                int top = (int)(H * 0.58f + ridge((float)x, W, 3, 6, 3, 1));
+            // one far ridge, gentle and dotted, kept above the roofs and tree tops of the near layer
+            for (int x = 0; x < W; x += 2) {
+                int top = (int)std::lround(H * 0.52f + ridge((float)x, W, 3, 3.5f, 1.5f, 0));
                 sc.put(x, top, L);
-                for (int y = top + 2; y < H; ++y)
-                    if (bayer4f(x, y) < 0.07f) sc.put(x, y, L);
             }
         } else if (layer == 3) {
-            float g = H * 0.86f;
-            // Gran's home, as a toy house drawn in outline
-            float hx = W * 0.15f;
-            sc.frame(hx, g - 14, 18, 14, L);
-            for (int i = 0; i < 10; ++i) { sc.put((int)(hx - 1 + i), (int)(g - 14 - i), L); sc.put((int)(hx + 19 - i), (int)(g - 14 - i), L); }
-            sc.frame(hx + 7, g - 7, 4, 7, L);
-            sc.frame(hx + 2, g - 11, 4, 3, L);
-            // three bare trees, all different
-            const float tx[3] = {0.45f, 0.62f, 0.86f};
-            for (int i = 0; i < 3; ++i) {
-                float x = W * tx[i];
-                for (int y = 0; y < 12; ++y) sc.put((int)(x + (i == 2 ? y / 4 : 0)), (int)(g - y), L);
-                if (i == 0) for (int a = 0; a < 36; ++a) sc.put((int)(x + std::cos(a * 0.1745f) * 6), (int)(g - 16 + std::sin(a * 0.1745f) * 5), L);
-                if (i == 1) for (int k = 0; k < 8; ++k) { sc.put((int)(x - k), (int)(g - 10 - k), L); sc.put((int)(x + k), (int)(g - 12 - k), L); }
-                if (i == 2) for (int k = 0; k < 6; ++k) { sc.put((int)(x + 3 + k), (int)(g - 12 - k / 2), L); sc.put((int)(x + 3 - k), (int)(g - 14 - k), L); }
-            }
+            int g = (int)(H * 0.84f);
+            // Gran's home: a small toy house in dotted outline (walls, gable, door)
+            int hx = (int)(W * 0.15f);
+            dl(hx, g - 12, hx + 16, g - 12);
+            dl(hx, g - 12, hx, g);
+            dl(hx + 16, g - 12, hx + 16, g);
+            dl(hx - 2, g - 12, hx + 8, g - 20);
+            dl(hx + 18, g - 12, hx + 8, g - 20);
+            dl(hx + 6, g - 6, hx + 10, g - 6);
+            dl(hx + 6, g - 6, hx + 6, g);
+            dl(hx + 10, g - 6, hx + 10, g);
+            // two bare trees, different shapes
+            int t1 = (int)(W * 0.52f), t2 = (int)(W * 0.82f);
+            dl(t1, g, t1, g - 10);
+            for (int a = 0; a < 18; ++a)
+                sc.put((int)std::lround(t1 + std::cos(a * 0.349f) * 5), (int)std::lround(g - 15 + std::sin(a * 0.349f) * 4), L);
+            dl(t2, g, t2 + 1, g - 9);
+            dl(t2 + 1, g - 9, t2 + 6, g - 14);
+            dl(t2 + 1, g - 9, t2 - 4, g - 15);
         }
         return;
     }

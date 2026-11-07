@@ -227,8 +227,11 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
         float off = std::fmod(camX * pxPerTile * parallax[l], tw);
         if (off < 0) off += tw;
         off = std::floor(off);   // whole pixels only
+        // 1-bit: exactly one texel per native pixel (the +1 overlap would stretch 312 texels
+        // over 313 pixels and double a column)
+        float dw = era == 0 ? tw : tw + 1;
         for (float x = -off; x < w; x += tw)
-            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, tw + 1, (float)h}, {0, 0}, 0,
+            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, dw, (float)h}, {0, 0}, 0,
                            Color{255, 255, 255, (unsigned char)(alpha * 255)});
     }
 }
@@ -345,6 +348,20 @@ void Renderer::drawEra(Game& g, int era, float swing)
     g_lightAmount = smooth(era) ? std::min(1.0f, swing) : 0.0f;
     const bool full3D = era == LAST_ERA;
 
+    // A sprite quad. In 1-bit it lands on whole native pixels and gets a 1 px black halo
+    // (dark silhouettes offset left, right and up, drawn first), so it always reads over the line-drawn scenery.
+    auto sprite = [&](const Texture2D& tex, Rectangle src, float x, float y, float w, float h, float z, Color tint, bool flip) {
+        if (era != 0) { quad(tex, src, x, y, w, h, z, tint, flip); return; }
+        const float px = 1.0f / TILE_PX[0];
+        x = std::round(x / px) * px;
+        y = std::round(y / px) * px;
+        Color halo{16, 18, 22, tint.a};
+        // left, right and above only: a halo below would cut the ground line under their feet
+        const float ox[3] = {px, -px, 0}, oy[3] = {0, 0, -px};
+        for (int k = 0; k < 3; ++k) quad(tex, src, x + ox[k], y + oy[k], w, h, z, halo, flip);
+        quad(tex, src, x, y, w, h, z, tint, flip);
+    };
+
     // lights: the players glow warm and cool, the boss eye glows
     g_lights.clear();
     g_lights.push_back({g.cam.x, 4, 0.12f, 0.1f, 0.05f, 40});   // soft fill
@@ -420,7 +437,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
             tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
             // pixel stages: a solid tile over empty space gets a dark underside, two native
             // pixels deep (the lower one darkest), so floating platforms read as solid objects
-            if (lowRes(era) && ch != '1' && ch != '2' && ty + 1 < LEVEL_H && open(0, 1)) {
+            // (not in 1-bit: there the half-dark row would dither, and the tiles carry their own edges)
+            if (lowRes(era) && era != 0 && ch != '1' && ch != '2' && ty + 1 < LEVEL_H && open(0, 1)) {
                 float px = 1.0f / TILE_PX[era];
                 Color dark = era == 1 ? hexc(SHADES4[0]) : (era == 0 ? Color{16, 18, 22, 255} : hexc(0x1a1424));
                 solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
@@ -471,13 +489,14 @@ void Renderer::drawEra(Game& g, int era, float swing)
     for (const auto& f : g.frags) {
         if (full3D) break;
         int fr = ((int)(f.t * 6 + f.x) % 2) ? T_FRAG1 : T_FRAG0;
-        float s = 0.7f;
+        float s = era == 0 ? 1.0f : 0.7f;   // 1-bit: drawn 1:1, never resampled
         unsigned char a = (!f.placed && f.t > 10) ? (unsigned char)(255 * std::max(0.0f, (12 - f.t) / 2)) : 255;
-        quad(A.tiles, frameRect(A.tiles, fr, 1, 1, era), f.x - s / 2, f.y - s / 2, s, s, 0.1f, Color{255, 255, 255, a});
+        sprite(A.tiles, frameRect(A.tiles, fr, 1, 1, era), f.x - s / 2, f.y - s / 2, s, s, 0.1f, Color{255, 255, 255, a}, false);
     }
     for (const auto& pu : g.powerups) {
         float bob = std::sin(pu.t * 3) * 0.12f;
-        quad(A.tiles, frameRect(A.tiles, T_PU_SHIELD + pu.type, 1, 1, era), pu.x - 0.45f, pu.y - 0.45f + bob, 0.9f, 0.9f, 0.1f, WHITE);
+        float ps = era == 0 ? 1.0f : 0.9f;
+        sprite(A.tiles, frameRect(A.tiles, T_PU_SHIELD + pu.type, 1, 1, era), pu.x - ps / 2, pu.y - ps / 2 + bob, ps, ps, 0.1f, WHITE, false);
         if ((int)(pu.t * 4) % 2 == 0) ring(pu.x, pu.y + bob, 0.6f, Color{255, 240, 180, 160});
     }
 
@@ -506,7 +525,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (e.dead) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - e.deadTime / 0.45f));
         float dx = e.cx() - fs / 2, dy = e.y + e.h - fs;
         if (e.type == EN_FLYER) dy = e.cy() - fs / 2;
-        quad(*t, frameRect(*t, fr, fs, fs, era), dx, dy, fs, fs, 0.0f, tint, e.dir > 0 ? false : true);
+        sprite(*t, frameRect(*t, fr, fs, fs, era), dx, dy, fs, fs, 0.0f, tint, e.dir > 0 ? false : true);
         if (e.owner >= 0 && !e.dead) ring(e.cx(), e.cy(), fs * 0.6f, e.owner == 0 ? Color{255, 150, 60, 200} : Color{80, 160, 255, 200});
     }
 
@@ -525,7 +544,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
-        if (!full3D) quad(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        if (!full3D) sprite(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
     }
 
     // ---- players
@@ -543,8 +562,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
         }
         const Texture2D& t = A.player[p];
         if (full3D) models_.drawPlayer(g, p);
-        else quad(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox, pl.bottom() - PLAYER_FH + 0.03f,
-             PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
+        else sprite(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox,
+                    pl.bottom() - PLAYER_FH + (era == 0 ? 0.0f : 0.03f), PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
         if (pl.shield) ring(pl.cx(), pl.cy(), 0.95f, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
         if (pl.faded && pl.reviveProgress > 0) ring(pl.cx(), pl.cy(), 1.1f * (1 - pl.reviveProgress / 0.6f) + 0.3f, Color{255, 255, 255, 230});
         if (pl.attackTime > 0) {

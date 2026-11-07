@@ -46,13 +46,19 @@ void main()
     if (mosaic > 1.01) {
         tp = (floor(tp / mosaic) + 0.5) * mosaic;
     } else if (era <= 4) {
-        vec2 scale = max(outSize / texSize, vec2(1.0));
-        vec2 i = floor(tp);
-        vec2 f = clamp((tp - i - 0.5) * scale + 0.5, 0.0, 1.0);
-        tp = i + f;
+        // pixel stages are always scaled by a whole number: read each native pixel at its
+        // centre, so it is never a blend of two neighbours
+        tp = floor(tp) + 0.5;
     }
     vec2 uv = tp / texSize;
     vec3 c = texture(texture0, uv).rgb;
+    // 1-bit: the screen is always a whole-number multiple of the native buffer, so read each
+    // native pixel exactly once (nearest), never a blend of two neighbours that the threshold
+    // below would turn into stray dots and doubled rows.
+    if (era == 0 && mosaic <= 1.01) {
+        ivec2 ip = clamp(ivec2(floor(fragTexCoord * texSize)), ivec2(0), ivec2(texSize) - 1);
+        c = texelFetch(texture0, ip, 0).rgb;
+    }
     vec2 px = floor(tp);
     vec2 d = fragTexCoord - 0.5;
     float vig = 1.0 - dot(d, d) * 1.4;
