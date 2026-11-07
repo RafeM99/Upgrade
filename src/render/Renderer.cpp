@@ -420,10 +420,11 @@ void Renderer::drawEra(Game& g, int era, float swing)
     if (lowRes(era) && c3.projection == CAMERA_ORTHOGRAPHIC) {
         // the buffer is sized to fill the window (ensureTargets), so it can be a few rows taller
         // or shorter than the camera's view: show exactly its height, one texel per pixel. A
-        // taller view keeps the floor on the bottom edge and shows more sky; a shorter one trims
-        // top and bottom alike.
+        // taller view keeps the floor on the bottom edge and shows more sky; a shorter one keeps
+        // the bottom edge too and trims only the top (under the HUD), so the floor under a
+        // standing player is never cut off.
         float viewH = (float)rtH_[era] / TILE_PX[era];
-        if (viewH > c3.fovy) c3.target.y += (viewH - c3.fovy) / 2;
+        c3.target.y += (viewH - c3.fovy) / 2;
         c3.fovy = viewH;
         // snap the camera to the native pixel grid, so sprites never land between pixels
         float tp = (float)TILE_PX[era];
