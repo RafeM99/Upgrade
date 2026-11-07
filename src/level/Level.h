@@ -24,6 +24,7 @@ public:
     bool isSolidChar(char c) const { return c == '#' || c == '=' || c == '|'; }
     void append(const Chunk& c, std::vector<SpawnMarker>& out);
     void dropBefore(int x);
+    void truncateFrom(int x);   // forget every column from x on (not yet seen), to place something new there
     int firstCol() const { return first_; }
     int endCol() const { return first_ + (int)cols_.size(); }
     int groundTop(int x) const;   // first solid row from the top, or -1 for a pit
@@ -41,6 +42,7 @@ public:
     // Keeps chunks spawned up to `untilX`. era, ability mask, two players?
     void fill(Level& level, float untilX, int era, unsigned abilities, bool twoPlayers, std::vector<SpawnMarker>& out);
     void forceAbility(int ability) { forced_.push_back(ability); }
+    void forceChunk(const std::string& name) { forcedName_ = name; }   // next chunk, by file name
     float generatedChance = 0.3f;
     const std::string& lastName() const { return last_; }
 
@@ -48,6 +50,7 @@ private:
     std::vector<Chunk> pool_;
     std::mt19937 rng_;
     std::vector<int> forced_;
+    std::string forcedName_;
     std::string last_;
     int placed_ = 0;
 };

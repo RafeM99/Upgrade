@@ -153,6 +153,9 @@ void Renderer::init()
     locTime_ = GetShaderLocation(post_, "time");
     locSize_ = GetShaderLocation(post_, "texSize");
     locFlash_ = GetShaderLocation(post_, "flash");
+    locOut_ = GetShaderLocation(post_, "outSize");
+    locMosaic_ = GetShaderLocation(post_, "mosaic");
+    locGlitch_ = GetShaderLocation(post_, "glitch");
     locDesat_ = GetShaderLocation(post_, "desat");
     locPal_ = GetShaderLocation(post_, "palette");
     float pal[48];
@@ -175,7 +178,9 @@ void Renderer::ensureTargets()
         rt_[e] = LoadRenderTexture(w, h);
         rtW_[e] = w;
         rtH_[e] = h;
-        SetTextureFilter(rt_[e].texture, e < 3 ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+        // Bilinear on every era: post.fs does "sharp" sampling, so pixel art stays crisp and even
+        // at any scale, and the mosaic blocks of the transition sample cleanly.
+        SetTextureFilter(rt_[e].texture, TEXTURE_FILTER_BILINEAR);
     }
 }
 
@@ -215,6 +220,7 @@ void Renderer::drawTitleBackground(Game& g, float t)
     ensureTargets();
     int e = ((int)(t / 3.0f)) % 4;
     renderEra_ = e;
+    oldEra_ = -1;
     BeginTextureMode(rt_[e]);
     ClearBackground(BLACK);
     drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (e == 3 ? rtH_[3] / (VIEW_TILES_H * TILE_PX[3]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
@@ -225,13 +231,28 @@ void Renderer::drawTitleBackground(Game& g, float t)
 void Renderer::drawWorld(Game& g)
 {
     ensureTargets();
-    const int era = g.era;
-    renderEra_ = era;
+    oldEra_ = -1;
+    float p = sweepProgress(g);
+    if (p >= 0.0f && p < 1.0f && g.transFromEra != g.era) {
+        oldEra_ = g.transFromEra;
+        drawEra(g, oldEra_, 0.0f);   // the old world, still flat, behind the sweep
+    }
+    drawEra(g, g.era, g.cam.swing);
+    renderEra_ = g.era;
+}
+
+float Renderer::sweepProgress(const Game& g)
+{
+    if (!g.transActive || !g.transSwitched) return -1.0f;
+    return std::min(1.0f, std::max(0.0f, (g.transT - kSwitchAt) / kSweepTime));
+}
+
+void Renderer::drawEra(Game& g, int era, float swing)
+{
     const EraArt& A = g.art.era[era];
     RenderTexture2D& rt = rt_[era];
     g.cam.aspect = (float)rtW_[era] / rtH_[era];
     float pxPerTile = rtH_[era] / g.cam.viewH;
-    const float swing = g.cam.swing;
     const float depth = swing;   // blocks extrude as the camera swings
     g_lightAmount = era == 3 ? swing : 0.0f;
 
@@ -246,11 +267,14 @@ void Renderer::drawWorld(Game& g)
 
     BeginTextureMode(rt);
     ClearBackground(era == 0 ? Color{16, 18, 22, 255} : BLACK);
-    // the 1-bit background is drawn faint, so the dither turns it into a soft dotted memory
-    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], era == 0 ? 0.42f : 1.0f);
+    // the 1-bit background is drawn at full strength: its ordered patterns are the shading
+    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
 
     float nearP, farP;
+    float savedSwing = g.cam.swing;
+    g.cam.swing = swing;
     Camera3D c3 = g.cam.camera3D(nearP, farP);
+    g.cam.swing = savedSwing;
     rlDrawRenderBatchActive();
     rlSetClipPlanes(nearP, farP);
     BeginMode3D(c3);
@@ -436,18 +460,73 @@ void Renderer::drawWorld(Game& g)
 }
 
 // ------------------------------------------------------------------ to the screen
-void Renderer::present(Game& g, float flash, float desat)
+void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, float mosaic, float glitch)
 {
-    int e = renderEra_;
     float t = g.time;
     float size[2] = {(float)rtW_[e], (float)rtH_[e]};
+    float out[2] = {dst.width, dst.height};
     SetShaderValue(post_, locEra_, &e, SHADER_UNIFORM_INT);
     SetShaderValue(post_, locTime_, &t, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locSize_, size, SHADER_UNIFORM_VEC2);
+    SetShaderValue(post_, locOut_, out, SHADER_UNIFORM_VEC2);
     SetShaderValue(post_, locFlash_, &flash, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
-    Rectangle dst = screenRect();
+    SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locGlitch_, &glitch, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(post_);
     DrawTexturePro(rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, {0, 0}, 0, WHITE);
     EndShaderMode();
+}
+
+// The upgrade scanline: a hot white edge with a glow trailing behind it, and loose pixels
+// the size of the old era's pixels breaking off and flying ahead of it.
+void Renderer::drawSweep(Game& g, Rectangle dst, float p)
+{
+    const Color eraGlow[4] = {{235, 235, 225, 255}, {247, 215, 58, 255}, {242, 140, 180, 255}, {255, 220, 150, 255}};
+    Color glow = eraGlow[std::min(3, std::max(0, g.era))];
+    float x = dst.x + dst.width * p;
+    int y0 = (int)dst.y, h = (int)dst.height;
+    DrawRectangleGradientH((int)(x - 90), y0, 90, h, Color{glow.r, glow.g, glow.b, 0}, Color{glow.r, glow.g, glow.b, 110});
+    DrawRectangleGradientH((int)x, y0, 28, h, Color{255, 255, 255, 170}, Color{255, 255, 255, 0});
+    DrawRectangle((int)x - 2, y0, 4, h, WHITE);
+
+    float px = oldEra_ >= 0 ? std::max(3.0f, dst.height / rtH_[oldEra_]) : 6.0f;   // one old-era pixel on screen
+    for (int i = 0; i < 70; ++i) {
+        float hy = std::fmod(std::sin(i * 91.7f) * 43758.5f, 1.0f);
+        float hx = std::fmod(std::sin(i * 37.3f + 1.7f) * 24634.6f, 1.0f);
+        hy = std::fabs(hy);
+        hx = std::fabs(hx);
+        float life = std::fmod(g.time * (1.5f + hx) + hx * 3.0f, 1.0f);   // each pixel loops along
+        float sx = x + life * (40 + 160 * hx);
+        float sy = dst.y + hy * dst.height + std::sin(g.time * 6 + i) * 6;
+        if (sx > dst.x + dst.width) continue;
+        unsigned char a = (unsigned char)(255 * (1 - life));
+        Color c = (i % 3 == 0) ? Color{255, 255, 255, a} : Color{glow.r, glow.g, glow.b, a};
+        DrawRectangle((int)sx, (int)sy, (int)px, (int)px, c);
+    }
+}
+
+void Renderer::present(Game& g, float flash, float desat)
+{
+    Rectangle dst = screenRect();
+
+    // Before the switch: the old era powers down, going blocky and torn.
+    if (g.transActive && !g.transSwitched) {
+        float k = std::min(1.0f, g.transT / kSwitchAt);
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + k * k * 7.0f, k * 0.9f);
+        return;
+    }
+
+    float p = sweepProgress(g);
+    if (oldEra_ >= 0 && p >= 0.0f && p < 1.0f) {
+        float e = p * p * (3 - 2 * p);   // ease in and out
+        blitEra(g, oldEra_, dst, 0.0f, desat, 8.0f, 0.5f);
+        float edge = dst.x + dst.width * e;
+        BeginScissorMode((int)dst.x, (int)dst.y, std::max(0, (int)(edge - dst.x)), (int)dst.height);
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + 3.0f * (1.0f - e), 0.0f);   // sharpens as it goes
+        EndScissorMode();
+        drawSweep(g, dst, e);
+        return;
+    }
+    blitEra(g, renderEra_, dst, flash, desat, 1.0f, 0.0f);
 }

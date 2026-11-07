@@ -626,28 +626,30 @@ void drawTile(Canvas& c, int t)
         c.rect(0, 0, 1, 1, [&](const Frag& f) {
             Col d = dirt;
             if (g_era == 0) {
-                // 1-bit: sparse light dots on dark
-                return (rnd(f.ix, f.iy, 5) < 0.12f) ? ONEBIT_LIGHT : ONEBIT_DARK;
+                // 1-bit: a clean brick-and-mortar pattern, light lines on dark (8 x 8 tile)
+                int lx = f.ix & 7, ly = f.iy & 7;
+                bool mortar = ly == 7 || (lx == 3 && ly < 7 && ly > 1);
+                return mortar ? ONEBIT_LIGHT : ONEBIT_DARK;
             }
             if (g_era >= 2) d = mixc(dirt, dirtDark, f.y * 0.6f);
             if (rnd(f.ix, f.iy, 5) < 0.12f) d = dirtDark;
             return d;
         });
         // a few stones
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < (g_era == 0 ? 0 : 3); ++i) {   // stones would be noise in 1-bit
             float sx = 0.15f + rnd(i, t, 6) * 0.7f, sy = 0.4f + rnd(i, t, 7) * 0.5f;
             c.ellipse(sx, sy, 0.09f, 0.06f, shade(g_era == 0 ? ONEBIT_LIGHT : stone, 0.8f));
         }
         if (t == T_GROUND_TOP) {
             Col grass = eraCol(0x6fdc4a, 1.0f), grassDark = eraCol(0x1e8a4c, 1.0f);
             c.rect(0, 0, 1, 0.28f, [&](const Frag& f) {
-                if (g_era == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ((f.ix + f.iy) % 2 ? ONEBIT_LIGHT : ONEBIT_DARK);
+                if (g_era == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // one bright top edge
                 Col g = f.y < 0.12f ? grass : grassDark;
                 if (g_era >= 2) g = mixc(grass, grassDark, f.y / 0.28f);
                 return g;
             });
             // grass tufts hanging down
-            for (int i = 0; i < 4; ++i) {
+            for (int i = 0; i < (g_era == 0 ? 2 : 4); ++i) {
                 float gx = 0.12f + i * 0.25f;
                 c.poly({{gx - 0.06f, 0.27f}, {gx + 0.06f, 0.27f}, {gx, 0.38f + 0.04f * (i % 2)}},
                        solid(g_era == 0 ? ONEBIT_LIGHT : grassDark));
@@ -807,7 +809,7 @@ void bgLayer(Px& p, int era, int layer)
                 Col c;
                 if (era == 0) {
                     c = ONEBIT_DARK;
-                    if (rnd(x, y, 3) < 0.004f) c = ONEBIT_LIGHT;
+                    if (rnd(x, y, 3) < 0.0025f && y < H * 0.5f) c = ONEBIT_LIGHT;   // a few stars
                 } else if (era == 1) c = t < 0.55f ? hex(0x3c9cf0) : hex(0x8ccff0);
                 else if (era == 2) c = mixc(mixc(hex(0x4a3a8a), hex(0xd06a8a), clamp01(t * 1.5f)), hex(0xf7b06a), clamp01(t * 2 - 1));
                 else {
@@ -846,10 +848,12 @@ void bgLayer(Px& p, int era, int layer)
             Col c;
             if (era == 0) {
                 // 1-bit: outline ridges with a little dither under them
+                // Ordered halftone, not random dots: far hills get a sparse grid, near hills a
+                // checker that fades out with depth. Reads as shading, not static.
                 bool edge = y - (int)top < 1;
-                float density = layer == 1 ? 0.08f : (layer == 2 ? 0.25f : 0.0f);
-                bool on = edge || rnd(x, y, layer) < density * (1 - d);
-                if (layer == 3) on = edge;
+                bool on = edge;
+                if (layer == 1) on = on || ((x % 4) == 0 && (y % 4) == 0);
+                if (layer == 2) on = on || (((x + y) % 2) == 0 && (y % 2) == 0 && d < 0.35f);
                 c = on ? ONEBIT_LIGHT : ONEBIT_DARK;
                 if (!on && layer == 1) continue;
             } else if (era == 1) {

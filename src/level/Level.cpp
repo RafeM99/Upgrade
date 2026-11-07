@@ -1,3 +1,4 @@
+#include "raylib.h"
 #include "level/Level.h"
 #include "player/Abilities.h"
 
@@ -59,6 +60,11 @@ void Level::dropBefore(int x)
     }
 }
 
+void Level::truncateFrom(int x)
+{
+    while (!cols_.empty() && endCol() > x) cols_.pop_back();
+}
+
 int Level::groundTop(int x) const
 {
     for (int y = 0; y < LEVEL_H; ++y)
@@ -93,6 +99,13 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
             return c.weight > 0;
         };
         const Chunk* pick = nullptr;
+        // An era's intro gate comes first, straight after the upgrade.
+        if (!forcedName_.empty()) {
+            for (auto& ch : pool_)
+                if (ch.name == forcedName_) pick = &ch;
+            if (pick) TraceLog(LOG_INFO, "UPGRADE: placed %s at column %d", pick->name.c_str(), level.endCol());
+            forcedName_.clear();
+        }
         // Right after an ability unlocks, the next chunk uses it.
         while (!forced_.empty() && !pick) {
             int ab = forced_.front();

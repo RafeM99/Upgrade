@@ -112,6 +112,7 @@ void Game::startRun()
     bestX = players[0].x;
     audio.setEra(era);
     events().eraChanged.emit(era);
+    if (era > 0) spawner.forceChunk("intro_era" + std::to_string(era));   // starting late: show the gate
     spawner.fill(level, cam.right() + 60, era, 0, !solo(), markers);
     spawnMarkers();
     showBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 3.0f);
@@ -152,7 +153,8 @@ void Game::run()
         if (screen == Screen::Title) renderer.drawTitleBackground(*this, time);
         else if (screen != Screen::Ending) {
             renderer.drawWorld(*this);
-            if (transActive) flash = std::max(0.0f, 1.0f - std::fabs(transT - 0.8f) / 0.6f);
+            // a short white pop right at the switch; the sweep does the rest
+            if (transActive) flash = 0.7f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.15f);
             if (lostTimer > 0) desat = std::min(1.0f, (1.5f - lostTimer) * 2);
             for (int p = 0; p < 2 && !solo(); ++p) (void)p;
         }
@@ -281,7 +283,8 @@ void Game::updatePlaying(float dt)
     // ---- era transition: gameplay is frozen while the world upgrades
     if (transActive) {
         transT += dt;
-        if (!transSwitched && transT >= 0.8f) switchEra(transFromEra + 1);
+        if (!transSwitched && transT >= Renderer::kSwitchAt) switchEra(transFromEra + 1);
+        if (!transSwitched) cam.addShake(0.4f * transT / Renderer::kSwitchAt);   // the old world shudders
         if (transSwitched && era == 3) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
         cam.update(cam.x, 0, wallX - 3, dt);
         if (transT >= transLen) { transActive = false; cam.swing = era == 3 ? 1.0f : 0.0f; }
@@ -575,7 +578,7 @@ void Game::updatePlaying(float dt)
                 if (pl.has[a]) mask |= 1u << a;
     if (level.endCol() < cam.right() + 70) {
         size_t before = markers.size();
-        spawner.fill(level, cam.right() + 80, era, mask, !soloNow, markers);
+        spawner.fill(level, cam.right() + config().f("level.lookahead_tiles", 30.0f), era, mask, !soloNow, markers);
         if (markers.size() != before) spawnMarkers();
     }
     level.dropBefore((int)std::floor(wallX) - 30);
@@ -806,6 +809,7 @@ void Game::beginEraTransition()
     transFromEra = era;
     transLen = era + 1 == 3 ? 4.4f : 3.4f;
     audio.play("era_up");
+    TraceLog(LOG_INFO, "UPGRADE: era transition %d -> %d at frame %d", era, era + 1, frameNo_);
 }
 
 void Game::unlockAbilitiesFor(int newEra)
@@ -828,6 +832,27 @@ void Game::switchEra(int newEra)
     bar = 0;
     bossBeatenThisEra = false;
     unlockAbilitiesFor(era);
+    // The level just past the screen is rebuilt so the new era's intro gate comes next.
+    {
+        int cut = (int)std::ceil(cam.right()) + 8;
+        if (level.endCol() > cut) {
+            float cx = (float)cut;
+            level.truncateFrom(cut);
+            enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [cx](const Enemy& e) { return e.cx() >= cx; }), enemies.end());
+            frags.erase(std::remove_if(frags.begin(), frags.end(), [cx](const Fragment& f) { return f.placed && f.x >= cx; }), frags.end());
+            powerups.erase(std::remove_if(powerups.begin(), powerups.end(), [cx](const PowerUp& p) { return p.x >= cx; }), powerups.end());
+            markers.erase(std::remove_if(markers.begin(), markers.end(), [cx](const SpawnMarker& m) { return m.x >= cx; }), markers.end());
+        }
+        unsigned mask = 0;
+        for (auto& pl : players)
+            if (pl.joined)
+                for (int a = 0; a < AB_COUNT; ++a)
+                    if (pl.has[a]) mask |= 1u << a;
+        spawner.forceChunk("intro_era" + std::to_string(era));
+        size_t before = markers.size();
+        spawner.fill(level, cam.right() + config().f("level.lookahead_tiles", 30.0f), era, mask, !solo(), markers);
+        if (markers.size() != before) spawnMarkers();
+    }
     audio.setEra(era);
     audio.play("unlock");
     events().eraChanged.emit(era);
