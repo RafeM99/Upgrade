@@ -51,6 +51,70 @@ const Player* nearest(const Player* ps, float x, float y, float& dist)
 bool solidE(const Level& L, float x, float y, float w, float h) { return boxHitsSolid(L, x, y, w, h, -1, false); }
 }  // namespace
 
+// The box an enemy keeps out of the terrain. It is a little bigger than the hitbox where the
+// drawn sprite is (the art is drawn ENEMY_K bigger than the hitbox), so a blob's body or a
+// book's pages never sink into a wall or a ceiling. The hitbox for players is unchanged.
+void enemyTerrainBox(const Enemy& e, float& x, float& y, float& w, float& h)
+{
+    float padX = 0, padTop = 0, padBottom = 0;
+    if (e.type == EN_BLOB) { padX = 0.1f; padTop = 0.22f; }
+    else if (e.type == EN_FLYER) { padX = 0.15f; padTop = 0.12f; padBottom = 0.12f; }
+    else if (e.type == EN_BRUTE) { padX = 0.0f; padTop = 0.12f; }
+    x = e.x - padX;
+    w = e.w + 2 * padX;
+    y = e.y - padTop;
+    h = e.h + padTop + padBottom;
+}
+
+static bool enemyHitsTerrain(const Level& L, const Enemy& e, float dx, float dy)
+{
+    float x, y, w, h;
+    enemyTerrainBox(e, x, y, w, h);
+    return solidE(L, x + dx, y + dy, w, h);
+}
+
+bool enemyMove(Enemy& e, const Level& level, float dx, float dy)
+{
+    // Move along one axis in small steps and stop flush against the first solid tile, so an
+    // enemy never passes through a thin wall or sinks into the floor on a fast frame.
+    float total = std::fabs(dx) + std::fabs(dy);
+    if (total <= 0) return false;
+    int steps = std::max(1, (int)std::ceil(total / 0.2f));
+    float sx = dx / steps, sy = dy / steps;
+    for (int i = 0; i < steps; ++i) {
+        if (!enemyHitsTerrain(level, e, sx, sy)) { e.x += sx; e.y += sy; continue; }
+        // blocked inside this step: find how far it can go (binary search to ~1/500 tile)
+        float lo = 0, hi = 1;
+        for (int k = 0; k < 9; ++k) {
+            float mid = (lo + hi) / 2;
+            if (enemyHitsTerrain(level, e, sx * mid, sy * mid)) hi = mid; else lo = mid;
+        }
+        e.x += sx * lo;
+        e.y += sy * lo;
+        return true;
+    }
+    return false;
+}
+
+bool settleEnemy(Enemy& e, const Level& level)
+{
+    // Spawned (or pushed) into the terrain: move it to the nearest free spot, trying up first,
+    // then sideways, then both. Returns false if there is no room nearby at all.
+    if (!enemyHitsTerrain(level, e, 0, 0)) return true;
+    for (int r = 1; r <= 24; ++r) {
+        float d = r * 0.25f;
+        const float tries[][2] = {{0, -d}, {-d, 0}, {d, 0}, {-d, -d}, {d, -d}, {0, d}};
+        for (auto& t : tries)
+            if (!enemyHitsTerrain(level, e, t[0], t[1])) {
+                e.x += t[0];
+                e.y += t[1];
+                e.baseY += t[1];
+                return true;
+            }
+    }
+    return false;
+}
+
 void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int era, float timeScale, const EnemyTuning& tu)
 {
     if (e.dead) {
@@ -61,21 +125,31 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
     dt *= timeScale;
     e.t += dt;
     e.hurt = std::max(0.0f, e.hurt - dt);
+    e.blink = std::max(0.0f, e.blink - dt);
     float eraK = 1.0f + tu.speedPerEra * era;
+    // pushed into a wall (a knock-back, a crumbling floor): step back out first
+    if (enemyHitsTerrain(level, e, 0, 0) && !settleEnemy(e, level)) { e.remove = true; return; }
 
     if (e.type == EN_FLYER) {
         float d;
         const Player* p = nearest(players, e.cx(), e.cy(), d);
+        float mx = 0;
         if (p && d < 12) {
             float dx = p->cx() - e.cx();
-            e.dir = dx < 0 ? -1 : 1;
-            e.x += e.dir * tu.flyerSpeed * eraK * dt;
+            if (std::fabs(dx) > 0.2f) e.dir = dx < 0 ? -1 : 1;
+            mx = e.dir * tu.flyerSpeed * eraK * dt;
             e.baseY += (std::min(p->y - 1.5f, 10.0f) - e.baseY) * 0.3f * dt;
         }
-        e.y = e.baseY + std::sin(e.t * 2.4f) * 1.1f;
-        if (e.y < 0.5f) e.y = 0.5f;
-        // glitch: blink a short distance now and then (16-bit era on)
-        if (era >= 2 && std::fmod(e.t, 3.0f) < dt) e.x += e.dir * 1.2f;
+        e.baseY = std::max(0.5f, e.baseY);
+        // fly around the terrain, never through it: blocked sideways, it rises over the obstacle
+        if (mx != 0 && enemyMove(e, level, mx, 0)) e.baseY -= 1.5f * dt;
+        float wantY = std::max(0.5f, e.baseY + std::sin(e.t * 2.4f) * 1.1f);
+        if (enemyMove(e, level, 0, wantY - e.y)) {
+            // the sine wave hit a floor or a ceiling: move the centre of the wave away from it
+            e.baseY += (wantY > e.y ? -1.0f : 1.0f) * 2.0f * dt;
+        }
+        // glitch: from 16-bit on it flickers now and then (drawn only, it never jumps)
+        if (era >= 2 && std::fmod(e.t, 3.0f) < dt) e.blink = 0.25f;
         return;
     }
 
@@ -98,26 +172,26 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
     e.vx = e.dir * speed;
     e.vy = std::min(e.vy + 50 * dt, 20.0f);
 
-    e.x += e.vx * dt;
-    if (solidE(level, e.x, e.y, e.w, e.h)) {
-        e.x -= e.vx * dt;
+    auto turn = [&]() {
         e.dir = -e.dir;
         if (e.state == 2) { e.state = 0; e.stateTime = 0; }
+    };
+    // turn at ledges before stepping off them (only on the ground: falling enemies keep going)
+    if (e.onGround && e.vx != 0) {
+        float bx, by, bw, bh;
+        enemyTerrainBox(e, bx, by, bw, bh);
+        float ahead = e.dir > 0 ? bx + bw + std::fabs(e.vx * dt) + 0.02f : bx - std::fabs(e.vx * dt) - 0.02f;
+        if (!level.solidFor((int)std::floor(ahead), (int)std::floor(e.y + e.h + 0.1f), -1, false)) { turn(); e.vx = -e.vx; }
     }
-    e.y += e.vy * dt;
+    if (enemyMove(e, level, e.vx * dt, 0)) turn();
+    bool wasGround = e.onGround;
     e.onGround = false;
-    if (solidE(level, e.x, e.y, e.w, e.h)) {
-        if (e.vy > 0) { e.y = std::floor(e.y + e.h) - e.h - 0.001f; e.onGround = true; }
-        else e.y = std::floor(e.y) + 1.001f;
+    if (enemyMove(e, level, 0, e.vy * dt)) {
+        if (e.vy > 0) e.onGround = true;
         e.vy = 0;
-    }
-    // turn at ledges
-    if (e.onGround) {
-        float ahead = e.dir > 0 ? e.x + e.w + 0.05f : e.x - 0.05f;
-        if (!level.solidFor((int)std::floor(ahead), (int)std::floor(e.y + e.h + 0.1f), -1, false)) {
-            e.dir = -e.dir;
-            if (e.state == 2) { e.state = 0; e.stateTime = 0; }
-        }
+    } else if (wasGround && e.vy > 0 && enemyHitsTerrain(level, e, 0, 0.05f)) {
+        e.onGround = true;   // resting exactly on the floor
+        e.vy = 0;
     }
     if (e.y > LEVEL_H + 2) e.remove = true;
 }

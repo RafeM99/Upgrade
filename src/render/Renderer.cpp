@@ -592,6 +592,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (e.owner == 0) tint = Color{255, 175, 95, 255};
         if (e.owner == 1) tint = Color{120, 180, 255, 255};
         if (e.dead) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - e.deadTime / 0.45f));
+        if (e.blink > 0 && ((int)(e.blink * 30)) % 2 == 0) tint.a = (unsigned char)(tint.a * 0.3f);   // the flyer's glitch flicker
         float dx = e.cx() - fs / 2, dy = e.y + e.h - fs;
         if (e.type == EN_FLYER) dy = e.cy() - fs / 2;
         sprite(*t, frameRect(*t, fr, fs, fs, era), dx, dy, fs, fs, 0.0f, tint, e.dir > 0 ? false : true);
