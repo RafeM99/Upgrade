@@ -1878,6 +1878,15 @@ Col horizonOf(int stage)
     return hex(h[stage]);
 }
 
+// Each stage's own scene painter lives in tools/assetgen/bg/eraN.inc.
+#include "bg/era0.inc"
+#include "bg/era1.inc"
+#include "bg/era2.inc"
+#include "bg/era3.inc"
+#include "bg/era4.inc"
+#include "bg/era5.inc"
+#include "bg/era6.inc"
+
 void bgLayer(Px& p, int layer)
 {
     Scene sc{p, p.w, p.h, p.h / 88.0f, horizonOf(g_era)};
@@ -1886,6 +1895,10 @@ void bgLayer(Px& p, int layer)
     const float fades[4] = {0, 0.6f, 0.35f, 0.12f};
     sc.fade = g_era == 0 ? 0 : fades[layer];
     const Col L = ONEBIT_LIGHT, D = ONEBIT_DARK;
+    {
+        bool (*const painters[ERA_COUNT])(Scene&, int) = {bgEra0, bgEra1, bgEra2, bgEra3, bgEra4, bgEra5, bgEra6};
+        if (painters[g_era](sc, layer)) return;
+    }
 
     // ---------------- 1-bit: a black night with a few dotted outlines that sit back
     // The scenery recedes: every line is dotted (every other pixel), there is very little of it,
