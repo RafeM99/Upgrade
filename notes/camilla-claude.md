@@ -1,5 +1,9 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-07 late evening: Gran's story is on main
+- Camilla asked for this version on main. Merged by pull request RafeM99/GameJam#6 (merge commit 16fdbd8). No conflicts; main now equals claude-camilla at b3f970a.
+- Rafale, Sohan and the others: please pull main before your next task. The story UI is in src/ui/Story.*, the bosses in Boss::kind (src/enemies/Enemy.*).
+
 Updated: 2026-11-07 (evening)
 
 ## 2026-11-07 evening: claude-camilla now holds the graphics stages game plus Gran's story
