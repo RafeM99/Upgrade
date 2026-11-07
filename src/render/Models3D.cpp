@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <cstdio>   // DEBUG-REMOVE
 
 namespace {
 
@@ -539,45 +540,143 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
     };
     float yaw = e.dir > 0 ? -0.52f : PI + 0.52f;
     float feet = Y3(e.y + e.h);
+    { static float lt = -1; static int fr = 0; if (g.time != lt) { lt = g.time; ++fr; } fprintf(stderr, "DBGEN %d %d %d %.2f %.2f %d\n", fr, e.type, e.state, e.cx() - g.cam.x, e.cy(), e.owner); }   // DEBUG-REMOVE
     if (e.type == EN_BLOB) {
-        float sq = e.dead ? 0.7f : 0.1f * std::sin(e.t * 9);
+        // An unidentifiable blob: a lopsided heap of squashed lumps that never settles on a
+        // shape. Each lump drifts and swells on its own beat, so the outline keeps changing.
         Matrix root = then(MatrixRotateY(yaw), T(e.cx(), feet, 0.2f));
         auto at = [&](Matrix m) { return then(m, root); };
-        float ry = 0.36f * (1 - sq);
-        part(sphere_, at(then(S(0.42f * (1 + sq), ry, 0.38f), T(0, ry, 0))), col(0x8a7fb4));
-        if (!e.dead) {
-            for (int s = -1; s <= 1; s += 2) {
-                part(sphere_, at(then(S(0.1f, 0.12f, 0.1f), T(0.3f, ry * 1.4f, s * 0.13f))), col(0xfaf3e6));
-                part(sphere_, at(then(S(0.05f, 0.06f, 0.05f), T(0.39f, ry * 1.4f, s * 0.13f))), col(0x0f0d1a));
-            }
-            part(cyl_, at(then(then(S(0.02f, 0.3f, 0.02f), MatrixRotateZ(0.4f)), T(-0.05f, ry * 1.9f, 0))), col(0x26305e));
-            part(sphere_, at(then(S(0.06f, 0.06f, 0.06f), T(-0.17f, ry * 1.9f + 0.28f, 0))), col(0xfaf3e6), 0.6f);
+        float flat = e.dead ? std::min(1.0f, e.deadTime / 0.2f) : 0.0f;   // it slumps as it goes
+        // centre x, y, z, radii x, y, z, shade
+        const float lumps[6][7] = {{0.00f, 0.31f, 0.00f, 0.36f, 0.30f, 0.33f, 0}, {0.13f, 0.45f, 0.07f, 0.24f, 0.21f, 0.22f, 1},
+                                   {-0.19f, 0.22f, -0.11f, 0.23f, 0.20f, 0.24f, 2}, {0.21f, 0.18f, -0.13f, 0.18f, 0.16f, 0.19f, 1},
+                                   {-0.11f, 0.51f, -0.07f, 0.17f, 0.15f, 0.17f, 2}, {-0.06f, 0.17f, 0.20f, 0.20f, 0.15f, 0.15f, 0}};
+        const unsigned shades[3] = {0x857d9e, 0x978fab, 0x716a88};
+        Vector3 eyeC{}, eyeR{};
+        for (int i = 0; i < 6; ++i) {
+            const float* L = lumps[i];
+            float ph = e.t * (2.3f + i * 0.85f) + i * 1.9f;
+            float kx = 1 + 0.13f * std::sin(ph * 1.7f + 2), ky = 1 + 0.13f * std::sin(ph * 1.1f), kz = 1 + 0.1f * std::cos(ph * 1.3f);
+            Vector3 c = {(L[0] + std::sin(ph) * 0.05f) * (1 + flat * 0.5f), (L[1] + std::sin(ph * 1.3f + 1) * 0.035f) * (1 - flat * 0.7f),
+                         L[2] + std::cos(ph * 0.8f) * 0.04f};
+            Vector3 r = {L[3] * kx * (1 + flat * 0.4f), L[4] * ky * (1 - flat * 0.6f), L[5] * kz * (1 + flat * 0.2f)};
+            part(sphere_, at(then(S(r.x, r.y, r.z), T(c.x, c.y, c.z))), col(shades[(int)L[6]]));
+            if (i == 1) { eyeC = c; eyeR = r; }
         }
+        if (!e.dead)   // two faint dots on the front lump: maybe eyes, maybe not
+            for (int s = -1; s <= 1; s += 2)
+                part(sphere_, at(then(S(0.03f, 0.036f, 0.03f), T(eyeC.x + eyeR.x * 0.9f, eyeC.y + eyeR.y * (s > 0 ? 0.12f : 0.02f),
+                                                                 eyeC.z + eyeR.z * s * 0.38f))),
+                     col(0x4a4458));
     } else if (e.type == EN_FLYER) {
+        // A memory book flying on its own pages: spine on top, covers hanging open a little,
+        // and a fan of pages out on each side that beats like wings.
         float cy = Y3(e.cy());
-        Matrix root = then(MatrixRotateY(yaw), T(e.cx(), cy, 0.3f));
+        float beat = e.t * 12;
+        float flap = e.dead ? -0.8f : std::sin(beat) * 0.55f;   // wing angle above level
+        Matrix root = then(then(MatrixRotateZ(-0.1f), MatrixRotateY(yaw)), T(e.cx(), cy - std::sin(beat) * 0.03f, 0.3f));
         auto at = [&](Matrix m) { return then(m, root); };
-        float flap = std::sin(e.t * 18) * 0.7f;
-        part(cube_, at(then(then(S(0.38f, 0.38f, 0.3f), MatrixRotateZ(PI / 4)), T(0, 0, 0))), col(0xe8364f));
+        const float L = 0.5f, top = 0.12f;   // length along the spine, height of the spine
+        Color cover = col(0x8c3644), spine = col(0x6a2432), gold = col(0xdcb862);
+        Color page = col(0xfcf8ee), pageEdge = col(0xeee4ce);
+        part(cube_, at(then(S(L - 0.04f, 0.2f, 0.13f), T(0, top - 0.12f, 0))), pageEdge);   // the page block
+        for (int s = -1; s <= 1; s += 2) {   // covers, hinged at the spine edges
+            Matrix hinge = then(MatrixRotateX(-s * 0.3f), T(0, top, s * 0.065f));
+            part(cube_, at(then(then(S(L + 0.02f, 0.3f, 0.025f), T(0, -0.15f, 0)), hinge)), cover);
+            part(cube_, at(then(then(S(0.24f, 0.13f, 0.01f), T(0.02f, -0.15f, s * 0.014f)), hinge)), gold, 0, false);   // the label
+            part(cube_, at(then(then(S(0.2f, 0.09f, 0.01f), T(0.02f, -0.15f, s * 0.016f)), hinge)), cover, 0, false);
+        }
+        part(cube_, at(then(S(L + 0.02f, 0.07f, 0.15f), T(0, top + 0.01f, 0))), spine);
+        for (int k = -1; k <= 1; k += 2)   // gold bands on the spine
+            part(cube_, at(then(S(0.03f, 0.075f, 0.155f), T(k * 0.15f, top + 0.012f, 0))), gold, 0, false);
+        // the ribbon bookmark trailing below
+        float sway = std::sin(e.t * 5) * 0.25f + 0.35f;
+        part(cube_, at(then(then(then(S(0.045f, 0.26f, 0.012f), T(0, -0.13f, 0)), MatrixRotateZ(-sway)), T(-0.16f, top - 0.2f, 0.0f))), col(0xd8a838));
+        // page wings: four pages a side, fanned, the outer ones lag behind the beat
         for (int s = -1; s <= 1; s += 2)
-            part(cube_, at(then(then(then(S(0.32f, 0.03f, 0.42f), T(0, 0, s * 0.21f)), MatrixRotateX(s * flap)), T(-0.05f, 0.05f, s * 0.12f))), col(0x3c9cf0));
-        part(sphere_, at(then(S(0.11f, 0.11f, 0.11f), T(0.2f, 0.04f, 0))), col(0xfaf3e6));
-        part(sphere_, at(then(S(0.05f, 0.05f, 0.05f), T(0.29f, 0.04f, 0))), col(0x0f0d1a));
-    } else {   // Fog Brute
-        Matrix root = then(MatrixRotateY(yaw), T(e.cx(), feet, 0.1f));
-        auto at = [&](Matrix m) { return then(m, root); };
-        float step = std::sin(e.t * 7) * 0.12f;
-        float lean = e.state >= 1 ? 0.25f : 0.0f;
-        part(cyl_, at(then(S(0.15f, 0.5f, 0.15f), T(-0.2f + step, 0, -0.25f))), col(0x5a567a));
-        part(cyl_, at(then(S(0.15f, 0.5f, 0.15f), T(-0.2f - step, 0, 0.25f))), col(0x5a567a));
-        const float puffs[5][4] = {{0, 1.05f, 0, 0.58f}, {-0.3f, 1.4f, -0.2f, 0.38f}, {0.25f, 1.45f, 0.15f, 0.4f},
-                                   {0.0f, 1.62f, 0, 0.34f}, {0.35f, 1.0f, -0.3f, 0.3f}};
-        for (int i = 0; i < 5; ++i)
-            part(sphere_, at(then(S(puffs[i][3], puffs[i][3], puffs[i][3]), T(puffs[i][0] + lean, puffs[i][1], puffs[i][2]))),
-                 col(i % 2 ? 0xa8a4c8 : 0x6e6a8e));
-        for (int s = -1; s <= 1; s += 2)
-            part(sphere_, at(then(S(0.08f, e.state >= 1 ? 0.08f : 0.05f, 0.08f), T(0.5f + lean, 1.35f, s * 0.15f))), col(0xff4040), 1.0f);
-        part(cyl_, at(then(then(S(0.15f, 0.6f, 0.15f), MatrixRotateZ(0.3f + step)), T(0.35f + lean, 1.25f, 0.45f))), col(0xa8a4c8));
+            for (int i = 0; i < 4; ++i) {
+                float ang = flap + (i - 1.5f) * 0.17f + (e.dead ? 0 : std::sin(beat - 0.5f - i * 0.25f) * 0.12f);
+                float len = 0.36f - std::abs(i - 1.5f) * 0.03f;
+                part(cube_, at(then(then(then(S(L - 0.06f - i * 0.02f, 0.012f, len), T(0, 0, s * len / 2)), MatrixRotateX(-s * ang)),
+                                    T(0.01f * i, top + 0.03f, s * 0.05f))),
+                     i % 2 ? pageEdge : page);
+            }
+        // one eye at the head of the spine
+        part(sphere_, at(then(S(0.09f, 0.09f, 0.08f), T(L / 2 - 0.01f, 0.03f, 0))), col(0xfaf3e6));
+        part(sphere_, at(then(S(0.045f, 0.05f, 0.045f), T(L / 2 + 0.065f, 0.03f, 0))), col(0x0f0d1a));
+        part(cube_, at(then(then(S(0.03f, 0.04f, 0.2f), MatrixRotateZ(-0.3f)), T(L / 2 + 0.04f, 0.11f, 0))), spine);   // a heavy lid
+    } else {
+        // A grandfather clock on two stubby feet: plinth, trunk with the pendulum behind glass,
+        // and a hood with the dial, scowling. It leans in and the pendulum thrashes when it charges.
+        float yawC = e.dir > 0 ? -1.0f : PI + 1.0f;   // turned further to the camera, so the dial shows
+        Matrix root = then(MatrixRotateY(yawC), T(e.cx(), feet, 0.1f));
+        bool mad = e.state >= 1 && !e.dead;
+        float wt = e.t * (e.state == 2 ? 18.0f : 7.0f);
+        float step = e.state == 1 ? 0.0f : std::sin(wt);
+        float lean = e.state == 1 ? -0.16f : (e.state == 2 ? -0.26f : -0.03f);
+        float rattle = e.state == 1 ? std::sin(e.t * 70) * 0.025f : 0.0f;
+        float rock = step * 0.05f, hop = std::fabs(std::cos(wt)) * (e.state == 1 ? 0 : 0.035f);
+        Matrix body = then(then(then(MatrixRotateX(rock), MatrixRotateZ(lean + rattle)), T(0, 0.13f + hop, 0)), root);
+        auto at = [&](Matrix m) { return then(m, body); };
+        auto atR = [&](Matrix m) { return then(m, root); };
+        Color wood = col(0x8e5634), dark = col(0x6c3c22), trim = col(0x50301c), brass = col(0xd4a64a), ink = col(0x1c1420);
+        auto disc = [&](float r, float th, float x, float y, float z) {   // a flat round facing forward (+x)
+            return at(then(then(S(r, th, r), MatrixRotateZ(-PI / 2)), T(x, y, z)));
+        };
+        // feet
+        for (int s = -1; s <= 1; s += 2) {
+            float fx = s * step * 0.12f, lift = std::max(0.0f, s * std::cos(wt)) * (e.state == 1 ? 0 : 0.06f);
+            part(cyl_, atR(then(S(0.07f, 0.14f, 0.07f), T(fx, 0.05f + lift, s * 0.21f))), trim);
+            part(sphere_, atR(then(S(0.19f, 0.085f, 0.13f), T(fx + 0.12f, 0.07f + lift, s * 0.21f))), trim);
+        }
+        // the case
+        part(cube_, at(then(S(0.52f, 0.28f, 0.8f), T(0, 0.17f, 0))), dark);        // plinth
+        part(cube_, at(then(S(0.56f, 0.05f, 0.84f), T(0, 0.32f, 0))), trim);        // moulding
+        part(cube_, at(then(S(0.38f, 0.62f, 0.52f), T(0, 0.64f, 0))), wood);        // trunk
+        part(cube_, at(then(S(0.56f, 0.05f, 0.84f), T(0, 0.96f, 0))), trim);        // moulding
+        part(cube_, at(then(S(0.5f, 0.5f, 0.76f), T(0, 1.22f, 0))), wood);          // hood
+        part(cube_, at(then(S(0.58f, 0.06f, 0.86f), T(0, 1.49f, 0))), trim);        // cornice
+        part(cyl_, at(then(then(S(0.15f, 0.52f, 0.34f), MatrixRotateZ(-PI / 2)), T(-0.26f, 1.5f, 0))), dark);   // arched top
+        part(sphere_, at(then(S(0.06f, 0.06f, 0.06f), T(0, 1.68f, 0))), brass);
+        for (int s = -1; s <= 1; s += 2) {
+            part(cyl_, at(then(S(0.03f, 0.48f, 0.03f), T(0.25f, 0.98f, s * 0.34f))), brass);   // hood columns
+            part(sphere_, at(then(S(0.05f, 0.05f, 0.05f), T(0.22f, 1.55f, s * 0.38f))), brass);
+        }
+        // the glass door: dark behind, the pendulum, a brass frame and a glint
+        float swing = e.dead ? 0.0f : (mad ? std::sin(e.t * 14) * 0.75f : std::sin(e.t * 4.2f) * 0.35f);
+        part(cube_, at(then(S(0.02f, 0.48f, 0.34f), T(0.19f, 0.64f, 0))), col(0x2a1a14), 0, false);
+        Matrix pend = then(MatrixRotateX(swing), T(0.205f, 0.86f, 0));
+        part(cyl_, at(then(then(S(0.012f, 0.36f, 0.012f), T(0, -0.36f, 0)), pend)), brass, 0, false);
+        part(cyl_, at(then(then(then(S(0.085f, 0.02f, 0.085f), MatrixRotateZ(-PI / 2)), T(0, -0.36f, 0)), pend)), brass, 0.15f);
+        for (int s = -1; s <= 1; s += 2) {
+            part(cube_, at(then(S(0.03f, 0.04f, 0.42f), T(0.2f, 0.64f + s * 0.25f, 0))), brass, 0, false);
+            part(cube_, at(then(S(0.03f, 0.54f, 0.04f), T(0.2f, 0.64f, s * 0.19f))), brass, 0, false);
+        }
+        part(cube_, at(then(then(S(0.005f, 0.2f, 0.025f), MatrixRotateX(0.6f)), T(0.215f, 0.72f, 0.09f))), col(0xe8f4ff), 0.6f, false);
+        part(cube_, at(then(then(S(0.005f, 0.1f, 0.018f), MatrixRotateX(0.6f)), T(0.215f, 0.62f, 0.12f))), col(0xe8f4ff), 0.6f, false);
+        // the dial
+        const float dy = 1.21f, dx = 0.25f;
+        part(cyl_, disc(0.21f, 0.03f, dx, dy, 0), col(0xf6f0e0), 0.1f, false);   // the bezel outlines it
+        part(torus_, at(then(then(S(0.205f, 0.205f, 0.205f), MatrixRotateY(PI / 2)), T(dx + 0.03f, dy, 0))), brass);   // bezel
+        for (int k = 0; k < 4; ++k) {   // marks at 12, 3, 6 and 9
+            float ang = k * PI / 2;
+            part(sphere_, at(then(S(0.016f, 0.016f, 0.016f), T(dx + 0.03f, dy + std::cos(ang) * 0.165f, std::sin(ang) * 0.165f))), ink);
+        }
+        float spin = mad ? e.t * 9 : e.t * 0.8f;
+        const float hand[2][3] = {{0.15f, 0.022f, 1.0f}, {0.1f, 0.03f, 1.0f / 12}};   // length, width, speed
+        for (int k = 0; k < 2; ++k)
+            part(cube_, at(then(then(then(S(0.012f, hand[k][0], hand[k][1]), T(0, hand[k][0] / 2 - 0.02f, 0)), MatrixRotateX(-spin * hand[k][2] - k * 2.1f)),
+                                T(dx + 0.04f, dy, 0))),
+                 ink, 0, false);
+        part(sphere_, at(then(S(0.022f, 0.022f, 0.022f), T(dx + 0.045f, dy, 0))), brass);
+        // eyes and cross brows
+        for (int s = -1; s <= 1; s += 2) {
+            if (!e.dead)
+                part(sphere_, at(then(S(0.03f, mad ? 0.04f : 0.03f, 0.034f), T(dx + 0.035f, dy + 0.055f, s * 0.075f))),
+                     mad ? col(0xff4040) : ink, mad ? 1.0f : 0.0f);
+            float tilt = mad ? 0.6f : 0.42f;
+            part(cube_, at(then(then(S(0.04f, 0.06f, 0.17f), MatrixRotateX(-s * tilt)), T(dx + 0.05f, dy + 0.125f - (mad ? 0.015f : 0), s * 0.08f))), ink);
+        }
     }
 }
 
