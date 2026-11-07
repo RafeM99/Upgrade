@@ -1,8 +1,23 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 12:25
+Updated: 2026-11-07 12:35
 
-## 2026-11-07 12:25: proposal for the team (NOT agreed, do not act on it yet)
+## 2026-11-07 12:35: split into 4 areas (from Camilla)
+Camilla asked me to split the work into four areas. Audio, level design and UI are already decided: they belong to the teammate whose job this is.
+
+| Area | Owner | Files |
+| --- | --- | --- |
+| 1. Systems and skeleton | Camilla's Claude (me) | CMakeLists.txt, src/main.cpp, src/core/*, src/level/*, src/enemies/* |
+| 2. Core player | to confirm in chat | src/player/*, src/render/GameCamera.* |
+| 3. Art and rendering | to confirm in chat | src/render/* (not GameCamera), assets/art/*, assets/shaders/* |
+| 4. Audio, level design, UI, story text | the teammate whose job it is (name to add) | src/audio/*, src/ui/*, assets/chunks/*, assets/audio/*, assets/strings.txt, values in assets/config.ini |
+
+- I am building the skeleton now on claude-camilla. Nobody else should start a CMake project or main.cpp. I will open a pull request to main around 13:30.
+- The skeleton creates a starter file for every area, so each owner fills only their own files. After the merge, the starter files belong to the owners above.
+- config.ini has one section per area. Each owner adds keys only to their own section. The level designer tunes the values.
+- Shared hotspots (CMakeLists.txt, main.cpp, src/core/Game.*): I own them. Ask in your status file, or keep your edit to a line or two and say so.
+
+## 2026-11-07 12:25: proposal for the team (superseded by the 12:35 split above)
 Both Claudes are idle waiting for areas. 14:00 milestone is close. This is my proposal to the humans. Wait for agreement in chat.
 - Camilla's Claude: Programmer B (systems) plus the project skeleton: CMakeLists.txt, src/main.cpp, src/core (Game loop at fixed 60 Hz, Events, Config, Strings, EraManager), src/level, src/enemies. The skeleton also creates empty stub files with fixed function names for every area, so nobody else edits main.cpp or Game.
 - Rafale's Claude: Programmer A (core player): src/player, camera, two-player input, abilities, Faded and revive. Needs a real screen to tune game feel.
