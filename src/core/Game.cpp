@@ -116,7 +116,7 @@ void Game::startRun()
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();
     cam.x = 12;
-    cam.top = LEVEL_H - art::VIEW_TILES_H;
+    cam.top = cam.lastTargetTop = LEVEL_H - art::VIEW_TILES_H;
     cam.pixelLock = art::lowRes(era);
     cam.swing = art::SWING[era];
     wallX = -10;
@@ -385,7 +385,7 @@ void Game::updatePlaying(float dt)
             cam.swing = art::SWING[transFromEra] + (art::SWING[era] - art::SWING[transFromEra]) * k;
         }
         cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
-        cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
+        cam.update(cam.x, cam.lastTargetTop, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
         if (transT >= transLen) {
             transActive = false;
             cam.swing = art::SWING[era];
@@ -718,14 +718,21 @@ void Game::updatePlaying(float dt)
     float wantTop = highest - 3.0f;
     if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
     // ...but the floor under the lowest player always stays in view: a player standing on the
-    // ground sees the ground (at least FLOOR_SHOWN tiles of it), however high the other player
-    // or the boss is. The highest thing may be cut at the top instead; the floor never is.
-    {
-        constexpr float FLOOR_SHOWN = 1.6f;
-        float lowest = -1e9f;
-        for (auto& pl : players)
-            if (pl.joined && pl.bottom() < LEVEL_H) lowest = std::max(lowest, pl.bottom());
-        if (lowest > -1e8f) wantTop = std::max(wantTop, lowest + FLOOR_SHOWN - cam.viewH);
+    // ground sees the ground, however high the other player or the boss is. The highest thing
+    // may be cut at the top instead; the floor never is. The floor counted is the one under each
+    // player (their feet when standing, the ground below them while jumping); a player over a
+    // bottomless pit does not pull the camera down. GameCamera::update applies it after its own
+    // 3D lift, where it knows how far the view looks down.
+    float floorY = -1;
+    for (auto& pl : players) {
+        if (!pl.joined) continue;
+        float f = -1;
+        if (pl.onGround) f = pl.bottom();
+        else {
+            int gt = level.groundTop((int)std::floor(pl.cx()));
+            if (gt >= 0 && gt + 0.01f >= pl.bottom()) f = (float)gt;
+        }
+        floorY = std::max(floorY, f);
     }
     cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
     {
@@ -745,7 +752,7 @@ void Game::updatePlaying(float dt)
         if (fMin < fMax) cam.setFocus(fMin, fMax, fTop, fBottom);
     }
     // never show past the start of the level: no empty strip at the left edge
-    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt);
+    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt, floorY);
 
     // ---- endless level: keep ~3 chunks ahead, drop what is far behind the wall
     unsigned mask = 0;
