@@ -664,6 +664,22 @@ void Game::updatePlaying(float dt)
     float wantTop = highest - 3.0f;
     if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
     cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
+    {
+        float fTop = 1e9f, fBottom = -1e9f, fMin = 1e9f, fMax = -1e9f;
+        for (auto& pl : players)
+            if (pl.joined) {
+                fMin = std::min(fMin, pl.x); fMax = std::max(fMax, pl.x + pl.w);
+                fTop = std::min(fTop, pl.y); fBottom = std::max(fBottom, pl.bottom());
+            }
+        // the boss counts too (from its top edge, with room for the 3D model's spikes), so it
+        // is never cut off at the top while it hovers
+        if (boss.active && boss.state != 5 && fMin < fMax) {
+            fTop = std::min(fTop, boss.y - boss.h / 2 - 1.0f);
+            fMin = std::min(fMin, boss.x - boss.w / 2);
+            fMax = std::max(fMax, boss.x + boss.w / 2);
+        }
+        if (fMin < fMax) cam.setFocus(fMin, fMax, fTop, fBottom);
+    }
     // never show past the start of the level: no empty strip at the left edge
     cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt);
 
