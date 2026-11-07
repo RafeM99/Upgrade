@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
-#include <cstdio>   // DEBUG-REMOVE
 
 namespace {
 
@@ -540,7 +539,6 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
     };
     float yaw = e.dir > 0 ? -0.52f : PI + 0.52f;
     float feet = Y3(e.y + e.h);
-    { static float lt = -1; static int fr = 0; if (g.time != lt) { lt = g.time; ++fr; } fprintf(stderr, "DBGEN %d %d %d %.2f %.2f %d\n", fr, e.type, e.state, e.cx() - g.cam.x, e.cy(), e.owner); }   // DEBUG-REMOVE
     if (e.type == EN_BLOB) {
         // An unidentifiable blob: a lopsided heap of squashed lumps that never settles on a
         // shape. Each lump drifts and swells on its own beat, so the outline keeps changing.
@@ -551,7 +549,7 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
         const float lumps[6][7] = {{0.00f, 0.31f, 0.00f, 0.36f, 0.30f, 0.33f, 0}, {0.13f, 0.45f, 0.07f, 0.24f, 0.21f, 0.22f, 1},
                                    {-0.19f, 0.22f, -0.11f, 0.23f, 0.20f, 0.24f, 2}, {0.21f, 0.18f, -0.13f, 0.18f, 0.16f, 0.19f, 1},
                                    {-0.11f, 0.51f, -0.07f, 0.17f, 0.15f, 0.17f, 2}, {-0.06f, 0.17f, 0.20f, 0.20f, 0.15f, 0.15f, 0}};
-        const unsigned shades[3] = {0x857d9e, 0x978fab, 0x716a88};
+        const unsigned shades[3] = {0x887ca6, 0x9a8fb4, 0x73698f};
         Vector3 eyeC{}, eyeR{};
         for (int i = 0; i < 6; ++i) {
             const float* L = lumps[i];
@@ -573,8 +571,9 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
         // and a fan of pages out on each side that beats like wings.
         float cy = Y3(e.cy());
         float beat = e.t * 12;
-        float flap = e.dead ? -0.8f : std::sin(beat) * 0.55f;   // wing angle above level
-        Matrix root = then(then(MatrixRotateZ(-0.1f), MatrixRotateY(yaw)), T(e.cx(), cy - std::sin(beat) * 0.03f, 0.3f));
+        float flap = e.dead ? -0.8f : 0.3f + std::sin(beat) * 0.6f;   // wing angle above level: mostly up, so they show
+        float yawB = e.dir > 0 ? -0.9f : PI + 0.9f;   // turned further to the camera, so the wings spread across the screen
+        Matrix root = then(then(MatrixRotateZ(-0.1f), MatrixRotateY(yawB)), T(e.cx(), cy - std::sin(beat) * 0.03f, 0.3f));
         auto at = [&](Matrix m) { return then(m, root); };
         const float L = 0.5f, top = 0.12f;   // length along the spine, height of the spine
         Color cover = col(0x8c3644), spine = col(0x6a2432), gold = col(0xdcb862);
@@ -590,13 +589,13 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
         for (int k = -1; k <= 1; k += 2)   // gold bands on the spine
             part(cube_, at(then(S(0.03f, 0.075f, 0.155f), T(k * 0.15f, top + 0.012f, 0))), gold, 0, false);
         // the ribbon bookmark trailing below
-        float sway = std::sin(e.t * 5) * 0.25f + 0.35f;
-        part(cube_, at(then(then(then(S(0.045f, 0.26f, 0.012f), T(0, -0.13f, 0)), MatrixRotateZ(-sway)), T(-0.16f, top - 0.2f, 0.0f))), col(0xd8a838));
+        float sway = std::sin(e.t * 7) * 0.3f + 0.7f;
+        part(cube_, at(then(then(then(S(0.035f, 0.17f, 0.01f), T(0, -0.085f, 0)), MatrixRotateZ(-sway)), T(-L / 2 + 0.02f, top - 0.18f, 0.0f))), col(0xc8323c));
         // page wings: four pages a side, fanned, the outer ones lag behind the beat
         for (int s = -1; s <= 1; s += 2)
             for (int i = 0; i < 4; ++i) {
-                float ang = flap + (i - 1.5f) * 0.17f + (e.dead ? 0 : std::sin(beat - 0.5f - i * 0.25f) * 0.12f);
-                float len = 0.36f - std::abs(i - 1.5f) * 0.03f;
+                float ang = flap + (i - 1.5f) * 0.22f + (e.dead ? 0 : std::sin(beat - 0.5f - i * 0.25f) * 0.12f);
+                float len = 0.4f - std::abs(i - 1.5f) * 0.03f;
                 part(cube_, at(then(then(then(S(L - 0.06f - i * 0.02f, 0.012f, len), T(0, 0, s * len / 2)), MatrixRotateX(-s * ang)),
                                     T(0.01f * i, top + 0.03f, s * 0.05f))),
                      i % 2 ? pageEdge : page);
