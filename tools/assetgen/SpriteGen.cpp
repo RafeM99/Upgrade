@@ -1080,8 +1080,6 @@ void drawBrute(Canvas& c, int frame)
     }
     const int e = g_era;
     const int tp = TILE_PX[e];
-    const int px1 = 1;
-    (void)px1;
     Col wood = pc(0xa26a3c, 2), woodD = pc(0x6e4026, 1), woodL = pc(0xc8925a, 3), side = farSide(wood);
     Col brass = pc(0xe0b04a, 3), dial = pc(0xf4e8cc, 3), glass = pc(0x2e2a3e, 0), ink = pc(0x2a1a14, 0);
     Col eye = pc(0xe8364f, 0);
