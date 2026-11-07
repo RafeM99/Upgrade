@@ -1,7 +1,7 @@
 #include "ui/Story.h"
 #include "core/Game.h"
 #include "core/Strings.h"
-#include "rlgl.h"
+#include "ui/PixelFont.h"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +19,7 @@ float S = 1, OX = 0, OY = 0, WW = 1280, WH = 720;   // page scale, offset and si
 const Color INK = {21, 17, 14, 255};
 const Color PAPER = {241, 231, 211, 255};
 const Color NARR = {203, 188, 165, 255};
-const Color DIM = {128, 114, 98, 255};
+const Color DIM = {182, 166, 146, 255};   // labels and the timeline: readable on INK
 const Color AMBER = {232, 165, 75, 255};
 const Color LILAC = {205, 176, 255, 255};
 const Color PHOTO_INK = {58, 51, 44, 255};
@@ -29,32 +29,43 @@ constexpr float CPS = 50.0f;        // characters typed per second
 constexpr float TYPE_DELAY = 0.6f;  // the card settles before the words start
 constexpr int LINE_PAUSE = 14;      // a pause between lines, counted in characters
 constexpr int MEMORIES = art::ERA_COUNT;
+constexpr float TEXT_X = 96, TEXT_W = 560, TEXT_Y = 92, PHOTO_X = 935;   // the card grid (page units)
 
 Color fade(Color c, float a) { c.a = (unsigned char)(c.a * std::max(0.0f, std::min(1.0f, a))); return c; }
 
-void page(Game& g)
+// The bars lie over the game image; the cards and the ending use the whole window, so the
+// layout is the same on every card whatever stage the game image was in.
+void page(Game& g, bool overGame = false)
 {
     Rectangle r = g.renderer.screenRect();
+    if (!overGame) {
+        float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+        float s = std::min(sw / 1280.0f, sh / 720.0f);
+        r = Rectangle{std::floor((sw - 1280 * s) / 2), std::floor((sh - 720 * s) / 2), 1280 * s, 720 * s};
+    }
     S = r.height / 720.0f;
     OX = r.x; OY = r.y; WW = r.width; WH = r.height;
 }
 float X(float x) { return std::round(OX + x * S); }
 float Y(float y) { return std::round(OY + y * S); }
 int scaleFor(float size) { return std::max(1, (int)std::lround(size * S / 10.0f)); }
+// Titles keep the default font's character; everything smaller uses the plain pixel font.
+Font fontFor(float size) { return size >= 40 ? GetFontDefault() : ui::smallFont(); }
 
 float widthOf(const std::string& s, float size)   // in page units
 {
     int t = scaleFor(size);
-    return MeasureTextEx(GetFontDefault(), s.c_str(), 10.0f * t, (float)t).x / S;
+    return MeasureTextEx(fontFor(size), s.c_str(), 10.0f * t, (float)t).x / S;
 }
 
 // align: 0 left, 1 centre, 2 right
 void text(const std::string& s, float x, float y, float size, Color c, int align = 0)
 {
     int t = scaleFor(size);
-    float w = MeasureTextEx(GetFontDefault(), s.c_str(), 10.0f * t, (float)t).x;
+    Font f = fontFor(size);
+    float w = MeasureTextEx(f, s.c_str(), 10.0f * t, (float)t).x;
     float px = X(x) - (align == 1 ? std::round(w / 2) : align == 2 ? w : 0);
-    DrawTextEx(GetFontDefault(), s.c_str(), {px, Y(y)}, 10.0f * t, (float)t, c);
+    DrawTextEx(f, s.c_str(), {px, Y(y)}, 10.0f * t, (float)t, c);
 }
 
 std::vector<std::string> wrap(const std::string& s, float size, float maxW)
@@ -161,19 +172,27 @@ void Story::setPhoto(int era, Image img)
     UnloadImage(img);
 }
 
-void Story::drawPolaroid(Game& g, int era, float cx, float cy, float w, float angle, float alpha, const std::string& caption)
+// The photograph is drawn square to the screen (no rotation: a rotated pixel image shimmers
+// and gets jagged edges). Each card still looks different: `variant` picks where the tape goes,
+// how long it is, and nudges the photo a little, all on whole pixels.
+// era < 0: an empty, unexposed photograph (the present day has no picture yet).
+void Story::drawPolaroid(Game& g, int era, float cx, float cy, float w, int variant, float alpha, const std::string& caption)
 {
     const float b = w * 0.045f, pw = w - 2 * b, ph = pw * 9.0f / 16.0f, bottom = w * 0.15f;
     const float h = b + ph + bottom;
-    const float Wp = w * S, Hp = h * S, Bp = b * S, PWp = pw * S, PHp = ph * S;
-    rlPushMatrix();
-    rlTranslatef(X(cx), Y(cy), 0);
-    rlRotatef(angle, 0, 0, 1);
-    float x0 = -Wp / 2, y0 = -Hp / 2;
-    DrawRectangleRec({x0 + 6 * S, y0 + 9 * S, Wp, Hp}, fade(BLACK, 0.45f * alpha));
+    const int v = ((variant % 4) + 4) % 4;
+    const float nudgeX[4] = {0, 10, -8, 4}, nudgeY[4] = {0, -6, 4, 8};
+    auto px = [&](float page) { return std::round(page * S); };   // a page length in whole window pixels
+    const float x0 = X(cx - w / 2 + nudgeX[v]), y0 = Y(cy - h / 2 + nudgeY[v]);
+    const float Wp = px(w), Hp = px(h), Bp = std::max(1.0f, px(b)), PWp = Wp - 2 * Bp, PHp = px(ph);
+    DrawRectangleRec({x0 + px(6), y0 + px(9), Wp, Hp}, fade(BLACK, 0.45f * alpha));   // hard drop shadow
     DrawRectangleRec({x0, y0, Wp, Hp}, fade(PAPER, alpha));
     Rectangle dst{x0 + Bp, y0 + Bp, PWp, PHp};
-    if (photo_[era].id) {
+    if (era < 0) {
+        DrawRectangleRec(dst, fade(Color{46, 41, 36, 255}, alpha));
+        const float u = std::max(1.0f, px(2));
+        DrawRectangleRec({dst.x + u * 3, dst.y + u * 3, dst.width - u * 6, u}, fade(Color{70, 63, 56, 255}, alpha));
+    } else if (photo_[era].id) {
         DrawTexturePro(photo_[era], {0, 0, (float)photo_[era].width, (float)photo_[era].height}, dst, {0, 0}, 0, fade(WHITE, alpha));
     } else {
         // no photograph taken yet (a run started late): the stage's own backdrop instead
@@ -185,15 +204,31 @@ void Story::drawPolaroid(Game& g, int era, float cx, float cy, float w, float an
             DrawTexturePro(t, {0, 0, sw, (float)t.height}, dst, {0, 0}, 0, fade(WHITE, alpha));
         }
     }
-    // a strip of tape across the top edge
-    DrawRectanglePro({0, y0 + 2 * S, Wp * 0.26f, 18 * S}, {Wp * 0.13f, 9 * S}, 3.5f, fade(Color{232, 220, 190, 255}, 0.75f * alpha));
-    if (!caption.empty()) {
-        int t = scaleFor(20);
-        float tw = MeasureTextEx(GetFontDefault(), caption.c_str(), 10.0f * t, (float)t).x;
-        DrawTextEx(GetFontDefault(), caption.c_str(), {std::round(-tw / 2), std::round(y0 + Bp + PHp + (bottom * S - 10 * t) / 2)},
-                   10.0f * t, (float)t, fade(PHOTO_INK, alpha));
+    // tape: square strips with torn (stepped) ends; where and how many changes per card
+    const Color TAPE = fade(Color{226, 212, 176, 255}, 0.85f * alpha);
+    auto tape = [&](float tx, float tw) {   // tx, tw in page units, relative to the photo's left edge
+        const float th = px(18), u = std::max(1.0f, px(3));
+        const float lx = x0 + px(tx), ty = y0 - px(8), lw = px(tw);
+        DrawRectangleRec({lx + u, ty, lw - 2 * u, th}, TAPE);
+        for (int i = 0; i < 3; ++i) {   // torn ends: one-step teeth, alternating
+            float sy = ty + std::round(i * th / 3), sh = std::round((i + 1) * th / 3) - std::round(i * th / 3);
+            DrawRectangleRec({i % 2 == 0 ? lx : lx + lw - u, sy, u, sh}, TAPE);
+        }
+    };
+    switch (v) {
+    case 0: tape(w * 0.37f, w * 0.26f); break;                              // one strip, centred
+    case 1: tape(-w * 0.04f, w * 0.18f); tape(w * 0.86f, w * 0.18f); break; // both top corners
+    case 2: tape(w * 0.12f, w * 0.22f); break;                              // off to the left
+    default: tape(w * 0.62f, w * 0.24f); break;                             // off to the right
     }
-    rlPopMatrix();
+    if (!caption.empty()) {
+        // a note written on the white strip under the photo, a little off centre like handwriting
+        float tw = widthOf(caption, 20);
+        float capX = cx + nudgeX[v] - tw / 2 + (v % 2 ? -w * 0.18f : w * 0.12f);
+        capX = std::max(cx + nudgeX[v] - w / 2 + b * 2, std::min(capX, cx + nudgeX[v] + w / 2 - b * 2 - tw));
+        float capY = (y0 - OY) / S + b + ph + (bottom - 7) / 2;
+        text(caption, capX, capY, 20, fade(PHOTO_INK, alpha));
+    }
 }
 
 // The timeline along the bottom: NOW on the right, her earliest memory on the left.
@@ -260,13 +295,16 @@ void Story::drawCard(Game& g)
     const float a = std::min(1.0f, t / 0.4f);
     const bool photo = card_.id >= 0;
 
-    float x = photo ? 96 : 300, w = photo ? 560 : 680;
-    if (photo) {
+    // One grid for every card: the words in the left column, the photograph on the right.
+    // The present day has no photograph yet: an empty one, with a question on it.
+    const float x = TEXT_X, w = TEXT_W;
+    {
         float k = std::min(1.0f, t / 0.7f);
         k = 1 - (1 - k) * (1 - k);
-        drawPolaroid(g, card_.id, 935, 330 + (1 - k) * 40, 520, -2.5f + (1 - k) * 4, a, card_.title);
+        std::string note = photo ? T("memory_note_" + std::to_string(card_.id)) : T("story_prologue_note");
+        drawPolaroid(g, photo ? card_.id : -1, PHOTO_X, 330 + std::round((1 - k) * 40), 520, photo ? card_.id : 3, a, note);
     }
-    float y = photo ? 92 : 96;
+    float y = TEXT_Y;
     text(card_.label, x, y, 20, fade(DIM, a));
     y += 34;
     for (auto& r : wrap(card_.title, 40, w)) { text(r, x, y, 40, fade(PAPER, a)); y += 48; }
@@ -292,7 +330,7 @@ void Story::showBars(const std::string& label, const std::string& title, const s
 void Story::drawBars(Game& g)
 {
     if (barsT_ <= 0) return;
-    page(g);
+    page(g, true);
     float into = barsLen_ - barsT_;
     float k = std::min(1.0f, std::min(into / 0.35f, barsT_ / 0.35f));
     k = 1 - (1 - k) * (1 - k);
@@ -373,20 +411,21 @@ void Story::drawEnding(Game& g)
         text(T("end_album_sub"), 640, 98, 20, fade(NARR, a), 1);
         const float xs[MEMORIES] = {200, 493, 787, 1080, 347, 640, 933};
         const float ys[MEMORIES] = {262, 262, 262, 262, 500, 500, 500};
-        const float ang[MEMORIES] = {-4, 3, -2, 4.5f, -3, 2, -1.5f};
+
         for (int k = 0; k < MEMORIES; ++k) {
             int era = MEMORIES - 1 - k;
             float at = 1.0f + k * ALBUM_STEP;
             float pa = std::min(1.0f, std::max(0.0f, (endT_ - at) / 0.4f));
             if (pa <= 0) continue;
-            drawPolaroid(g, era, xs[k], ys[k] - (1 - pa) * 20, 250, ang[k], pa, T("memory_year_" + std::to_string(era)));
+            drawPolaroid(g, era, xs[k], ys[k] - std::round((1 - pa) * 20), 250, k, pa, T("memory_year_" + std::to_string(era)));
         }
         if (endT_ > albumDone() && std::fmod((float)GetTime(), 1.2f) < 0.8f) text(T("story_continue"), 1184, 676, 20, NARR, 2);
         return;
     }
     if (endPhase_ == 1) {
         float a = std::min(1.0f, card_.t / 0.4f);
-        float x = 300, w = 680, y = 96;
+        float x = TEXT_X, w = TEXT_W, y = TEXT_Y;
+        drawPolaroid(g, 0 + MEMORIES - 1, PHOTO_X, 330, 520, 2, a, T("end_note"));   // the cottage, as it is now
         text(card_.label, x, y, 20, fade(DIM, a));
         y += 34;
         for (auto& r : wrap(card_.title, 40, w)) { text(r, x, y, 40, fade(PAPER, a)); y += 48; }

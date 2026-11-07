@@ -3,44 +3,61 @@
 // hills, a farmhouse and barn, hedgerows, haystacks and bale rows, and cluster-built trees in
 // three flat, hue-shifted tones (lit side yellow-green, shadow side blue-teal).
 //
-// Everything is painted on a coarse "art pixel" grid (E5Grid, one cell = b x b image pixels)
-// and then blown up with hard edges, so the scene reads as crisp chunky pixel art even though
-// this is a smooth stage. The grid wraps on x so every parallax layer tiles.
+// The scene is laid out in "art units" (E5Grid::K image pixels each) but every shape is painted
+// at the layer's full resolution: curves, slopes and rims step in single image pixels, not in
+// coarse 4 px blocks. The 2.5D and 3D stages draw smooth geometry in front of these layers, so
+// the backdrop has to be just as fine or the two clash. Flat colour areas, hard edges, no
+// gradients. The grid wraps on x so every parallax layer tiles.
 //
 // In game the layers 1..3 stand as cut-outs at real depths and the haze shader mixes them
 // towards the dusk horizon (Renderer::drawBackdrop3D); the bottom 14-16% of layers 2 and 3 sits
 // below the lawn. The e5_ helpers are also used by era6.inc (included right after this file).
 
 struct E5Grid {
-    int w, h;
-    std::vector<Col> c;
-    E5Grid(int W, int H) : w(W), h(H), c((size_t)W * H, Col{0, 0, 0, 0}) {}
-    void set(int x, int y, Col col)
+    static constexpr int K = 4;   // image pixels per art unit
+    int fw, fh;                   // size in image pixels
+    int w, h;                     // size in art units: the scene is laid out in these
+    std::vector<Col> c;           // one entry per image pixel
+    E5Grid(int W, int H) : fw(W), fh(H), w(W / K), h(H / K), c((size_t)W * H, Col{0, 0, 0, 0}) {}
+    void setf(int x, int y, Col col)
     {
-        if (y < 0 || y >= h) return;
-        x = ((x % w) + w) % w;
-        c[(size_t)y * w + x] = col;
+        if (y < 0 || y >= fh) return;
+        x = ((x % fw) + fw) % fw;
+        c[(size_t)y * fw + x] = col;
     }
-    Col get(int x, int y) const
+    Col getf(int x, int y) const
     {
-        if (y < 0 || y >= h) return Col{0, 0, 0, 0};
-        x = ((x % w) + w) % w;
-        return c[(size_t)y * w + x];
+        if (y < 0 || y >= fh) return Col{0, 0, 0, 0};
+        x = ((x % fw) + fw) % fw;
+        return c[(size_t)y * fw + x];
     }
-    void rect(int x0, int y0, int ww, int hh, Col col)
+    // Calls f(fx, fy, ax, ay) for every image pixel whose centre lies in the art-unit box
+    // [x0, x1) x [y0, y1); (ax, ay) is that centre in art units.
+    template <class F>
+    void each(float x0, float y0, float x1, float y1, F f)
     {
-        for (int y = y0; y < y0 + hh; ++y)
-            for (int x = x0; x < x0 + ww; ++x) set(x, y, col);
+        int fx0 = (int)std::floor(x0 * K), fx1 = (int)std::ceil(x1 * K);
+        int fy0 = std::max(0, (int)std::floor(y0 * K)), fy1 = std::min(fh, (int)std::ceil(y1 * K));
+        for (int fy = fy0; fy < fy1; ++fy)
+            for (int fx = fx0; fx < fx1; ++fx) {
+                float ax = (fx + 0.5f) / K, ay = (fy + 0.5f) / K;
+                if (ax < x0 || ax >= x1 || ay < y0 || ay >= y1) continue;
+                f(fx, fy, ax, ay);
+            }
     }
-    // blow the grid up into the layer, b image pixels per cell
-    void blit(Scene& sc, int b) const
+    void rectf(float x0, float y0, float ww, float hh, Col col)
     {
-        for (int y = 0; y < h; ++y)
-            for (int x = 0; x < w; ++x) {
-                const Col& k = c[(size_t)y * w + x];
-                if (k.a <= 0) continue;
-                for (int yy = 0; yy < b; ++yy)
-                    for (int xx = 0; xx < b; ++xx) sc.put(x * b + xx, y * b + yy, k);
+        each(x0, y0, x0 + ww, y0 + hh, [&](int fx, int fy, float, float) { setf(fx, fy, col); });
+    }
+    void set(int x, int y, Col col) { rectf((float)x, (float)y, 1, 1, col); }   // one whole art unit
+    Col get(int x, int y) const { return getf(x * K, y * K); }
+    void rect(int x0, int y0, int ww, int hh, Col col) { rectf((float)x0, (float)y0, (float)ww, (float)hh, col); }
+    void blit(Scene& sc) const
+    {
+        for (int y = 0; y < fh; ++y)
+            for (int x = 0; x < fw; ++x) {
+                const Col& k = c[(size_t)y * fw + x];
+                if (k.a > 0) sc.put(x, y, k);
             }
     }
 };
@@ -65,50 +82,52 @@ static void e5_canopy(E5Grid& g, float cx, float cy, float rx, float ry, const E
     // lower side clusters so the crown is round, not a dome
     bl.push_back({cx - rx * 0.5f, cy + ry * 0.3f, std::min(rx, ry) * 0.48f});
     bl.push_back({cx + rx * 0.5f, cy + ry * 0.32f, std::min(rx, ry) * 0.48f});
-    int x0 = (int)std::floor(cx - rx * 1.4f), x1 = (int)std::ceil(cx + rx * 1.4f);
-    int y0 = (int)std::floor(cy - ry * 1.4f), y1 = (int)std::ceil(cy + ry * 1.4f);
     float sx = rx / std::min(rx, ry), sy = ry / std::min(rx, ry);
-    for (int y = y0; y <= y1; ++y)
-        for (int x = x0; x <= x1; ++x) {
-            float px = x + 0.5f, py = y + 0.5f;
-            int best = -1;
-            float bestD = 1e9f;
-            for (size_t i = 0; i < bl.size(); ++i) {
-                float dx = (px - bl[i].x) / sx, dy = (py - bl[i].y) / sy;
-                float d = std::sqrt(dx * dx + dy * dy) / bl[i].r;
-                float edge = 1.0f + (rnd(x, y, seed * 7 + 11) - 0.5f) * 0.22f;   // stepped, jagged rim
-                if (d < edge && d < bestD) { bestD = d; best = (int)i; }
-            }
-            if (best < 0) continue;
-            const Blob& b = bl[best];
-            float nx = (px - b.x) / (b.r * sx), ny = (py - b.y) / (b.r * sy);
-            float local = -(nx * 0.6f + ny * 0.8f);
-            float glob = -((px - cx) / rx * 0.35f + (py - cy) / ry * 0.95f);
-            float v = 0.5f * local + 0.5f * glob + (rnd(x, y, seed + 77) - 0.5f) * 0.12f;
-            Col col = v > 0.22f ? p.lit : (v > -0.32f ? p.mid : p.dark);
-            g.set(x, y, col);
+    g.each(cx - rx * 1.4f, cy - ry * 1.4f, cx + rx * 1.4f, cy + ry * 1.4f, [&](int fx, int fy, float px, float py) {
+        int best = -1;
+        float bestD = 1e9f;
+        // the rim steps in little leaf clumps (three image pixels), never single stray pixels
+        float edge = 1.0f + (rnd(fx / 3, fy / 3, seed * 7 + 11) - 0.5f) * 0.14f;
+        for (size_t i = 0; i < bl.size(); ++i) {
+            float dx = (px - bl[i].x) / sx, dy = (py - bl[i].y) / sy;
+            float d = std::sqrt(dx * dx + dy * dy) / bl[i].r;
+            if (d < edge && d < bestD) { bestD = d; best = (int)i; }
         }
+        if (best < 0) return;
+        const Blob& b = bl[best];
+        float nx = (px - b.x) / (b.r * sx), ny = (py - b.y) / (b.r * sy);
+        float local = -(nx * 0.6f + ny * 0.8f);
+        float glob = -((px - cx) / rx * 0.35f + (py - cy) / ry * 0.95f);
+        float v = 0.5f * local + 0.5f * glob + (rnd(fx / 3, fy / 3, seed + 77) - 0.5f) * 0.08f;
+        g.setf(fx, fy, v > 0.22f ? p.lit : (v > -0.32f ? p.mid : p.dark));
+    });
 }
 
-// A straight trunk, lighter on the left, darker on the right; `fork` adds two angled limbs.
+// A straight trunk, lighter on the left half, darker on the right; `fork` adds two angled limbs.
 static void e5_trunk(E5Grid& g, int x, int baseY, int h, int w, Col lit, Col dark, bool fork = false)
 {
-    for (int y = baseY - h; y < baseY; ++y)
-        for (int i = 0; i < w; ++i) g.set(x - w / 2 + i, y, i < (w + 1) / 2 ? lit : dark);
+    float l = (float)(x - w / 2);
+    g.rectf(l, (float)(baseY - h), w * 0.5f, (float)h, lit);
+    g.rectf(l + w * 0.5f, (float)(baseY - h), w * 0.5f, (float)h, dark);
     if (fork) {
-        for (int k = 0; k < h / 2 + 2; ++k) {
-            g.set(x - 1 - k / 2, baseY - h - k, lit);
-            g.set(x + 1 + k / 2, baseY - h - k, dark);
-            g.set(x + 2 + k / 2, baseY - h - k, dark);
-        }
+        float top = (float)(baseY - h), len = h / 2.0f + 2.0f;
+        g.each(x - len, top - len, x + len + 3, top + 0.5f, [&](int fx, int fy, float ax, float ay) {
+            float k = top + 0.5f - ay;   // how far up the limbs
+            if (std::fabs(ax - (x - 0.5f - k * 0.5f)) < 0.45f) g.setf(fx, fy, lit);
+            else if (ax >= x + 1.0f + k * 0.5f && ax < x + 2.4f + k * 0.5f) g.setf(fx, fy, dark);
+        });
     }
 }
 
+// A grass tuft at the foot of a tree: a fan of thin blades.
 static void e5_tuft(E5Grid& g, int x, int y, const E5Pal& p, int seed)
 {
-    for (int i = -3; i <= 3; ++i) {
-        int hgt = 1 + (rnd(i, seed, 61) < 0.5f ? 1 : 0);
-        for (int k = 0; k < hgt; ++k) g.set(x + i, y - k, rnd(i, k + seed, 62) < 0.5f ? p.lit : p.mid);
+    const int K = E5Grid::K;
+    for (int j = -10; j <= 10; j += 2) {
+        int hgt = 3 + (int)(rnd(j, seed, 61) * 5);
+        int bx = x * K + 2 + j, by = y * K + K - 1;
+        int lean = j < 0 ? -1 : 1;
+        for (int k = 0; k < hgt; ++k) g.setf(bx + (k > hgt / 2 ? lean : 0), by - k, (j < 0 || k == hgt - 1) ? p.lit : p.mid);
     }
 }
 
@@ -137,161 +156,166 @@ static void e5_tree(E5Grid& g, int x, int baseY, float size, int kind, const E5P
 static void e5_pine(E5Grid& g, int x, int baseY, int h, const E5Pal& p, Col trunk, int seed)
 {
     int trunkH = std::max(1, h / 7);
-    for (int y = baseY - trunkH; y < baseY; ++y) g.set(x, y, trunk);
+    g.rectf(x + 0.2f, (float)(baseY - trunkH), 0.6f, (float)trunkH, trunk);
     int tiers = std::max(2, h / 6), top = baseY - h, bodyH = h - trunkH;
+    const float cx = x + 0.5f;
     for (int t = 0; t < tiers; ++t) {
         int ty0 = top + t * bodyH / (tiers + 1), ty1 = top + (t + 2) * bodyH / (tiers + 1);
         if (t == tiers - 1) ty1 = baseY - trunkH;
         float maxHalf = 1.0f + (h * 0.32f) * (t + 1) / tiers;
-        for (int y = ty0; y < ty1; ++y) {
-            float f = (float)(y - ty0 + 1) / (ty1 - ty0);
-            int half = (int)std::lround(maxHalf * f);
-            if ((y - ty0) % 2 == 1 && half > 1 && rnd(y, t, seed) < 0.5f) half -= 1;   // ragged needle tips
-            for (int i = -half; i <= half; ++i) {
-                Col c = i > 0 ? p.dark : (i > -half / 2 - 1 || y > ty1 - 2 ? p.mid : p.lit);
-                if (i < 0 && y < ty0 + 2) c = p.lit;
-                g.set(x + i, y, c);
-            }
-        }
+        g.each(cx - maxHalf - 1, (float)ty0, cx + maxHalf + 1, (float)ty1, [&](int fx, int fy, float ax, float ay) {
+            float f = (ay - ty0) / (ty1 - ty0);
+            float half = maxHalf * f + 0.3f;
+            if ((fy / 2) % 2 == 1 && half > 1 && rnd(fy / 2, t, seed) < 0.5f) half -= 0.5f;   // ragged needle tips
+            float u = ax - cx;
+            if (std::fabs(u) > half) return;
+            Col c = u > 0.3f ? p.dark : (u > -half * 0.5f - 0.5f || ay > ty1 - 1.5f ? p.mid : p.lit);
+            if (u < 0 && ay < ty0 + 1.5f) c = p.lit;
+            g.setf(fx, fy, c);
+        });
     }
 }
 
 // A layered ridge with a lit face where the ground rises to the right (light from the left),
 // a lighter rim along the top, and fill down to the bottom.
 // whole periods only, so it tiles
-static float e5_ridgeTop(const E5Grid& g, int x, float base, int seed, float amp, int period, float a2 = 0.5f, float a3 = 0.25f)
+static float e5_ridgeTop(const E5Grid& g, float x, float base, int seed, float amp, int period, float a2 = 0.5f, float a3 = 0.25f)
 {
-    float t = (float)x / g.w * 6.2831853f;
+    float t = x / g.w * 6.2831853f;
     return base + amp * std::sin(t * period + seed) + amp * a2 * std::sin(t * (period * 2 + 1) + seed * 1.7f) +
            amp * a3 * std::sin(t * period * 6 + seed * 2.3f);
 }
 
 static void e5_ridge(E5Grid& g, float base, int seed, float amp, int period, Col fill, Col lit, Col rim, float a2 = 0.5f, float a3 = 0.25f)
 {
-    auto top = [&](int x) { return e5_ridgeTop(g, x, base, seed, amp, period, a2, a3); };
-    for (int x = 0; x < g.w; ++x) {
-        int y0 = (int)std::lround(top(x));
-        float slope = top(x + 2) - top(x - 2);
-        for (int y = y0; y < g.h; ++y) {
+    auto top = [&](float x) { return e5_ridgeTop(g, x, base, seed, amp, period, a2, a3); };
+    const int K = E5Grid::K;
+    for (int fx = 0; fx < g.fw; ++fx) {
+        float ax = (fx + 0.5f) / K, y0 = top(ax);
+        float slope = top(ax + 2) - top(ax - 2);
+        for (int fy = std::max(0, (int)std::floor(y0 * K)); fy < g.fh; ++fy) {
+            float ay = (fy + 0.5f) / K;
+            if (ay < y0) continue;
             Col c = fill;
-            if (y < y0 + 1) c = rim;
-            else if (slope < -0.25f && y < y0 + 3 + (int)(-slope * 3)) c = lit;
-            g.set(x, y, c);
+            if (ay < y0 + 0.5f) c = rim;
+            else if (slope < -0.25f && ay < y0 + 0.5f + (-slope - 0.25f) * 6) c = lit;   // grows smoothly with the slope
+            g.setf(fx, fy, c);
         }
     }
 }
 
-// A stepped cloud: stacked blobs with a flat bottom, three tones from the top down.
+// A stepped cloud: stacked blobs with a flat bottom, three tones from the top down. The lit top
+// follows the bumps of the blobs.
 static void e5_cloud(E5Grid& g, float cx, float cy, float size, Col top, Col mid, Col under, int seed)
 {
     struct B { float x, y, r; };
     B bl[5] = {{cx, cy - size * 0.35f, size}, {cx - size * 1.2f, cy, size * 0.7f}, {cx + size * 1.3f, cy + size * 0.05f, size * 0.62f},
                {cx - size * 2.1f, cy + size * 0.3f, size * 0.4f}, {cx + size * 2.2f, cy + size * 0.3f, size * 0.38f}};
     float flat = cy + size * 0.5f;
-    for (int y = (int)(cy - size * 1.5f); y <= (int)flat; ++y)
-        for (int x = (int)(cx - size * 3); x <= (int)(cx + size * 3); ++x) {
-            float px = x + 0.5f, py = y + 0.5f;
-            bool in = false;
-            for (auto& b : bl) {
-                float dx = (px - b.x), dy = (py - b.y) * 1.6f;
-                if (dx * dx + dy * dy < b.r * b.r) in = true;
+    (void)seed;
+    g.each(cx - size * 3, cy - size * 1.5f, cx + size * 3, flat, [&](int fx, int fy, float px, float py) {
+        bool in = false;
+        float lift = 0;   // how far down from its own blob top this point is
+        for (auto& b : bl) {
+            float dx = (px - b.x), dy = (py - b.y) * 1.6f;
+            if (dx * dx + dy * dy < b.r * b.r) {
+                if (!in) lift = 1e9f;
+                in = true;
+                float topY = b.y - std::sqrt(std::max(0.0f, b.r * b.r - dx * dx)) / 1.6f;
+                lift = std::min(lift, py - topY);
             }
-            if (!in || py > flat) continue;
-            float rel = (py - (cy - size * 1.3f)) / (flat - (cy - size * 1.3f));
-            Col c = rel < 0.55f ? top : (rel < 0.82f ? mid : under);
-            if (rel >= 0.55f && rel < 0.82f && rnd(x, y, seed) < 0.15f) c = top;
-            g.set(x, y, c);
         }
+        if (!in) return;
+        float rel = (py - (cy - size * 1.3f)) / (flat - (cy - size * 1.3f));
+        Col c = rel < 0.82f ? mid : under;
+        if (lift < size * 0.45f && rel < 0.8f) c = top;
+        g.setf(fx, fy, c);
+    });
 }
 
 // Flat sky bands with a stepped (staircase) edge between each pair.
 static void e5_sky(E5Grid& g, const uint32_t* bands, int n, float endFrac, int seed)
 {
-    for (int y = 0; y < g.h; ++y)
-        for (int x = 0; x < g.w; ++x) {
-            float f = (float)y / (g.h * endFrac) * n;
-            // a small stair offset so the band edges step
-            f += ((x / 6 + seed) % 3 == 0 ? 0.08f : 0.0f);
-            int b = std::min(n - 1, std::max(0, (int)f));
-            g.set(x, y, hex(bands[b]));
-        }
+    g.each(0, 0, (float)g.w, (float)g.h, [&](int fx, int fy, float ax, float ay) {
+        float f = ay / (g.h * endFrac) * n;
+        f += (((int)ax / 6 + seed) % 3 == 0 ? 0.08f : 0.0f);   // a small stair offset so the band edges step
+        int b = std::min(n - 1, std::max(0, (int)f));
+        g.setf(fx, fy, hex(bands[b]));
+    });
 }
 
-// A flat sun with two halo rings of slightly lighter sky.
+// A flat sun: a crisp disc inside one ring of lighter sky.
 static void e5_sun(E5Grid& g, float cx, float cy, float r, Col core, Col ring1, Col ring2)
 {
-    for (int y = (int)(cy - r * 2.2f); y <= (int)(cy + r * 2.2f); ++y)
-        for (int x = (int)(cx - r * 2.2f); x <= (int)(cx + r * 2.2f); ++x) {
-            float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = std::sqrt(dx * dx + dy * dy);
-            if (d < r) g.set(x, y, core);
-            else if (d < r * 1.35f) g.set(x, y, ring1);
-            else if (d < r * 1.75f) g.set(x, y, mixc(g.get(x, y), ring2, 0.5f));
-        }
+    g.each(cx - r * 2, cy - r * 2, cx + r * 2, cy + r * 2, [&](int fx, int fy, float ax, float ay) {
+        float dx = ax - cx, dy = ay - cy, d = std::sqrt(dx * dx + dy * dy);
+        if (d < r) g.setf(fx, fy, core);
+        else if (d < r * 1.3f) g.setf(fx, fy, ring1);
+        (void)ring2;
+    });
 }
 
-// A traditional domed haystack, lit on the left.
+// A traditional domed haystack, lit on the left, with short straw strokes.
 static void e5_haystack(E5Grid& g, int x, int baseY, int w, int h, const E5Pal& p, int seed)
 {
-    float rx = w * 0.5f;
-    for (int y = baseY - h; y < baseY; ++y) {
-        float t = (float)(y - (baseY - h)) / h;   // 0 top .. 1 base
+    float rx = w * 0.5f, cx = x + 0.5f;
+    g.each(cx - rx - 2, (float)(baseY - h), cx + rx + 2, (float)baseY, [&](int fx, int fy, float ax, float ay) {
+        float t = (ay - (baseY - h)) / h;   // 0 top .. 1 base
         float half = t < 0.55f ? rx * std::sqrt(std::max(0.0f, 1 - (0.55f - t) * (0.55f - t) / (0.55f * 0.55f))) : rx * (1.0f + (t - 0.55f) * 0.15f);
-        int hw = (int)std::lround(half);
-        for (int i = -hw; i <= hw; ++i) {
-            float u = (i + 0.5f) / (hw + 0.5f);
-            Col c = u < -0.25f ? p.lit : (u < 0.45f ? p.mid : p.dark);
-            if (t > 0.86f) c = u < 0.2f ? p.mid : p.dark;                       // shaded skirt
-            if ((y + i / 3 + seed) % 4 == 0 && t > 0.2f && rnd(i, y, seed) < 0.5f) c = c.r == p.lit.r ? p.mid : p.dark;   // straw lines
-            g.set(x + i, y, c);
-        }
-    }
-    g.set(x, baseY - h - 1, p.dark);   // the little top knot
+        float u = (ax - cx) / (half + 0.5f);
+        if (std::fabs(u) > 1.0f) return;
+        Col c = u < -0.25f ? p.lit : (u < 0.45f ? p.mid : p.dark);
+        if (t > 0.86f) c = u < 0.2f ? p.mid : p.dark;   // shaded skirt
+        if ((fy + fx / 5 + seed) % 5 == 0 && t > 0.2f && rnd(fx / 5, fy, seed) < 0.5f) c = c.r == p.lit.r ? p.mid : p.dark;   // straw
+        g.setf(fx, fy, c);
+    });
+    g.rectf(cx - 0.25f, baseY - h - 0.75f, 0.5f, 0.75f, p.dark);   // the little top knot
 }
 
 // A small rectangular bale seen slightly from the side: lit top, front face, dark end.
 static void e5_bale(E5Grid& g, int x, int baseY, int w, int h, const E5Pal& p)
 {
-    g.rect(x, baseY - h, w, 1, p.lit);
-    g.rect(x, baseY - h + 1, w - 1, h - 1, p.mid);
-    g.rect(x + w - 1, baseY - h + 1, 1, h - 1, p.dark);
-    if (w > 3) g.rect(x + w / 3, baseY - h + 1, 1, h - 1, p.dark);   // the twine
+    g.rectf((float)x, (float)(baseY - h), (float)w, 0.75f, p.lit);
+    g.rectf((float)x, baseY - h + 0.75f, w - 0.75f, h - 0.75f, p.mid);
+    g.rectf(x + w - 0.75f, baseY - h + 0.75f, 0.75f, h - 0.75f, p.dark);
+    if (w > 3) g.rectf(x + w / 3.0f, baseY - h + 0.75f, 0.5f, h - 0.75f, p.dark);   // the twine
 }
 
 // A stook: sheaves leaned together, a little triangle.
 static void e5_stook(E5Grid& g, int x, int baseY, int h, const E5Pal& p)
 {
-    for (int y = 0; y < h; ++y) {
-        int half = y * 2 / 3 + 1;
-        for (int i = -half; i <= half; ++i) g.set(x + i, baseY - h + y, i < 0 ? p.lit : (i == 0 ? p.mid : p.dark));
-    }
+    float cx = x + 0.5f;
+    g.each(cx - h - 1, (float)(baseY - h), cx + h + 1, (float)baseY, [&](int fx, int fy, float ax, float ay) {
+        float u = ax - cx, half = (ay - (baseY - h)) * 0.667f + 0.6f;
+        if (std::fabs(u) > half) return;
+        g.setf(fx, fy, u < -0.3f ? p.lit : (u <= 0.3f ? p.mid : p.dark));
+    });
 }
 
-// A hedgerow: a lumpy band of small clusters along y.
+// A hedgerow: a lumpy band of small clusters along y (its bottom row is y).
 static void e5_hedge(E5Grid& g, int x0, int x1, int y, int hgt, const E5Pal& p, int seed)
 {
-    for (int x = x0; x < x1; ++x) {
-        float lump = 0.5f + 0.5f * std::sin(x * 0.9f + seed) * std::sin(x * 0.37f + seed * 2.0f);
-        int top = y - hgt + (int)std::lround(lump * 2 + rnd(x, seed, 71) * 1.2f);
-        for (int yy = top; yy <= y; ++yy) {
-            float rel = (float)(yy - top) / std::max(1, y - top);
-            int phase = (x + seed) % 5;
+    const int K = E5Grid::K;
+    for (int fx = x0 * K; fx < x1 * K; ++fx) {
+        float ax = (fx + 0.5f) / K;
+        float lump = 0.5f + 0.5f * std::sin(ax * 0.9f + seed) * std::sin(ax * 0.37f + seed * 2.0f);
+        float top = y - hgt + lump * 2 + rnd(fx / 3, seed, 71) * 0.8f;
+        int phase = ((int)std::floor(ax) + seed) % 5;
+        for (int fy = (int)std::ceil(top * K - 0.5f); fy < (y + 1) * K; ++fy) {
+            float rel = ((fy + 0.5f) / K - top) / std::max(1.0f, y + 1 - top);
             Col c = rel < 0.34f ? (phase < 3 ? p.lit : p.mid) : (rel < 0.7f ? p.mid : p.dark);
-            g.set(x, yy, c);
+            g.setf(fx, fy, c);
         }
     }
 }
 
 static void e5_fence(E5Grid& g, int x0, int x1, int y, Col post, Col postD, Col rail)
 {
-    for (int x = x0; x < x1; ++x) {
-        g.set(x, y - 3, rail);
-        g.set(x, y - 1, rail);
-    }
+    g.rectf((float)x0, y - 3 + 0.25f, (float)(x1 - x0), 0.5f, rail);
+    g.rectf((float)x0, y - 1 + 0.25f, (float)(x1 - x0), 0.5f, rail);
     for (int x = x0; x < x1; x += 5) {
-        g.rect(x, y - 4, 1, 5, post);
-        g.set(x + 1, y - 4, postD);
-        g.set(x + 1, y - 2, postD);
-        g.set(x + 1, y, postD);
+        g.rectf((float)x, (float)(y - 4), 0.75f, 5, post);
+        g.rectf(x + 0.75f, (float)(y - 4), 0.5f, 5, postD);
     }
 }
 
@@ -302,29 +326,36 @@ static void e5_farmhouse(E5Grid& g, int x, int baseY, int w, int h)
     Col win = hex(0xffd878), frame = hex(0x5a3a3a), door = hex(0x3a5a6a), stone = hex(0x9a8a90);
     int roofH = w / 3;
     g.rect(x, baseY - h, w, h, wall);
-    g.rect(x + w - 3, baseY - h, 3, h, wallD);                 // shaded gable end
-    g.rect(x, baseY - 1, w, 1, stone);                         // plinth
-    for (int r = 0; r < roofH; ++r) {                          // a long hipped roof, eaves at r = 0
-        int l = x - 2 + r, rr = x + w + 1 - r, y = baseY - h - 1 - r;
-        for (int i = l; i <= rr; ++i) {
-            Col c = (r % 3 == 0) ? roofD : roof;               // courses of tiles
-            if (r >= roofH - 2) c = roofL;                     // the ridge catches the sun
-            if (i > rr - (r + 3)) c = roofD;                   // the hip on the shaded end
-            else if (i < l + 2) c = roofL;                     // the lit hip
-            g.set(i, y, c);
-        }
-    }
-    g.rect(x + w / 5, baseY - h - roofH - 3, 2, 4, stone);    // chimneys
-    g.rect(x + w * 3 / 4 - 2, baseY - h - roofH - 2, 2, 3, stone);
-    g.set(x + w / 5, baseY - h - roofH - 4, hex(0x9aa8c8));    // a curl of smoke
-    g.set(x + w / 5 + 1, baseY - h - roofH - 6, hex(0xb0bcd8));
-    g.set(x + w / 5, baseY - h - roofH - 8, hex(0xc8d0e4));
+    g.rect(x + w - 3, baseY - h, 3, h, wallD);   // shaded gable end
+    g.rectf((float)x, baseY - 0.75f, (float)w, 0.75f, stone);   // plinth
+    // a long hipped roof: the eaves overhang two units, each course of tiles a little band
+    float eaves = (float)(baseY - h);
+    g.each(x - 2.0f, eaves - roofH, x + w + 2.0f, eaves, [&](int fx, int fy, float ax, float ay) {
+        float r = eaves - ay;   // height above the eaves
+        float l = x - 2 + r, rr = x + w + 2 - r;
+        if (ax < l || ax >= rr) return;
+        Col c = ((int)(r * 2) % 3 == 0) ? roofD : roof;   // courses of tiles
+        if (r >= roofH - 1.5f) c = roofL;                  // the ridge catches the sun
+        if (ax > rr - (r + 2.5f)) c = roofD;               // the hip on the shaded end
+        else if (ax < l + 1.5f) c = roofL;                 // the lit hip
+        g.setf(fx, fy, c);
+    });
+    g.rectf(x + w / 5.0f, eaves - roofH - 3, 1.5f, 4, stone);   // chimneys
+    g.rectf(x + w * 3 / 4.0f - 2, eaves - roofH - 2, 1.5f, 3, stone);
+    for (int i = 0; i < 3; ++i)   // a curl of smoke
+        g.rectf(x + w / 5.0f + (i % 2) * 0.75f, eaves - roofH - 4.5f - i * 1.6f, 0.75f + 0.25f * i, 0.75f,
+                mixc(hex(0x9aa8c8), hex(0xc8d0e4), i / 2.0f));
     int nWin = std::max(2, w / 7);
     for (int i = 0; i < nWin; ++i) {
         int wx = x + 2 + i * (w - 6) / nWin;
-        g.rect(wx, baseY - h + 2, 3, 3, win);
-        g.set(wx + 2, baseY - h + 2, frame);
-        if (i != nWin / 2) { g.rect(wx, baseY - h + 7, 3, 3, win); g.set(wx + 2, baseY - h + 7, frame); }
+        for (int row = 0; row < 2; ++row) {
+            if (row == 1 && i == nWin / 2) continue;
+            float wy = (float)(baseY - h + 2 + row * 5);
+            g.rect(wx, (int)wy, 3, 3, win);
+            g.rectf(wx + 1.25f, wy, 0.5f, 3, frame);       // glazing bars
+            g.rectf((float)wx, wy + 1.25f, 3, 0.5f, frame);
+            g.rectf(wx + 2.5f, wy, 0.5f, 3, frame);        // the shaded reveal
+        }
     }
     int dx = x + 2 + (nWin / 2) * (w - 6) / nWin;
     g.rect(dx, baseY - 6, 3, 5, door);
@@ -336,32 +367,31 @@ static void e5_barn(E5Grid& g, int x, int baseY, int w, int h)
     Col wall = hex(0x9a4a3a), wallL = hex(0xb85e44), wallD = hex(0x6a2e34), roof = hex(0x7a7890), roofL = hex(0xa8a4b4), roofD = hex(0x4a4a64);
     Col hay = hex(0xf0c860), hayD = hex(0xb88a3a), dark = hex(0x3a2230);
     g.rect(x, baseY - h, w, h, wall);
-    for (int i = x; i < x + w; i += 2) g.rect(i, baseY - h, 1, h, (i - x) % 4 == 0 ? wallL : wall);   // boards
+    for (float i = x + 0.5f; i < x + w - 3; i += 1.5f) g.rectf(i, (float)(baseY - h), 0.5f, (float)h, wallL);   // boards
     g.rect(x + w - 3, baseY - h, 3, h, wallD);
     int roofH = w / 3 + 1;
-    for (int r = 0; r < roofH; ++r) {
-        int half = (w / 2 + 2) - r * (w / 2 + 2) / roofH;
-        for (int i = -half; i <= half; ++i) {
-            Col c = i < 0 ? (r < roofH - 2 && (i + r) % 3 == 0 ? roofL : roofL) : roofD;
-            if (i < 0 && (i % 3 == 0)) c = roof;
-            g.set(x + w / 2 + i, baseY - h - r, c);
-        }
-    }
+    float eaves = (float)(baseY - h + 1), cx = x + w / 2 + 0.5f, span = w / 2 + 2.5f;
+    g.each(cx - span, eaves - roofH, cx + span, eaves, [&](int fx, int fy, float ax, float ay) {
+        float r = eaves - ay, half = span * (1 - r / roofH), u = ax - cx;
+        if (std::fabs(u) > half) return;
+        Col c = u < 0 ? (fx % 6 < 2 ? roof : roofL) : roofD;   // corrugations on the lit side
+        g.setf(fx, fy, c);
+    });
     // the open door, hay piled inside
     int dw = w / 3, dx = x + w / 2 - dw / 2, dh = h * 3 / 4;
     g.rect(dx, baseY - dh, dw, dh, dark);
-    for (int i = 0; i < dw; ++i) {
-        int hh = dh / 2 + (int)(2 * std::sin(i * 0.9f));
-        for (int k = 0; k < hh; ++k) g.set(dx + i, baseY - 1 - k, k == hh - 1 ? hay : (i < dw / 2 ? hay : hayD));
-    }
+    g.each((float)dx, (float)(baseY - dh), (float)(dx + dw), (float)baseY, [&](int fx, int fy, float ax, float ay) {
+        float hh = dh / 2.0f + 2 * std::sin((ax - dx) * 0.9f), top = baseY - hh;
+        if (ay < top) return;
+        g.setf(fx, fy, ay < top + 0.5f ? hay : (ax < dx + dw / 2.0f ? hay : hayD));
+    });
     g.rect(x + w / 2 - 1, baseY - h - 3, 2, 2, hex(0x2a1a2a));   // hay loft hatch
 }
 
 bool bgEra5(Scene& sc, int layer)
 {
     const int W = sc.W, H = sc.H;
-    const int b = 4;                        // image pixels per art pixel
-    E5Grid g(W / b, H / b);
+    E5Grid g(W, H);
     const int gw = g.w, gh = g.h;
     // the haze shader already fades the cut-outs towards the dusk; keep the painted fade light
     const float fades[4] = {0, 0.0f, 0.06f, 0.0f};
@@ -389,10 +419,10 @@ bool bgEra5(Scene& sc, int layer)
         e5_cloud(g, gw * 0.27f, gh * 0.42f, 2.6f, hex(0xfce8d0), hex(0xf0c8b0), hex(0xd8a8a0), 5);
         // a few long thin strands low near the sun
         for (int i = 0; i < 4; ++i) {
-            int y = (int)(gh * (0.36f + 0.06f * i)), x0 = (int)(gw * (0.6f + 0.05f * i)), len = 14 + i * 4;
-            g.rect(x0, y, len, 1, hex(0xfce4c0));
+            float y = gh * (0.36f + 0.06f * i), x0 = gw * (0.6f + 0.05f * i), len = 14.0f + i * 4;
+            g.rectf(x0, y, len, 0.5f, hex(0xfce4c0));
         }
-        g.blit(sc, b);
+        g.blit(sc);
         return true;
     }
 
@@ -405,35 +435,40 @@ bool bgEra5(Scene& sc, int layer)
         // patchwork on the near hill: rows that follow the hill and widen towards us, cut into
         // fields by hedges, with clumps of trees along the hedges
         const uint32_t patch[5] = {0xe8c868, 0x8ab44a, 0xd8b050, 0xa8c458, 0x74a046};
-        const int rowH[8] = {3, 4, 5, 6, 7, 8, 9, 10};
-        auto rowOf = [&](int d, int& start) {
-            int r = 0, acc = 0;
+        const float rowH[8] = {3, 4, 5, 6, 7, 8, 9, 10};
+        auto rowOf = [&](float d, float& start) {
+            int r = 0;
+            float acc = 0;
             while (r < 7 && d >= acc + rowH[r]) { acc += rowH[r]; ++r; }
             start = acc;
             return r;
         };
-        for (int x = 0; x < gw; ++x) {
-            int top = (int)std::lround(e5_ridgeTop(g, x, b3, 11, a3, 4));
-            for (int y = top + 2; y < gh; ++y) {
-                int start, row = rowOf(y - top - 2, start);
-                int span = 14 + row * 6, shift = (int)(rnd(row, 0, 310) * 40) + (y - top) / 2;
-                int cut = (x + shift) / span;
+        const int K = E5Grid::K;
+        for (int fx = 0; fx < g.fw; ++fx) {
+            float ax = (fx + 0.5f) / K, top = e5_ridgeTop(g, ax, b3, 11, a3, 4);
+            for (int fy = (int)std::floor((top + 2) * K); fy < g.fh; ++fy) {
+                float ay = (fy + 0.5f) / K, d = ay - top - 2;
+                if (d < 0) continue;
+                float start;
+                int row = rowOf(d, start);
+                float span = 14.0f + row * 6, shift = rnd(row, 0, 310) * 40 + (ay - top) / 2;
+                int cut = (int)std::floor((ax + shift) / span);
                 int k = (int)(rnd(cut, row, 311) * 5);
                 Col c = hex(patch[k]);
-                bool hedgeRow = y - top - 2 == start && rnd(cut, row, 313) < 0.8f;
-                bool hedgeCut = (x + shift) % span == 0;
+                bool hedgeRow = d - start < 0.6f && rnd(cut, row, 313) < 0.8f;
+                bool hedgeCut = std::fmod(ax + shift, span) < 0.6f;
                 if (hedgeRow || hedgeCut) c = hex(0x4a7048);
-                else if (k % 2 == 0 && (x + y) % 4 == 0) c = mul(c, 0.94f);   // mown lines in the hay
-                g.set(x, y, c);
+                else if (k % 2 == 0 && fy % 4 == 0) c = mul(c, 0.94f);   // mown lines in the hay
+                g.setf(fx, fy, c);
             }
         }
         // tree clumps sitting on the hedge lines, bigger lower down
         for (int i = 0; i < 70; ++i) {
             int x = (int)(rnd(i, 1, 314) * gw), row = 1 + (int)(rnd(i, 2, 314) * 5);
-            int top = (int)std::lround(e5_ridgeTop(g, x, b3, 11, a3, 4)), acc = 0;
+            float top = e5_ridgeTop(g, (float)x, b3, 11, a3, 4), acc = 0;
             for (int r = 0; r < row; ++r) acc += rowH[r];
             float sz = 1.2f + row * 0.45f;
-            e5_canopy(g, (float)x, (float)(top + 2 + acc) - sz * 0.6f, sz * 1.3f, sz, leafFar, i + 200, 4);
+            e5_canopy(g, (float)x, top + 2 + acc - sz * 0.6f, sz * 1.3f, sz, leafFar, i + 200, 4);
         }
         // a far wood: a dense band of small cluster trees and a few pines
         int base = gh - 1;
@@ -444,25 +479,25 @@ bool bgEra5(Scene& sc, int layer)
             else e5_canopy(g, (float)x, base - sz * 0.9f, sz * 1.25f, sz, leafFar, i + 40, 4);
         }
         // the band's bottom stays solid so the cut-out meets the lawn
-        for (int x = 0; x < gw; ++x) g.rect(x, gh - 3, 1, 3, leafFar.dark);
-        g.blit(sc, b);
+        g.rect(0, gh - 3, gw, 3, leafFar.dark);
+        g.blit(sc);
         return true;
     }
 
     if (layer == 2) {
         // mid: the hay meadow with the farm. The bottom 16% sits below the lawn.
         int fieldTop = (int)(gh * 0.66f);
-        // gently rolling field edge
-        for (int x = 0; x < gw; ++x) {
-            int top = fieldTop + (int)std::lround(1.5f * std::sin(x * 6.2831853f / gw * 3 + 1.0f));
-            for (int y = top; y < gh; ++y) {
-                Col c = hex(0xe8c470);
-                if (y < top + 1) c = hex(0xf8e098);
-                else if ((y - top) % 5 == 2) c = hex(0xd2a858);   // mown rows
-                else if ((y - top) % 5 == 3 && (x + y) % 3 == 0) c = hex(0xf2d488);
-                g.set(x, y, c);
-            }
-        }
+        // gently rolling field edge, mown in rows
+        g.each(0, fieldTop - 2.0f, (float)gw, (float)gh, [&](int fx, int fy, float ax, float ay) {
+            float top = fieldTop + 1.5f * std::sin(ax * 6.2831853f / gw * 3 + 1.0f);
+            if (ay < top) return;
+            float rr = std::fmod(ay - top, 5.0f);
+            Col c = hex(0xe8c470);
+            if (ay < top + 0.5f) c = hex(0xf8e098);
+            else if (rr >= 2.0f && rr < 2.75f) c = hex(0xd2a858);   // mown rows
+            else if (rr >= 3.0f && rr < 3.5f) c = hex(0xf2d488);
+            g.setf(fx, fy, c);
+        });
         // hedgerows along the field top, with gaps
         e5_hedge(g, 0, gw / 3, fieldTop, 4, hedge, 1);
         e5_hedge(g, gw / 3 + 10, gw * 2 / 3, fieldTop, 4, hedge, 2);
@@ -485,7 +520,7 @@ bool bgEra5(Scene& sc, int layer)
             e5_haystack(g, x, fieldTop + 6 + (i % 2) * 2, 7 + (i % 3), 7 + (i % 2), hayFar, i);
         }
         for (int i = 0; i < 18; ++i) e5_stook(g, (int)(gw * 0.05f + i * 6.5f) % gw, fieldTop + 12 + (i % 3), 3, hay);
-        g.blit(sc, b);
+        g.blit(sc);
         return true;
     }
 
@@ -493,20 +528,18 @@ bool bgEra5(Scene& sc, int layer)
     // and further back in game; its bottom 14% sits below the lawn.
     int ground = (int)(gh * 0.8f);
     // stubble ground strip
-    for (int x = 0; x < gw; ++x)
-        for (int y = ground; y < gh; ++y) {
-            Col c = hex(0xe0b860);
-            if (y == ground) c = hex(0xf4d68a);
-            else if ((x * 3 + y * 5) % 11 == 0) c = hex(0xc8984a);
-            g.set(x, y, c);
-        }
-    // a hedge with a few big cluster trees standing out of it
-    e5_hedge(g, 0, gw, ground - 6, 7, hedge, 9);
-    for (int x = 0; x < gw; ++x)
-        for (int y = ground - 6; y < ground; ++y) {
-            float r = rnd(x / 2, y / 2, 320);   // 2x2 leaf clusters
-            g.set(x, y, r < 0.25f && y < ground - 3 ? hedge.lit : (r < 0.6f ? hedge.mid : hedge.dark));
-        }
+    g.each(0, (float)ground, (float)gw, (float)gh, [&](int fx, int fy, float, float ay) {
+        Col c = hex(0xe0b860);
+        if (ay < ground + 0.5f) c = hex(0xf4d68a);
+        else if ((fx * 3 + fy * 7) % 29 == 0) c = hex(0xc8984a);
+        g.setf(fx, fy, c);
+    });
+    // a hedge built of leaf clumps, with a few big cluster trees standing out of it
+    e5_hedge(g, 0, gw, ground - 1, 6, hedge, 9);
+    for (int i = 0; i < gw / 3; ++i) {
+        float x = i * 3.0f + rnd(i, 1, 320) * 2, y = ground - 3.2f - rnd(i, 2, 320) * 1.6f;
+        e5_canopy(g, x, y, 2.0f + rnd(i, 3, 320) * 0.8f, 1.7f, hedge, 400 + i, 3);
+    }
     const int kinds[5] = {0, 2, 1, 3, 4};
     for (int i = 0; i < 5; ++i) {
         int x = (int)(gw * (0.1f + i * 0.2f)) + (int)(rnd(i, 1, 304) * 6);
@@ -525,6 +558,6 @@ bool bgEra5(Scene& sc, int layer)
         e5_bale(g, x, ground + 5, 9, 5, hay);
         if (i % 2 == 0) e5_bale(g, x + 2, ground + 1, 7, 4, hay);
     }
-    g.blit(sc, b);
+    g.blit(sc);
     return true;
 }

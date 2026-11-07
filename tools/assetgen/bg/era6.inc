@@ -3,7 +3,8 @@
 // (layer 0) and one far cut-out (layer 1, stood far back and hazed by Renderer::drawBackdrop3D).
 // So: a fresh morning sky with stepped clouds and a pale sun, and far mountains in layers that
 // fade lighter and bluer with distance over a band of pines and cluster-canopy trees.
-// Uses the E5Grid / e5_ helpers from era5.inc, which is included just before this file.
+// Uses the E5Grid / e5_ helpers from era5.inc, which is included just before this file: painted at
+// the layer's full resolution, so the backdrop is as fine as the models in front of it.
 
 // A range of peaked mountains: lit on the left face of each peak, shadowed on the right, with a
 // few lighter gullies running down the lit faces. Peaks wrap on x so the layer tiles.
@@ -14,28 +15,34 @@ static void e6_mountains(E5Grid& g, float base, float height, int nPeaks, int se
     for (int i = 0; i < nPeaks; ++i)
         pk.push_back({(i + 0.2f + 0.6f * rnd(i, seed, 601)) * g.w / nPeaks, base - height * (0.55f + 0.45f * rnd(i, seed, 602)),
                       0.55f + 0.35f * rnd(i, seed, 603)});
-    for (int x = 0; x < g.w; ++x) {
+    const int K = E5Grid::K;
+    for (int fx = 0; fx < g.fw; ++fx) {
+        float ax = (fx + 0.5f) / K;
         float best = 1e9f;
         int bi = 0;
         float bdx = 0;
         for (int i = 0; i < nPeaks; ++i)
             for (int k = -1; k <= 1; ++k) {   // wrapped copies
-                float dx = x + 0.5f - (pk[i].x + k * g.w);
-                float y = pk[i].y + std::fabs(dx) * pk[i].slope + (rnd(x / 2, i, seed + 604) < 0.3f ? 1 : 0);
+                float dx = ax - (pk[i].x + k * g.w);
+                float y = pk[i].y + std::fabs(dx) * pk[i].slope + (rnd(fx / 3, i, seed + 604) < 0.3f ? 0.25f : 0.0f);
                 if (y < best) { best = y; bi = i; bdx = dx; }
             }
-        int y0 = (int)std::lround(std::min(best, base + 2));
+        float y0 = std::min(best, base + 2);
         bool litSide = bdx < 0;
-        for (int y = y0; y < g.h; ++y) {
+        for (int fy = std::max(0, (int)std::floor(y0 * K)); fy < g.fh; ++fy) {
+            float ay = (fy + 0.5f) / K;
+            if (ay < y0) continue;
             Col c = litSide ? lit : shade;
-            if (y == y0) c = litSide ? rim : lit;
-            // gullies: diagonal light streaks down the lit faces, dark ones on the shadow side
-            float depth = y - y0;
+            if (ay < y0 + 0.5f) c = litSide ? rim : lit;
+            // gullies: thin diagonal light streaks down the lit faces, dark ones on the shadow side
+            float depth = ay - y0;
             if (depth > 2 && depth < 22) {
-                int streak = (int)(bdx * 0.7f + depth * (litSide ? 0.5f : -0.5f));
-                if (((streak % 6) + 6) % 6 == 0 && rnd(bi, (int)depth / 3, seed + 605) < 0.8f) c = litSide ? gully : mixc(shade, lit, 0.4f);
+                float streak = bdx * 0.7f + depth * (litSide ? 0.5f : -0.5f);
+                float m = std::fmod(streak, 6.0f);
+                if (m < 0) m += 6.0f;
+                if (m < 0.6f && rnd(bi, (int)depth / 3, seed + 605) < 0.8f) c = litSide ? gully : mixc(shade, lit, 0.4f);
             }
-            g.set(x, y, c);
+            g.setf(fx, fy, c);
         }
     }
 }
@@ -43,9 +50,8 @@ static void e6_mountains(E5Grid& g, float base, float height, int nPeaks, int se
 bool bgEra6(Scene& sc, int layer)
 {
     const int W = sc.W, H = sc.H;
-    const int b = 4;
     if (layer >= 2) return true;   // the 3D stage has models here; leave these transparent
-    E5Grid g(W / b, H / b);
+    E5Grid g(W, H);
     const int gw = g.w, gh = g.h;
     sc.fade = layer == 1 ? 0.08f : 0.0f;   // the haze shader does the depth fade in game
 
@@ -59,8 +65,8 @@ bool bgEra6(Scene& sc, int layer)
         e5_cloud(g, gw * 0.62f, gh * 0.34f, 4.0f, ct, cm, cu, 13);
         e5_cloud(g, gw * 0.84f, gh * 0.2f, 6.0f, ct, cm, cu, 14);
         e5_cloud(g, gw * 0.3f, gh * 0.44f, 3.0f, ct, cm, cu, 15);
-        for (int i = 0; i < 3; ++i) g.rect((int)(gw * (0.5f + 0.13f * i)), (int)(gh * (0.48f + 0.04f * i)), 12 + 4 * i, 1, hex(0xeef6fa));
-        g.blit(sc, b);
+        for (int i = 0; i < 3; ++i) g.rectf(gw * (0.5f + 0.13f * i), gh * (0.48f + 0.04f * i), 12.0f + 4 * i, 0.5f, hex(0xeef6fa));
+        g.blit(sc);
         return true;
     }
 
@@ -82,7 +88,7 @@ bool bgEra6(Scene& sc, int layer)
         float sz = 3.0f + 2.0f * rnd(i, 5, 611);
         e5_canopy(g, (float)x, base - sz * 0.8f, sz * 1.3f, sz * 1.05f, broad, i + 300, 5);
     }
-    for (int x = 0; x < gw; ++x) g.rect(x, gh - 3, 1, 3, broad.dark);   // solid foot, meets the ground
-    g.blit(sc, b);
+    g.rect(0, gh - 3, gw, 3, broad.dark);   // solid foot, meets the ground
+    g.blit(sc);
     return true;
 }
