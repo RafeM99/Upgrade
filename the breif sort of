@@ -1,0 +1,231 @@
+# CLAUDE.md — "Upgrade" · Game Jam 2026 Project Brief
+
+You are helping a team build a game for **GameJam 2026**, a 24-hour game jam.
+- **Theme:** Time
+- **Jam window:** Sat 7 Nov 2026 10:30 → Sun 8 Nov 2026 10:30 (UK time)
+- **Team size:** 2–6 people, each using Claude Code on their own part
+- **Prizes we're targeting:** overall winner AND **best co-op game**
+
+Read this whole file before doing anything. Every decision below is already agreed by the team. Do not redesign the game. If something is unclear, make the simplest choice that fits this document and say what you chose.
+
+---
+
+## 0. Project details
+
+- **Game title:** **Upgrade** (the graphics upgrade as memories return)
+- **Tech:** **C++ with OpenGL.** Recommended route: **raylib** (OpenGL-based library). Fallback: raw OpenGL 3.3 + GLFW. Team confirms which at the start — see section 15 "Tech notes". If a teammate hasn't said which, assume **raylib**.
+- **Repo:** https://github.com/RafeM99/GameJam
+- **Who owns what:** to be decided — see section 13. Until assigned, only work on the task the user gives you.
+
+---
+
+## 1. One-line pitch
+
+> Two players fight off the Forgetting to recover a memory they share, watching the world grow from 1-bit to 2.5D as it comes back.
+
+## 2. How it ties to the theme "Time"
+
+- Memories are time we've lost. Recovering them = recovering time.
+- The graphics travel forward through gaming history (1-bit → 8-bit → 16-bit → 2.5D) as memories return. Time literally passes on screen.
+- The Forgetting chases the players from behind like time running out.
+
+## 3. Core concept
+
+Two characters have lost a memory they share (e.g. two siblings, or a parent and child — the reveal of who they are to each other is the ending). The world starts as a faded, blurry, **1-bit** memory. As they defeat the Forgetting, the memory bar fills and the world **upgrades through graphical eras**, and each player **gets back an ability** they had forgotten.
+
+## 4. Core gameplay loop
+
+1. Players run right through an **endless, procedurally assembled side-scrolling platformer level** (Mario-style controls).
+2. **Enemies** (creatures of the Forgetting: static, glitches, fog blobs) spawn in the level.
+3. **Killing enemies drops memory fragments** → fills the **shared Memory Bar**.
+4. A **Forgetting Wall** (wall of static/fog) advances from the left. If it touches a player, that player becomes "Faded" (see co-op revive). If both are Faded, the bar drops and the run is lost / restarts from the current era's start.
+5. At **25% / 50% / 75%** on the bar → **era transition**: graphics upgrade + each player unlocks a new ability.
+6. At **100%** → final memory restored → ending scene → (optional) endless score mode.
+
+Target run length: **8–12 minutes** to reach 100% for a first-time pair.
+
+## 5. Graphics eras
+
+The world is ALWAYS built in a 3D scene with gameplay locked to one 2D plane (X/Y). Early eras just *look* 2D. This makes the final 2.5D switch cheap.
+
+| Era | Bar range | Look | Camera | Audio |
+|---|---|---|---|---|
+| 1. **1-bit** (early childhood) | 0–25% | Black & white only, low-res pixelation, chunky blocks, no animation or 2-frame animation | Orthographic, side-on | Simple beeps, square wave |
+| 2. **8-bit** (school years) | 25–50% | Limited colour palette (~16 colours), pixel sprites, simple tile backgrounds | Orthographic | Chiptune loop |
+| 3. **16-bit** (teenage years) | 50–75% | Richer palette, more detailed sprites, **parallax** background layers | Orthographic | Fuller chiptune / SNES-style |
+| 4. **2.5D** (adulthood) | 75–100% | 3D models or extruded blocks, real lighting, shadows, particles, bloom/post-processing | **Perspective**, slightly angled | Full soundtrack |
+
+### Implementation rules for eras
+- One global `EraManager` holds the current era (0–3) and fires an `on_era_changed(era)` event/signal.
+- Every visual thing (tiles, players, enemies, background, UI) listens and swaps its sprite/material/model for that era. **Never** rebuild level layouts per era — only re-skin.
+- 1-bit look can be done with a full-screen pixelation + 2-colour palette shader/post effect over simple art. Lower pixelation and widen palette for 8-bit and 16-bit.
+- **Era transition moment:** freeze gameplay ~1.5s, screen flash or "boot-up" effect, short text like `MEMORY RESTORED: [name]` and `NEW ABILITY: [ability]`, then resume.
+- **Final transition to 2.5D** is the showpiece: camera smoothly swings from orthographic side view to a slightly angled perspective view while flat blocks extrude into 3D. Spend polish time here.
+- Placeholder art is fine until the art pass. Coloured cubes/rectangles with era-appropriate colours are acceptable for prototyping.
+
+## 6. Players and co-op (this is how we win "best co-op")
+
+- **Local co-op, 2 players, one shared screen.** No online multiplayer. No split screen.
+- Input: Player 1 = keyboard WASD + Space (jump) + F (attack) + G (ability) **or** controller 1. Player 2 = arrow keys + Right Ctrl/Enter (jump) + Right Shift (attack) + / (ability) **or** controller 2. Make bindings easy to change.
+- Must also work with **1 player** (P2 can join by pressing any of their buttons) so it can be tested alone, but the design is built for 2.
+
+### Co-op mechanics
+1. **Shared Memory Bar** — both players' kills fill one bar.
+2. **Split abilities** — each player unlocks DIFFERENT abilities (table below). Some level chunks need both players' abilities to pass.
+3. **Player-coloured memories** — some platforms/enemies are tinted in one player's colour and are only solid/visible/damageable for that player. Players must call out to each other. (P1 colour: warm, e.g. orange. P2 colour: cool, e.g. blue.)
+4. **Faded & revive** — a player touched by the Forgetting Wall or killed becomes **Faded**: greyscale, ghostly, can still move slowly but can't attack or collect. The other player revives them by touching them (or standing next to them for 1s). Ties to "remembering someone".
+5. **Both Faded = memory lost:** bar drops by 10% (never below current era's threshold) and both respawn together.
+6. **Camera** follows the midpoint between players and keeps both on screen. If a player falls too far behind, they are pulled/teleported to their partner after 2s off-screen (with a small penalty, e.g. becoming Faded).
+
+## 7. Abilities
+
+| Era unlocked | Player 1 | Player 2 |
+|---|---|---|
+| Start (1-bit) | Run, jump, stomp | Run, jump, stomp |
+| 8-bit | **Double jump** | **Dash** (short horizontal burst, damages enemies) |
+| 16-bit | **Ground pound** (breaks cracked floors, kills enemies below) | **Wall jump** |
+| 2.5D | **Glide** | **Time-slow pulse** (slows enemies and Forgetting Wall for 3s, 10s cooldown) |
+
+- Each ability is a separate component/script that is **disabled until unlocked**. Unlocking = enable it + show the UI popup.
+- Level chunks that require an ability must only appear once that ability is unlocked.
+
+## 8. Enemies (the Forgetting)
+
+Keep to **3 enemy types** max:
+1. **Static Blob** — walks back and forth, dies to stomp or attack. Drops 1 fragment.
+2. **Glitch Flyer** — floats in a sine wave, needs attack or dash/double jump to reach. Drops 2 fragments.
+3. **Fog Brute** — bigger, takes 3 hits, appears from 8-bit era onward. Drops 5 fragments.
+
+Optional if time allows: a **mini-boss at each era threshold**.
+
+- Each enemy has an era-appropriate look (same swap system as everything else).
+- Memory fragments are small pickups that drift toward the nearest player and add to the bar when collected.
+- Spawn rate and enemy mix scale up slightly with era.
+
+## 9. Memory Bar & Forgetting Wall
+
+- **Memory Bar:** 0–100. Fragment = +1 by default (tune numbers in one config file). Small passive fill from distance travelled is optional; main source is kills.
+- Era thresholds: 25 / 50 / 75 / 100.
+- **Forgetting Wall:** a vertical wall of static/fog off the left side of the screen moving right at a steady speed that increases slightly each era. It stops players farming enemies. If the players are far ahead it catches up a bit faster (rubber-band) so it stays a threat.
+- All tuning values (speeds, fragment values, spawn rates, thresholds) live in **one config/settings resource** so designers can tweak without touching code.
+
+## 10. Endless level generation (chunk-based)
+
+Do NOT write a full procedural generator. Use **hand-made chunks**:
+- A chunk = a short section (~1–2 screens wide) of platforms, gaps, enemy spawn points and fragment spots, with a fixed entry height and exit height so chunks connect.
+- **There is no level editor, so chunks are ASCII text files** in `/assets/chunks/`, loaded at startup. Anyone can make or edit a chunk in a text editor. Format: first line is a tag header, then a grid where each character is one tile:
+  ```
+  # abilities=double_jump min_era=1 difficulty=2 coop=false
+  ..........................
+  ..........F.......G.......
+  ........#####.............
+  ....S...........###...F...
+  ####################..####
+  ```
+  Legend: `.` empty · `#` solid block · `=` cracked floor (ground pound) · `1` / `2` platform only solid for P1 / P2 · `S` Static Blob · `G` Glitch Flyer · `B` Fog Brute · `F` fragment · `|` wall (for wall jump). Add new symbols here if needed. Era numbers: 0 = 1-bit, 1 = 8-bit, 2 = 16-bit, 3 = 2.5D.
+- `ChunkSpawner` keeps ~3 chunks ahead of the camera, picks the next one at random from the allowed pool, and deletes chunks once they're well behind the Forgetting Wall.
+- Each chunk has tags: `required_abilities` (list), `min_era`, `difficulty`, `coop_required` (bool).
+- Only pick chunks whose required abilities are unlocked. Right after an ability unlocks, force the next chunk to be one that uses it, so the player feels it immediately.
+- Target: **10–15 chunks total**, including at least 4 co-op chunks (need both players' abilities, or player-coloured platforms).
+- Chunk layouts stay the same across eras; they re-skin via the era system.
+
+## 11. UI
+
+- **Memory Bar** at top centre, with tick marks at 25/50/75. Bar style also upgrades per era (pixel bar → glossy bar).
+- Small player indicators (P1/P2 colour, Faded state).
+- Ability unlock popup.
+- **Title screen:** game name, "Press any button to start", "P2 press to join".
+- **Ending screen:** final memory scene (a short sequence of 3–5 still images or a simple animated scene in the 2.5D style) revealing who the two characters are to each other, then credits with team names.
+- Pause menu with restart and quit.
+
+## 12. Story
+
+- No dialogue system needed. Story is told through: era popup text, short one-line memory names (e.g. "The first bike ride", "The treehouse", "The phone call", "Home"), and the ending scene.
+- Writer/designer owns the exact text. Put all strings in one file.
+
+## 13. Suggested team split (edit to match your team)
+
+- **Programmer A (core):** player controller, abilities, co-op input, camera, Faded/revive.
+- **Programmer B (systems):** EraManager, Memory Bar, Forgetting Wall, ChunkSpawner, enemies, config file.
+- **Artist(s):** 4 versions of tiles, players, enemies, backgrounds; the 2.5D models; transition effects.
+- **Designer/Level builder:** builds chunks, tunes numbers, writes memory text and ending.
+- **Audio:** sound effects and music per era.
+- Whoever is free: UI, title/ending screens, juice (screen shake, particles, hit pause).
+
+## 14. Milestones (jam started 10:30 Sat)
+
+| By | Goal |
+|---|---|
+| **~14:00 Sat** | CMake project builds on every teammate's laptop, repo shared, window opens, one player can run and jump on a flat floor with placeholder rectangles. |
+| **~18:30 Sat** | **Core loop playable:** 2 players, camera, enemies die and drop fragments, bar fills, Forgetting Wall works, 3+ chunks spawning endlessly. |
+| **~22:30 Sat** | All 4 eras switch (even with placeholder art), all abilities working, Faded/revive, at least 8 chunks. |
+| **~04:00 Sun** | Real art and audio in for all eras, 2.5D camera transition working, title + ending screen. |
+| **~08:00 Sun** | **Feature freeze.** Only bug fixes, balancing, polish, juice. |
+| **~09:30 Sun** | Final build exported and tested on a different computer. Submission done with time to spare. |
+
+If behind schedule, cut in this order: mini-bosses → time-slow ability → Fog Brute → player-coloured platforms → glide. **Never cut:** the era transitions, co-op revive, shared bar, the 2.5D finale.
+
+## 15. Rules for Claude Code (how to work on this project)
+
+- **Keep the game playable at all times.** Every change should leave the game runnable. Prefer small, working steps.
+- **Simple over clever.** This is a 24-hour jam. No over-engineering, no unnecessary abstractions, no extra frameworks or packages.
+- **Stay in your lane.** Only edit files for the task you were given. If you need to change a shared system (EraManager, config, player controller), keep changes minimal and tell the user so they can tell the team.
+- **Use events/signals** for cross-system communication (era changed, fragment collected, player faded, ability unlocked) so team members' code doesn't tangle.
+- **All tuning numbers in the config file**, all player-facing text in the strings file.
+- **Placeholder first, art later.** Use coloured rectangles/cubes so programmers aren't blocked on art.
+- **No editor:** anything a non-programmer should tweak (numbers, text, chunks) lives in `/assets` text files, never hard-coded.
+- **Folder structure:**
+  ```
+  CMakeLists.txt
+  /src
+    main.cpp
+    /core       Game (state + main loop), EraManager, Config, Events, Strings
+    /player     Player, abilities, input mapping
+    /enemies
+    /level      Chunk loader, ChunkSpawner, ForgettingWall, collision
+    /render     Renderer, camera, era shaders/post-processing
+    /ui
+  /assets
+    /chunks     *.txt chunk files (see section 10)
+    /shaders    *.vs / *.fs
+    /art/era0 /era1 /era2 /era3
+    /audio/era0 /era1 /era2 /era3
+    config.ini  all tuning numbers
+    strings.txt all player-facing text
+  ```
+- **Code style:** plain modern C++17. Simple structs and classes, no deep inheritance, no extra libraries beyond those listed in Tech notes. Use a tiny event system (e.g. a list of `std::function` callbacks per event type) for: era changed, fragment collected, player faded, player revived, ability unlocked.
+- **Fixed timestep** for game logic (60 updates/sec) so physics is the same on every laptop.
+- **Git:** pull often, commit small, commit often with clear messages. Each person works in their own files where possible; the main shared hotspots are `Game`, `Config` and `main.cpp`, so keep edits there small and tell the team.
+- When finishing a task, briefly summarise what changed, which files, and anything another teammate needs to hook up.
+
+### Tech notes (OpenGL)
+
+**Route A — raylib (recommended).** raylib is a C library built on OpenGL. It gives us window, keyboard + 2 gamepads, 2D/3D drawing, textures, fonts, audio and cameras, so we spend the jam on the game, not the plumbing.
+- Build with CMake and fetch raylib via `FetchContent` (raylib 5.x) so everyone builds the same way with no manual installs.
+- Eras 0–2: draw the world as flat quads/cubes viewed by a `Camera3D` with `CAMERA_ORTHOGRAPHIC`, side-on. Era 3: switch to `CAMERA_PERSPECTIVE` and tween position/target/fovy over ~2s for the 2.5D swing. Gameplay is always on the X/Y plane, Z = 0.
+- Simpler alternative for eras 0–2: draw with `Camera2D` and switch to `Camera3D` for era 3 — only if the team finds the 3D-ortho approach confusing. Pick one early and stick to it.
+- **Pixelation:** render the scene into a small `RenderTexture2D` (e.g. 160×90 for era 0, 256×144 for era 1, 384×216 for era 2, full res for era 3) and draw it scaled up with point filtering (`TEXTURE_FILTER_POINT`).
+- **Palette / 1-bit look:** a custom fragment shader (`LoadShader`) applied when drawing that render texture: era 0 = threshold to 2 colours, era 1 = snap to a 16-colour palette, era 2 = wider palette, era 3 = off (optional bloom/vignette shader instead). This is our "real OpenGL" GLSL showcase.
+- 2.5D era: real lighting can be a simple custom lit shader; if short on time use raylib's basic lighting example approach or fake it with vertex colours + a shadow quad under players.
+- Collision: our own simple AABB tile collision against the chunk grid (don't use a physics library).
+- Audio: raylib `Music` streams per era, crossfade on era change; `Sound` for SFX.
+- Input: `IsKeyDown` for keyboards, `IsGamepadAvailable(0/1)` + `GetGamepadAxisMovement` / `IsGamepadButtonDown` for controllers.
+
+**Route B — raw OpenGL 3.3 core (only if the team insists).**
+- Libraries: GLFW (window, input, gamepads), glad (GL loader), GLM (maths), stb_image (textures), miniaudio (audio), stb_truetype or a bitmap font texture (text). All via CMake `FetchContent` or vendored in `/external`.
+- Write: a sprite/quad batch renderer, a cube mesh for 2.5D, a shader loader, a framebuffer for low-res rendering (draw to small FBO, blit/upscale with `GL_NEAREST`), the same palette fragment shader as above.
+- Camera: `glm::ortho` for eras 0–2; for era 3 interpolate to `glm::perspective` (simplest: blend the two projection matrices over ~2s, or fade-cut on the flash).
+- Expect this route to cost the programmers 4–6 extra hours before gameplay work starts. If behind at the ~18:30 milestone, switch to raylib.
+
+**Both routes:** ship a Windows build (and the CMake project) for judging; test the final build on a machine that didn't compile it.
+
+## 16. Definition of done (what judges should experience)
+
+1. Title screen → two players join.
+2. Black-and-white blurry world, simple beeps. Run, jump, stomp static creatures, bar fills.
+3. Flash → colour appears, new chiptune, each player gets a different ability, co-op sections start.
+4. Parallax, richer world, new abilities, tougher enemies, the Forgetting Wall speeding up.
+5. **The camera swings round and the world becomes 2.5D** — lighting, depth, full music.
+6. Bar hits 100% → the memory is restored → reveal of who the two players are to each other → credits.
+
+Total: under 15 minutes, understandable without explanation, clearly about **Time**, and clearly better with two people.
