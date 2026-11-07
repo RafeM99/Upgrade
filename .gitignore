@@ -4,3 +4,8 @@ build-*/
 *.swp
 .vscode/
 .idea/
+
+# ElevenLabs key (never commit)
+.env.local
+.env
+tools/voice/.venv/

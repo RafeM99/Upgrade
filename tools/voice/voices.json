@@ -1,0 +1,12 @@
+{
+  "model": "eleven_v4",
+  "output_format": "mp3_44100_64",
+  "voices": {
+    "gran":        { "voice_id": "pFZP5JQG7iQjIQuC4Bku", "voice_name": "Lily (British, warm)",        "stability": 0.55, "similarity_boost": 0.75 },
+    "sam":         { "voice_id": "JBFqnCBsd6RMkjVDRZzb", "voice_name": "George (British, warm)",      "stability": 0.5,  "similarity_boost": 0.75 },
+    "narrator":    { "voice_id": "Xb7hH8MSUJpSbSDYk0k2", "voice_name": "Alice (British, clear)",      "stability": 0.65, "similarity_boost": 0.75 },
+    "school_bell": { "voice_id": "FGY2WhTYpPnrIDTdsKH5", "voice_name": "Laura (quirky, sassy)",       "stability": 0.35, "similarity_boost": 0.7 },
+    "last_train":  { "voice_id": "pqHfZKP75CvOlQylNhV4", "voice_name": "Bill (old, crisp)",           "stability": 0.4,  "similarity_boost": 0.75 },
+    "forgetting":  { "voice_id": "N2lVS1w4EtoT3dr4eOWO", "voice_name": "Callum (husky trickster)",    "stability": 0.3,  "similarity_boost": 0.7 }
+  }
+}

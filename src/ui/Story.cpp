@@ -1,3 +1,4 @@
+#include "audio/Voice.h"
 #include "ui/Story.h"
 #include "core/Game.h"
 #include "core/Strings.h"
@@ -105,6 +106,7 @@ void Story::open(const std::vector<int>& cards)
 void Story::load(int id)
 {
     card_ = Card();
+    voicedLine_ = -1;   // akshat
     card_.id = id;
     std::string pre = id == PROLOGUE ? "story_prologue" : "story_" + std::to_string(id);
     if (id == PROLOGUE) {
@@ -130,6 +132,25 @@ void Story::load(int id)
     for (auto& l : card_.lines) card_.totalChars += (int)l.text.size() + LINE_PAUSE;
 }
 
+// akshat: voiceover. The line being typed right now starts its clip once; a new card starts over.
+void Story::voiceTick()
+{
+    float budget = shownChars();
+    for (int i = 0; i < (int)card_.lines.size(); ++i) {
+        const Line& l = card_.lines[i];
+        if (budget < (float)l.text.size() + LINE_PAUSE) {
+            if (i != voicedLine_) {
+                voicedLine_ = i;
+                std::string t = l.text;   // speech is shown in one pair of quotes: voice the words inside
+                if (l.who >= 0 && t.size() >= 2 && t.front() == '"' && t.back() == '"') t = t.substr(1, t.size() - 2);
+                vo::play(l.who == 0 ? "gran" : (l.who == 1 ? "sam" : "narrator"), t);
+            }
+            return;
+        }
+        budget -= l.text.size() + LINE_PAUSE;
+    }
+}
+
 float Story::shownChars() const { return std::max(0.0f, (card_.t - TYPE_DELAY) * CPS); }
 
 void Story::update(float dt, bool pressed, bool autoplay)
@@ -145,8 +166,10 @@ void Story::update(float dt, bool pressed, bool autoplay)
     if (autoplay && card_.t > typedAt + 1.5f) next = true;
     if (next) {
         ++cur_;
+        vo::stop();   // akshat
         if (active()) load(queue_[cur_]);
     }
+    if (active()) voiceTick();   // akshat
 }
 
 void Story::setPhoto(int era, Image img)
@@ -318,6 +341,7 @@ void Story::startEnding()
 void Story::loadEnding()
 {
     card_ = Card();
+    voicedLine_ = -1;   // akshat
     card_.id = PROLOGUE;
     card_.label = T("end_label");
     card_.title = T("end_title");
@@ -350,6 +374,7 @@ bool Story::updateEnding(float dt, bool pressed, bool autoplay)
         }
     } else if (endPhase_ == 1) {
         card_.t += dt;
+        voiceTick();   // akshat
         float typedAt = TYPE_DELAY + card_.totalChars / CPS;
         if (pressed && card_.t > 0.35f) {
             if (!typed()) card_.t = typedAt + 0.01f;

@@ -69,6 +69,8 @@ private:
     float endT_ = 0;
 
     void load(int id);
+    int voicedLine_ = -1;    // akshat: the card line whose voiceover is playing
+    void voiceTick();        // akshat: start the voiceover of the line being typed now
     void loadEnding();
     float shownChars() const;
     bool typed() const { return shownChars() >= card_.totalChars; }

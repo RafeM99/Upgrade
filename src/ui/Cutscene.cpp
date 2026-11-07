@@ -1,3 +1,4 @@
+#include "audio/Voice.h"
 #include "ui/Cutscene.h"
 #include "core/Game.h"
 #include "core/Strings.h"
@@ -324,6 +325,7 @@ void Cutscene::begin(Game& g, const Scene* s)
 
 void Cutscene::finish(Game& g)
 {
+    vo::stop();   // akshat
     if (!queue_.empty()) {
         const Scene* next = queue_.front();
         queue_.pop_front();
@@ -348,6 +350,7 @@ void Cutscene::startLine(Game& g)
     blips_ = 0;
     pages_.clear();
     const Line& ln = cur_->lines[line_];
+    vo::play(ln.speaker, ln.text);   // akshat: voiceover for this line
     if (ln.speaker == "sam" || isBoss(ln.speaker)) {
         if (rightWho_ != ln.speaker) rightIn_ = 0;
         rightWho_ = ln.speaker;

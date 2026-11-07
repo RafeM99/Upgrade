@@ -1,0 +1,58 @@
+94229051b25befc9	school_bell	DING-A-LING! Nine o'clock! Late, late, LATE! Little boys who dawdle get left behind!
+b614e49a9e14e7cf	gran	I know you. You rang every morning for six years, and I was never once late.
+aeee219ff30329a8	sam	I was. Every day. You carried my shoes so I'd run faster.
+604ba50817f9adc9	school_bell	Time waits for nobody, Edith! I'll ring every minute right out of you!
+81b01943816649a4	gran	It's Edie. And I've waited at that gate longer than you've been hanging up there. Come on, Sam.
+ec800c9919459573	school_bell	Dong... three o'clock... home time...
+dbd95bb7351e36ae	gran	Three o'clock. I told him I'd be right here.
+604ba74da121675e	sam	And you were, Gran. Every single day.
+f28debf6da55db57	last_train	ALL ABOARD! Departing in ten seconds! Nine! Eight! Miss me, Edie, and you never meet him!
+2594c5a0861447de	gran	Arthur's on that train. In a borrowed suit, two sizes too big.
+4418ef55c926e316	sam	Then we're not missing it. How long have we got?
+3c9efe744a5385d3	last_train	Sixty years, give or take! Seven! Six! TOOT TOOT!
+2fa60505c036a584	gran	Sixty years is plenty. Mind the gap, Sam.
+2343bd1db8a2af10	last_train	Hsssss... this service is delayed... due to... sentiment...
+8db82e17a7ccc628	gran	He stood up and gave me his seat. He said he'd get off wherever I did.
+4eb09aab3b278920	sam	And did he?
+88667bee9c7a2119	gran	Every stop, love. Every stop for sixty years.
+8eb4606397aece42	forgetting	There you are, Edie. The first one. The last one. I saved it till the end.
+32d621ba2cf907db	gran	I know you. You're the one who takes the days back. You took this morning.
+29d93e75e170e0cf	sam	Gran, it's after the cottage. If that goes, it all goes.
+3cd7b86596e71f90	forgetting	Let go of the first one, and all the rest will follow. Every clock runs back to me.
+f8557f81e8c0b392	gran	Then it can run back without me. Hold my hand, Sam. Tight.
+4572df6ec12977c3	forgetting	You can't keep them... not for ever...
+1044a54d714a4c59	gran	No. Not for ever. Just for now. Now is enough.
+deb6863b6bf7d073	sam	The cottage is still there, Gran. Your mum's at the gate.
+834b6e4a838b7008	gran	Then let's not keep her waiting. Tea's at five.
+67510451b0da9467	sam	It's Sam, Gran. Come on. We'll go and find them. All of them, one at a time.
+60f8b9023eaf6278	gran	Who are you? Sam is five. You're far too tall to be Sam.
+274f49f4396cf9cf	sam	I found you at the bus stop that night, Gran. In your slippers.
+edbd89d078af84c9	gran	I was only going to the shop.
+fbc738befdf4fc2e	gran	He likes them dried in the wind. He says they smell of outside.
+d43dc76bcd3ca259	sam	I helped you peg them. I was thirteen. You let me keep the blue one.
+7f52f8ddfc4c0dcd	gran	Off you go, little man. I'll be right here at three o'clock.
+f2707b4b6334fbc0	sam	And you were. Every single day.
+dd8274c57d1e8ac3	gran	Arthur held the tent pole till morning. Rose slept through the lot.
+4f7fa074a9ac4e01	sam	Mum still tells that one at Christmas.
+eedc4ab30db8aff1	gran	He said, "I'm Arthur. I'll get off wherever you do."
+682dd864fb10a3ab	sam	You never told me that, Gran.
+f4c9e3695e410f6c	gran	I raced the swallows down the long field. I won, too.
+2c8a989d4acf9f2a	sam	I believe you.
+b87c784f330c277c	gran	This is the oldest one, Sam. The clearest one. If this goes, they all go.
+579b99785b07c0fd	sam	Gran, look. It's your cottage. You still live here.
+498a216d23b11a49	gran	Sam?
+f936d4aa5f797c1d	sam	Hi, Gran.
+63380a5d928b3ec2	gran	Look at you. When did you get so tall?
+716390d1aceb5410	sam	A while ago. Sit down, I'll tell you all about it.
+6a001687c67d2e46	narrator	Edie is eighty. She has Alzheimer's disease.
+fe7946a71869399d	narrator	It takes the newest memories first. The oldest ones hold on the longest.
+382f1066abd27db9	narrator	This morning she called her grandson Arthur. Arthur was her husband.
+e8cc3fe582cdc658	narrator	Every memory she gets back, she sees a little more clearly.
+9ac127e4ea06f359	narrator	Last winter Gran woke at three in the morning, sure it was time for work. She put on her coat over her nightie and walked out into the dark.
+bbf7fbb1c9a72e1b	narrator	The spring after Grandpa Arthur died, Gran kept washing his shirts and pegging them out on the line.
+b3beb098fc825db1	narrator	Mum had to work, so Gran walked Sam to school on his first day. At the gate he would not let go of her hand.
+90ac0df8349aaad5	narrator	Edie, Arthur and little Rose, six years old, in a borrowed tent under the pines. The storm came in the night.
+7062f1454af5518a	narrator	Edie was eighteen, leaving home for a job in the city. The train was packed. A boy in a borrowed suit stood up and gave her his seat.
+db16d2cc1d8b6e8a	narrator	Every summer the whole village brought in the hay. Edie was twelve, and faster than any of the boys.
+30bf6dabc9a83720	narrator	The cottage at the end of the lane. Edie is five. Her mother is at the gate, calling her in for tea.
+f776b8d64b99cc48	narrator	Sam makes the tea. Gran watches him from her chair by the window, the way she always did.

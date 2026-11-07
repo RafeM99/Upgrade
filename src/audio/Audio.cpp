@@ -1,4 +1,5 @@
 #include "audio/Audio.h"
+#include "audio/Voice.h"
 #include "core/Config.h"
 #include "core/Paths.h"
 #include "render/ArtSpec.h"
@@ -58,6 +59,7 @@ void Audio::init()
 void Audio::shutdown()
 {
     if (!ready_) return;
+    vo::shutdown();   // akshat: voiceover clips go before the device closes
     for (int e = 0; e < 4; ++e) {
         for (auto& kv : sfx_[e]) UnloadSound(kv.second);
         if (hasMusic_[e]) UnloadMusicStream(music_[e]);
