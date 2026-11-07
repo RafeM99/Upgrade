@@ -1,5 +1,6 @@
 #include "ui/Hud.h"
 #include "core/Config.h"
+#include "core/Events.h"
 #include "core/Game.h"
 #include "core/Strings.h"
 #include "player/Abilities.h"
@@ -9,16 +10,43 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
+
+// Every stage has its own HUD, drawn the way a game of that era drew it:
+//   0 1-bit    one black strip at the top, 1 px white lines, big blocky text
+//   1 4-shade  a handheld status bar at the bottom in the four LCD greys
+//   2 8-bit    chunky white-bordered boxes in the corners, a block meter
+//   3 16-bit   separate bevelled windows (light top-left edge, dark bottom-right)
+//   4 32-bit   one bevelled header bar across the top, split in three
+//   5 2.5D     flat dark modern panels with a colour accent
+//   6 3D       flat light modern cards
+// All of it is flat colour. In the pixel stages every box and line is drawn on a whole
+// pixel grid (U window pixels per HUD pixel) and the default font is drawn at whole
+// multiples of its 10 px size, so text is never blurry.
 
 namespace {
 
-float S = 1;          // UI scale (window height / 720)
+// ------------------------------------------------------------------ screen space
+float S = 1;          // legacy UI scale (window height / 720), for the title, pause and ending screens
 float OX = 0, OY = 0; // game image offset in the window
+int X0 = 0, Y0 = 0, W = 1280, H = 720;   // the game image, in whole window pixels
 
 Color hexc(unsigned h, unsigned char a = 255) { return Color{(unsigned char)(h >> 16), (unsigned char)(h >> 8), (unsigned char)h, a}; }
 Color fade(Color c, float a) { c.a = (unsigned char)(c.a * std::max(0.0f, std::min(1.0f, a))); return c; }
 
 const Color P_COL[2] = {{242, 138, 30, 255}, {60, 156, 240, 255}};
+
+// The look of the current stage.
+struct Theme {
+    int era = 0;
+    int U = 1;        // window pixels per HUD pixel
+    int tb = 2;       // big text scale (window pixels per font pixel)
+    int ts = 2;       // small text scale
+    int bt = 4;       // banner text scale
+    Color fg, dim, bg, p[2], chipText;
+    bool pixel = true;
+};
+Theme th;
 
 void setup(Game& g)
 {
@@ -26,160 +54,630 @@ void setup(Game& g)
     S = r.height / 720.0f;
     OX = r.x;
     OY = r.y;
+    X0 = (int)std::lround(r.x);
+    Y0 = (int)std::lround(r.y);
+    W = (int)std::lround(r.width);
+    H = (int)std::lround(r.height);
+
+    const int e = std::max(0, std::min(art::LAST_ERA, g.era));
+    th.era = e;
+    th.pixel = art::lowRes(e);
+    if (th.pixel) {
+        const int k = std::max(1, (int)std::lround(r.height / art::BG_H[e]));   // window px per world pixel
+        auto atLeast1 = [](int v) { return std::max(1, v); };
+        switch (e) {
+        case 0: th.U = atLeast1(k / 2); th.tb = atLeast1(k / 2); th.ts = atLeast1(k / 4); th.bt = atLeast1(k / 2); break;
+        case 1: th.U = atLeast1(k / 2); th.tb = atLeast1(k / 2); th.ts = atLeast1(k / 2); th.bt = atLeast1(k); break;
+        case 2: th.U = k; th.tb = atLeast1(k * 3 / 4); th.ts = atLeast1(k / 2); th.bt = k; break;
+        case 3: th.U = k; th.tb = k; th.ts = atLeast1(k * 2 / 3); th.bt = atLeast1(k * 4 / 3); break;
+        default: th.U = k; th.tb = atLeast1(k * 3 / 2); th.ts = k; th.bt = 2 * k; break;
+        }
+    } else {
+        const int s = std::max(1, (int)std::lround(r.height / 720.0f));
+        th.U = 2 * s;   // modern stages: 2 px lines, roomier spacing
+        th.tb = 3 * s;
+        th.ts = 2 * s;
+        th.bt = 4 * s;
+    }
+
+    const unsigned* G = art::SHADES4;
+    switch (e) {
+    case 0:
+        th.fg = hexc(0xebebe1); th.dim = th.fg; th.bg = hexc(0x101216);
+        th.p[0] = th.p[1] = th.fg; th.chipText = th.bg;
+        break;
+    case 1:
+        th.fg = hexc(G[0]); th.dim = hexc(G[1]); th.bg = hexc(G[3]);
+        th.p[0] = hexc(G[0]); th.p[1] = hexc(G[1]); th.chipText = hexc(G[3]);
+        break;
+    case 2:   // a handful of colours from an 8-bit console palette
+        th.fg = hexc(0xfcfcfc); th.dim = hexc(0xbcbcbc); th.bg = hexc(0x000000);
+        th.p[0] = hexc(0xfc9838); th.p[1] = hexc(0x3cbcfc); th.chipText = hexc(0x000000);
+        break;
+    case 3:
+        th.fg = hexc(0xf8f8f8); th.dim = hexc(0xb8c0f0); th.bg = hexc(0x30389c);
+        th.p[0] = hexc(0xf8a838); th.p[1] = hexc(0x68c0f8); th.chipText = hexc(0xf8f8f8);
+        break;
+    case 4:
+        th.fg = hexc(0xf4ecff); th.dim = hexc(0xa89cc8); th.bg = hexc(0x2e2650);
+        th.p[0] = hexc(0xff9a3c); th.p[1] = hexc(0x52b8ff); th.chipText = hexc(0xf4ecff);
+        break;
+    case 5:
+        th.fg = hexc(0xf2f2f2); th.dim = hexc(0xa8adb8); th.bg = hexc(0x12161f, 210);
+        th.p[0] = P_COL[0]; th.p[1] = P_COL[1]; th.chipText = hexc(0xf2f2f2);
+        break;
+    default:
+        th.fg = hexc(0x23262d); th.dim = hexc(0x6b6f78); th.bg = hexc(0xf6f3ed, 240);
+        th.p[0] = hexc(0xd2680c); th.p[1] = hexc(0x2474c4); th.chipText = hexc(0x23262d);
+        break;
+    }
 }
 
-int fs(float size) { return std::max(8, (int)std::lround(size * S)); }
+// ------------------------------------------------------------------ crisp primitives (window px relative to the game image)
+void fill(int x, int y, int w, int h, Color c)
+{
+    if (w > 0 && h > 0) DrawRectangle(X0 + x, Y0 + y, w, h, c);
+}
 
-// Text in UI units (1280 x 720 space), centred or left aligned, with a drop shadow.
+// The default font is 10 px; drawn at 10 * t with spacing t, every font pixel is t x t window pixels.
+int textW(const std::string& s, int t) { return (int)std::lround(MeasureTextEx(GetFontDefault(), s.c_str(), 10.0f * t, (float)t).x); }
+int capH(int t) { return 7 * t; }   // the visible height of a capital letter
+void txt(const std::string& s, int x, int y, int t, Color c)
+{
+    DrawTextEx(GetFontDefault(), s.c_str(), Vector2{(float)(X0 + x), (float)(Y0 + y)}, 10.0f * t, (float)t, c);
+}
+int snap(int v) { return v / th.U * th.U; }
+
+// Blinks on and off in the pixel stages; pulses in the modern ones.
+float blink(Game& g, float speed)
+{
+    float s = std::sin(g.time * speed);
+    return th.pixel ? (s > -0.3f ? 1.0f : 0.0f) : 0.6f + 0.4f * s;
+}
+
+// ------------------------------------------------------------------ the stage's box, meter and chip
+void panel(int x, int y, int w, int h)
+{
+    const int U = th.U;
+    switch (th.era) {
+    case 0:   // black box, 1 px white line
+        fill(x, y, w, h, th.fg);
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, th.bg);
+        break;
+    case 1:   // the LCD: lightest grey, darkest grey line
+        fill(x, y, w, h, hexc(art::SHADES4[0]));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(art::SHADES4[3]));
+        break;
+    case 2:   // chunky: black edge, white border with clipped corners, black inside
+        fill(x, y, w, h, th.bg);
+        fill(x + 2 * U, y + U, w - 4 * U, U, th.fg);
+        fill(x + 2 * U, y + h - 2 * U, w - 4 * U, U, th.fg);
+        fill(x + U, y + 2 * U, U, h - 4 * U, th.fg);
+        fill(x + w - 2 * U, y + 2 * U, U, h - 4 * U, th.fg);
+        break;
+    case 3:   // bevelled window
+        fill(x, y, w, h, hexc(0x080818));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(0x9098e8));
+        fill(x + 2 * U, y + 2 * U, w - 3 * U, h - 3 * U, hexc(0x141850));
+        fill(x + 2 * U, y + 2 * U, w - 4 * U, h - 4 * U, th.bg);
+        break;
+    case 4:   // richer bevel: outline, light and dark edge, a second inner light line on top
+        fill(x, y, w, h, hexc(0x0a0814));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(0x8676c0));
+        fill(x + 2 * U, y + 2 * U, w - 3 * U, h - 3 * U, hexc(0x15102a));
+        fill(x + 2 * U, y + 2 * U, w - 4 * U, h - 4 * U, th.bg);
+        fill(x + 2 * U, y + 2 * U, w - 4 * U, U, hexc(0x40366c));
+        break;
+    case 5:   // flat dark panel
+        fill(x, y, w, h, th.bg);
+        break;
+    default:  // flat light card, hairline border
+        fill(x, y, w, h, hexc(0xd8d2c6, 240));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, th.bg);
+        break;
+    }
+}
+int panelPad() { return th.era == 2 ? 4 * th.U : (th.era >= 5 ? 6 * th.U : (th.era >= 3 ? 4 * th.U : 3 * th.U + (th.era == 0 ? th.U : 0))); }
+
+void meter(int x, int y, int w, int h, float k)
+{
+    const int U = th.U;
+    k = std::max(0.0f, std::min(1.0f, k));
+    switch (th.era) {
+    case 0: {
+        fill(x, y, w, h, th.fg);
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, th.bg);
+        int segs = 20, ix = x + 2 * U, iw = w - 4 * U, sw = (iw + U) / segs;
+        for (int i = 0; i < segs; ++i)
+            if ((i + 0.5f) / segs <= k) fill(ix + i * sw, y + 2 * U, sw - U, h - 4 * U, th.fg);
+        break;
+    }
+    case 1: {
+        const unsigned* G = art::SHADES4;
+        fill(x, y, w, h, hexc(G[0]));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(G[3]));
+        int segs = 25, ix = x + 2 * U, iw = w - 4 * U, sw = (iw + U) / segs;
+        for (int i = 0; i < segs; ++i)
+            fill(ix + i * sw, y + 2 * U, sw - U, h - 4 * U, hexc((i + 0.5f) / segs <= k ? G[0] : G[2]));
+        break;
+    }
+    case 2: {   // a row of blocks, like hearts
+        int segs = 16, sw = (w + U) / segs;
+        for (int i = 0; i < segs; ++i) {
+            bool on = (i + 0.5f) / segs <= k;
+            int bx = x + i * sw;
+            fill(bx, y, sw - U, h, hexc(on ? 0xf8b800 : 0x383838));
+            fill(bx, y + h - U, sw - U, U, hexc(on ? 0xc84c0c : 0x1c1c1c));
+        }
+        break;
+    }
+    case 3: {   // sunken trough
+        fill(x, y, w, h, hexc(0x9098e8));
+        fill(x, y, w - U, h - U, hexc(0x0c0e34));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(0x1c2060));
+        int fw = (int)((w - 2 * U) * k);
+        fill(x + U, y + U, fw, h - 2 * U, hexc(0xf06898));
+        fill(x + U, y + h - 2 * U, fw, U, hexc(0xa83070));
+        break;
+    }
+    case 4: {
+        fill(x, y, w, h, hexc(0x0a0814));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(0x15102a));
+        int iw = w - 2 * U, fw = (int)(iw * k), ih = h - 2 * U;
+        fill(x + U, y + U, fw, ih, hexc(0x46dcc8));
+        fill(x + U, y + U + ih / 2, fw, ih - ih / 2, hexc(0x2196a8));
+        for (int i = 1; i < 10; ++i) fill(x + U + iw * i / 10, y + U, U, ih, hexc(0x0a0814));
+        break;
+    }
+    case 5:
+        fill(x, y, w, h, hexc(0xffffff, 46));
+        fill(x, y, (int)(w * k), h, hexc(0xffb050));
+        break;
+    default:
+        fill(x, y, w, h, hexc(0xdcd6ca));
+        fill(x, y, (int)(w * k), h, hexc(0xee8a2c));
+        break;
+    }
+}
+
+// A label for an ability or status. Returns its width.
+int chipW(const std::string& s) { return textW(s, th.ts) + (th.era >= 5 ? 6 * th.U : (th.era == 2 ? 2 * th.U : 3 * th.U) + (th.era >= 3 ? th.U : 0)); }
+int chipH() { return capH(th.ts) + (th.era >= 5 ? 4 * th.U : (th.era == 2 ? 2 * th.U : 3 * th.U) + (th.era >= 3 ? th.U : 0)); }
+void chip(int x, int y, const std::string& s, Color col)
+{
+    const int U = th.U, w = chipW(s), h = chipH();
+    int tx = x + (w - textW(s, th.ts)) / 2, ty = y + (h - capH(th.ts)) / 2;
+    Color tc = th.chipText;
+    switch (th.era) {
+    case 0: fill(x, y, w, h, th.fg); tc = th.bg; break;
+    case 1: fill(x, y, w, h, hexc(art::SHADES4[1])); tc = hexc(art::SHADES4[3]); break;
+    case 2: fill(x, y, w, h, col); tc = th.chipText; break;
+    case 3:
+        fill(x, y, w, h, hexc(0x0c0e34));
+        fill(x, y, w - U, h - U, col);
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, ColorBrightness(col, -0.45f));
+        break;
+    case 4:
+        fill(x, y, w, h, hexc(0x0a0814));
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, ColorBrightness(col, -0.5f));
+        fill(x + U, y + U, w - 2 * U, U, ColorBrightness(col, -0.15f));
+        break;
+    case 5: fill(x, y, w, h, fade(col, 0.32f)); break;
+    default:
+        fill(x, y, w, h, col);
+        fill(x + U, y + U, w - 2 * U, h - 2 * U, hexc(0xf6f3ed));
+        tc = col;
+        break;
+    }
+    txt(s, tx, ty, th.ts, tc);
+}
+
+// ------------------------------------------------------------------ what a player panel shows
+struct PView {
+    std::string name;
+    Color col;
+    bool joined, faded;
+    std::vector<std::string> abilities;
+    std::vector<std::pair<std::string, Color>> status;
+    float slowK = -1;   // time-slow recharge 0..1, or -1
+};
+
+PView view(Game& g, int p)
+{
+    const Player& pl = g.players[p];
+    PView v;
+    v.name = T(p == 0 ? "p1_name" : "p2_name");
+    v.col = th.p[p];
+    v.joined = pl.joined;
+    v.faded = pl.faded;
+    for (int a = 0; a < AB_COUNT; ++a)
+        if (pl.has[a]) v.abilities.push_back(T(std::string("ability_short_") + abilityId(a)));
+    bool mono = th.era <= 1;
+    if (pl.shield) v.status.push_back({T("status_shield"), mono ? th.fg : (th.era == 6 ? hexc(0xc83860) : hexc(0xff7aa0))});
+    if (pl.speedTime > 0) v.status.push_back({T("status_speed"), mono ? th.fg : (th.era == 6 ? hexc(0xb08800) : hexc(0xf8d838))});
+    if (pl.magnetTime > 0) v.status.push_back({T("status_magnet"), mono ? th.fg : (th.era == 6 ? hexc(0x7050c0) : hexc(0xc8a8ff))});
+    if (pl.has[AB_TIME_SLOW] && pl.slowCooldown > 0)
+        v.slowK = 1 - pl.slowCooldown / config().f("abilities.time_slow_cooldown", 10.0f);
+    return v;
+}
+
+// ------------------------------------------------------------------ word wrap
+std::vector<std::string> wrap(const std::string& s, int t, int maxW)
+{
+    std::vector<std::string> out;
+    size_t start = 0;
+    while (start <= s.size()) {   // hard breaks first
+        size_t nl = s.find('\n', start);
+        std::string para = s.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+        std::string line, word;
+        auto flushWord = [&]() {
+            if (word.empty()) return;
+            std::string trial = line.empty() ? word : line + " " + word;
+            if (!line.empty() && textW(trial, t) > maxW) { out.push_back(line); line = word; }
+            else line = trial;
+            word.clear();
+        };
+        for (char ch : para) {
+            if (ch == ' ') flushWord();
+            else word += ch;
+        }
+        flushWord();
+        out.push_back(line);
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------ a player's block
+// Row 1: the name (big) and status words. Below it, one or more lines of ability chips or a
+// message, wrapped to fit maxW.
+struct Item { std::string s; bool isChip; };
+using Line = std::vector<Item>;
+
+int rowGap() { return th.pixel ? 2 * th.U : 3 * th.U; }
+int chipGap() { return th.pixel ? 2 * th.U : 3 * th.U; }
+int lineGap() { return th.pixel ? th.U : 2 * th.U; }
+int itemW(const Item& it) { return it.isChip ? chipW(it.s) : textW(it.s, th.ts); }
+int lineW(const Line& l)
+{
+    int w = 0;
+    for (auto& it : l) w += itemW(it) + chipGap();
+    return l.empty() ? 0 : w - chipGap();
+}
+
+std::vector<Line> detailLines(Game& g, const PView& v, int maxW)
+{
+    std::vector<Line> out;
+    if (!v.joined) maxW = std::max(maxW, textW(T("p2_join_2"), th.ts));   // keep the join prompt on one line
+    auto textLines = [&](const std::string& s) { for (auto& l : wrap(s, th.ts, maxW)) out.push_back({{l, false}}); };
+    if (!v.joined) { textLines(T("p2_join_2")); return out; }
+    if (v.faded) {
+        std::string h = g.solo() ? T("faded_hint_solo") : T("faded_hint");
+        Line first{{T("faded"), true}, {h, false}};
+        if (lineW(first) <= maxW) out.push_back(first);
+        else { out.push_back({{T("faded"), true}}); textLines(h); }
+        return out;
+    }
+    if (v.abilities.empty()) { textLines(T("no_abilities")); return out; }
+    Line cur;
+    for (auto& a : v.abilities) {
+        Line trial = cur;
+        trial.push_back({a, true});
+        if (!cur.empty() && lineW(trial) > maxW) { out.push_back(cur); cur = {{a, true}}; }
+        else cur = trial;
+    }
+    out.push_back(cur);
+    return out;
+}
+
+int row1W(const PView& v)
+{
+    if (!v.joined) return textW(T("p2_join_1"), th.tb);
+    int w = textW(v.name, th.tb);
+    for (auto& s : v.status) w += 3 * th.U + textW(s.first, th.ts) + 2 * th.ts;
+    return w;
+}
+int playerRowsH(Game& g, const PView& v, int maxW)
+{
+    int n = (int)detailLines(g, v, maxW).size();
+    return capH(th.tb) + rowGap() + n * chipH() + (n - 1) * lineGap() + (v.slowK >= 0 ? 2 * th.U : 0);
+}
+int playerRowsW(Game& g, const PView& v, int maxW)
+{
+    int w = row1W(v);
+    for (auto& l : detailLines(g, v, maxW)) w = std::max(w, lineW(l));
+    return w;
+}
+
+// `right` lines everything up against x instead of starting at x.
+void playerRows(Game& g, const PView& v, int x, int y, bool right, int maxW)
+{
+    const int U = th.U;
+    auto put = [&](int w) { return right ? x - w : x; };
+    // row 1
+    if (!v.joined) {
+        std::string a = T("p2_join_1");
+        if (blink(g, 4) > 0) txt(a, put(textW(a, th.tb)), y, th.tb, fade(th.fg, blink(g, 4)));
+    } else {
+        int rx = put(row1W(v));
+        txt(v.name, rx, y, th.tb, v.col);
+        rx += textW(v.name, th.tb);
+        for (auto& s : v.status) {   // a small square marker then the word, bottom aligned with the name
+            rx += 3 * U;
+            int sy = y + capH(th.tb) - capH(th.ts);
+            fill(rx, sy + capH(th.ts) / 2 - th.ts, 2 * th.ts, 2 * th.ts, s.second);
+            txt(s.first, rx + 3 * th.ts, sy, th.ts, s.second);
+            rx += textW(s.first, th.ts) + 2 * th.ts;
+        }
+    }
+    // the detail lines
+    int ly = y + capH(th.tb) + rowGap();
+    for (auto& l : detailLines(g, v, maxW)) {
+        int lx = put(lineW(l));
+        for (auto& it : l) {
+            if (it.isChip) {
+                bool isFaded = v.faded && it.s == T("faded");
+                if (!isFaded || blink(g, 6) > 0) chip(lx, ly, it.s, v.col);
+            } else {
+                Color c = (!v.joined || v.abilities.empty()) && !v.faded ? th.dim : th.fg;
+                txt(it.s, lx, ly + (chipH() - capH(th.ts)) / 2, th.ts, c);
+            }
+            lx += itemW(it) + chipGap();
+        }
+        ly += chipH() + lineGap();
+    }
+    if (v.slowK >= 0) {   // time-slow recharging: a thin line under the chips
+        int lw = std::min(maxW, 60 * th.ts);
+        int lx = right ? x - lw : x;
+        ly += U - lineGap();
+        fill(lx, ly, lw, U, th.era == 0 ? th.bg : (th.era == 1 ? hexc(art::SHADES4[2]) : fade(v.col, 0.35f)));
+        if (th.era == 0) { fill(lx, ly, lw, U, th.fg); fill(lx + U, ly, (int)((lw - 2 * U) * (1 - v.slowK)), U, th.bg); }
+        else fill(lx, ly, (int)(lw * v.slowK), U, th.era == 1 ? hexc(art::SHADES4[0]) : (th.era == 6 ? v.col : hexc(0x7fe8ff)));
+    }
+}
+
+std::string pctText(Game& g) { return std::to_string((int)std::floor(g.bar)) + "%"; }
+std::string stageText(Game& g) { return T("era_name_" + std::to_string(g.era)); }
+std::string scoreText(Game& g) { return std::string(T("score")) + " " + std::to_string(g.score); }
+
+// ------------------------------------------------------------------ layouts
+// Each returns where the free space under the HUD starts (0 for a bottom strip).
+
+// 1-bit and 4-shade: one full-width strip, at the top or the bottom.
+int stripLayout(Game& g, bool bottom)
+{
+    const int U = th.U, pad = 3 * U, side = 4 * U;
+    PView a = view(g, 0), b = view(g, 1);
+    std::string lab = T("bar_label"), pct = pctText(g);
+    std::string line2 = stageText(g) + "   " + scoreText(g);
+    const int labW = textW(lab, th.ts), pctW = textW("100%", th.ts);
+    const int centreW = snap(std::max(textW(line2, th.ts), labW + pctW + 6 * U + W * 22 / 100));
+    const int maxW = (W - centreW) / 2 - side - 6 * U;
+    const int rowsH = std::max(playerRowsH(g, a, maxW), playerRowsH(g, b, maxW));
+    const int h = U + pad + std::max(rowsH, capH(th.tb) + rowGap() + chipH()) + pad + U;
+    const int y = bottom ? H - h + U : -U;
+    panel(-U, y, W + 2 * U, h);   // only the inner edge's line shows
+    const int top = y + U + pad;
+    playerRows(g, a, side, top, false, maxW);
+    playerRows(g, b, W - side, top, true, maxW);
+
+    // centre: MEMORY [bar] 42%   /   stage name . score
+    const int cx = snap((W - centreW) / 2);
+    const int bh = capH(th.tb);
+    txt(lab, cx, top + (bh - capH(th.ts)) / 2, th.ts, th.fg);
+    meter(cx + labW + 3 * U, top, centreW - labW - pctW - 6 * U, bh, g.bar / 100.0f);
+    txt(pct, cx + centreW - textW(pct, th.ts), top + (bh - capH(th.ts)) / 2, th.ts, th.fg);
+    int r2 = top + capH(th.tb) + rowGap();
+    txt(line2, (W - textW(line2, th.ts)) / 2, r2 + (chipH() - capH(th.ts)) / 2, th.ts, th.dim);
+    return bottom ? 0 : y + h;
+}
+
+// 8-bit, 16-bit, 2.5D, 3D: a box for each player in the top corners, the Memory Bar box between them.
+int cornerLayout(Game& g)
+{
+    const int U = th.U, pad = panelPad(), m = th.pixel ? 2 * U : 8 * U;
+    const int gap = th.pixel ? 2 * U : 6 * U;
+    const int accent = th.era == 5 ? U : 0;
+    PView v[2] = {view(g, 0), view(g, 1)};
+    const int maxW = W * 31 / 100 - 2 * pad - accent;
+    int pw[2], ph = 0;
+    for (int p = 0; p < 2; ++p) {
+        pw[p] = snap(std::max(W * 22 / 100, playerRowsW(g, v[p], maxW) + 2 * pad + accent) + U - 1);
+        ph = std::max(ph, playerRowsH(g, v[p], maxW));
+    }
+    ph = snap(2 * pad + ph + (th.era == 2 ? U : 0) + U - 1);
+    for (int p = 0; p < 2; ++p) {
+        int x = p == 0 ? m : W - m - pw[p];
+        panel(x, m, pw[p], ph);
+        if (th.era == 5) fill(x, m, 2 * U, ph, th.p[p]);   // modern colour accent
+        if (th.era == 6) fill(x, m, pw[p], 2 * U, th.p[p]);
+        playerRows(g, v[p], x + pad + accent, m + pad + (th.era == 6 ? U : 0), false, maxW);
+    }
+    // the Memory Bar box
+    const int bx = m + pw[0] + gap, bw = W - m - pw[1] - gap - bx;
+    panel(bx, m, bw, ph);
+    const int iy = m + pad;
+    std::string lab = T("bar_label"), pct = pctText(g);
+    int labW = textW(lab, th.ts), pctW = textW("100%", th.ts);
+    int barH = th.era == 2 ? 4 * U : (th.era == 3 ? 6 * U : (th.pixel ? capH(th.tb) : 4 * U));
+    const int lg = th.pixel ? 3 * U : 6 * U;
+    int barX = bx + pad + labW + lg, barW = bw - 2 * pad - labW - pctW - 2 * lg;
+    int rowH = std::max(barH, capH(th.ts));
+    txt(lab, bx + pad, iy + (rowH - capH(th.ts)) / 2, th.ts, th.fg);
+    meter(barX, iy + (rowH - barH) / 2, barW, barH, g.bar / 100.0f);
+    txt(pct, bx + bw - pad - textW(pct, th.ts), iy + (rowH - capH(th.ts)) / 2, th.ts, th.fg);
+    // stage name and score on the second row
+    int r2 = std::max(iy + rowH + rowGap(), m + ph - pad - capH(th.ts) - (th.era == 2 ? U : 0));
+    std::string sc = scoreText(g);
+    if (textW(stageText(g), th.ts) + textW(sc, th.ts) + 4 * U > bw - 2 * pad) {   // narrow: two lines
+        txt(sc, bx + pad, r2, th.ts, th.fg);
+        txt(stageText(g), bx + pad, r2 - capH(th.ts) - rowGap(), th.ts, th.dim);
+    } else {
+        txt(stageText(g), bx + pad, r2, th.ts, th.dim);
+        txt(sc, bx + bw - pad - textW(sc, th.ts), r2, th.ts, th.fg);
+    }
+    return m + ph;
+}
+
+// 32-bit: one bevelled header bar across the top, split into three sections by grooves.
+int headerLayout(Game& g)
+{
+    const int U = th.U, pad = 6 * U;
+    PView a = view(g, 0), b = view(g, 1);
+    const int maxW = W * 30 / 100 - 2 * pad;
+    const int sw = snap(std::max(W * 26 / 100, std::max(playerRowsW(g, a, maxW), playerRowsW(g, b, maxW)) + 2 * pad));
+    const int rowsH = std::max(playerRowsH(g, a, maxW), playerRowsH(g, b, maxW));
+    const int h = snap(pad + std::max(rowsH, capH(th.tb) + rowGap() + chipH()) + pad + 2 * U);
+    const int y = 0;
+    panel(-2 * U, y - 2 * U, W + 4 * U, h + 2 * U);
+    for (int i = 0; i < 2; ++i) {   // grooves: dark line with a light line beside it
+        int gx = i == 0 ? sw : W - sw;
+        fill(gx, y + 2 * U, U, h - 5 * U, hexc(0x15102a));
+        fill(gx + U, y + 2 * U, U, h - 5 * U, hexc(0x8676c0));
+    }
+    playerRows(g, a, pad, y + pad, false, maxW);
+    playerRows(g, b, W - sw + pad, y + pad, false, maxW);
+    const int cx = sw + 2 * U + pad, cw = W - 2 * sw - 2 * U - 2 * pad;
+    std::string lab = T("bar_label"), pct = pctText(g);
+    int labW = textW(lab, th.ts);
+    int barH = capH(th.tb) + 2 * U;
+    int iy = y + pad - U;
+    txt(lab, cx, iy + (barH - capH(th.ts)) / 2, th.ts, th.fg);
+    int barX = cx + labW + 4 * U, barW = cw - labW - 4 * U - textW("100%", th.ts) - 4 * U;
+    meter(barX, iy, barW, barH, g.bar / 100.0f);
+    txt(pct, cx + cw - textW(pct, th.ts), iy + (barH - capH(th.ts)) / 2, th.ts, hexc(0x46dcc8));
+    int r2 = iy + barH + rowGap() + (chipH() - capH(th.ts)) / 2;
+    txt(stageText(g), cx, r2, th.ts, th.dim);
+    std::string sc = scoreText(g);
+    txt(sc, cx + cw - textW(sc, th.ts), r2, th.ts, th.fg);
+    return y + h;
+}
+
+// ------------------------------------------------------------------ the one-time hint, as Gran speaking
+bool hintDone = false;
+bool gotFragment = false;
+bool listening = false;
+constexpr float kHintSeconds = 8.0f;
+
+void hintBox(Game& g, int top)
+{
+    const int U = th.U, pad = panelPad() + U;
+    const int t = th.ts;
+    const int w = snap(std::min(W * 62 / 100, std::max(W / 2, 64 * t * 6)));
+    const int x = snap((W - w) / 2);
+    std::string who = "Gran:";
+    std::string msg = T("controls_hint");
+    int lh = capH(t) + 4 * t;
+    std::vector<std::string> lines = wrap(msg, t, w - 2 * pad);
+    const int h = snap(pad + capH(th.tb) + 3 * U + (int)lines.size() * lh - 2 * t + pad + U);
+    const int y = snap(top + (th.pixel ? std::max(3 * U, 8) : 6 * U));
+    panel(x, y, w, h);
+    if (th.era == 5) fill(x, y, 2 * U, h, th.p[0]);
+    if (th.era == 6) fill(x, y, w, 2 * U, th.p[0]);
+    txt(who, x + pad, y + pad, th.tb, th.p[0]);
+    // the words type in, like an old text box
+    int shown = (int)(g.time * 40.0f);
+    int used = 0, ly = y + pad + capH(th.tb) + 3 * U + U;
+    for (auto& l : lines) {
+        if (used >= shown) break;
+        std::string part = l.substr(0, (size_t)std::max(0, std::min((int)l.size(), shown - used)));
+        txt(part, x + pad, ly, t, th.fg);
+        used += (int)l.size() + 1;
+        ly += lh;
+    }
+    // a "more" marker in the corner once the text is out, blinking
+    if (used <= shown && blink(g, 5) > 0 && th.era <= 4) {
+        int mx = x + w - pad - 3 * U, my = y + h - pad - 2 * U;
+        fill(mx, my, 3 * U, U, th.era == 1 ? th.fg : th.p[0]);
+        fill(mx + U, my + U, U, U, th.era == 1 ? th.fg : th.p[0]);
+    }
+}
+
+void bossBar(Game& g, int top)
+{
+    const int U = th.U, pad = panelPad();
+    const int w = snap(W * 36 / 100), x = snap((W - w) / 2), y = snap(top + 3 * U);
+    const int barH = th.pixel ? std::max(2 * U, capH(th.ts)) : 8 * U;
+    const int h = snap(pad + capH(th.ts) + 3 * U + barH + pad);
+    panel(x, y, w, h);
+    std::string n = T("boss_name");
+    Color nc = th.era <= 1 ? th.fg : (th.era == 6 ? hexc(0x8a3ab0) : hexc(0xe0b0ff));
+    txt(n, x + (w - textW(n, th.ts)) / 2, y + pad, th.ts, nc);
+    float k = g.boss.hp / (float)std::max(1, g.boss.maxHp);
+    int bx = x + pad, bw = w - 2 * pad, by = y + pad + capH(th.ts) + 3 * U;
+    Color fc = th.era == 0 ? th.fg : (th.era == 1 ? hexc(art::SHADES4[0]) : hexc(0xb050d0));
+    Color tc = th.era == 0 ? th.bg : (th.era == 1 ? hexc(art::SHADES4[2]) : (th.era == 6 ? hexc(0xdcd6ca) : hexc(0x000000, 200)));
+    fill(bx, by, bw, barH, tc);
+    fill(bx, by, (int)(bw * k), barH, fc);
+    if (th.era == 0) { fill(bx, by, bw, U, th.fg); fill(bx, by + barH - U, bw, U, th.fg); fill(bx, by, U, barH, th.fg); fill(bx + bw - U, by, U, barH, th.fg); }
+    if (g.boss.state == 3 && blink(g, 8) > 0) {
+        std::string hnt = T("boss_hint");
+        txt(hnt, (W - textW(hnt, th.ts)) / 2, y + h + 2 * U, th.ts, fade(th.era == 6 ? th.fg : (th.era == 1 ? th.fg : WHITE), blink(g, 8)));
+    }
+}
+
+void banner(Game& g)
+{
+    float a = std::min(1.0f, g.bannerT * 3);
+    if (th.pixel) a = 1;   // pixel stages: the box just appears and goes
+    const int U = th.U, pad = panelPad() + 2 * U;
+    const int bt = th.bt, st = th.ts;
+    std::vector<std::string> sub = wrap(g.bannerSub, st, W - 16 * U - 2 * pad);
+    int w = textW(g.banner, bt);
+    for (auto& l : sub) w = std::max(w, textW(l, st));
+    w = snap(std::min(W - 8 * U, w + 2 * pad));
+    int lh = capH(st) + 4 * st;
+    int h = snap(pad + capH(bt) + (sub.empty() ? 0 : 5 * U + (int)sub.size() * lh - 4 * st) + pad + U);
+    int x = snap((W - w) / 2), y = snap(H * 36 / 100);
+    if (a < 1) {   // modern stages fade the whole box in
+        // draw at reduced alpha by fading the panel colour: keep it simple and flat
+        fill(x, y, w, h, fade(th.bg, a));
+    } else {
+        panel(x, y, w, h);
+    }
+    Color tc = th.era == 0 ? th.fg : (th.era == 1 ? hexc(art::SHADES4[0]) : (th.era == 6 ? th.fg : hexc(0xfff4d8)));
+    txt(g.banner, (W - textW(g.banner, bt)) / 2, y + pad, bt, fade(tc, a));
+    int ly = y + pad + capH(bt) + 5 * U;
+    for (auto& l : sub) { txt(l, (W - textW(l, st)) / 2, ly, st, fade(th.era <= 1 ? th.fg : th.dim, a)); ly += lh; }
+}
+
+// ------------------------------------------------------------------ legacy text for the title, pause and ending screens
+// Snapped to whole multiples of the font's 10 px and whole pixels, with a hard 1-font-pixel shadow.
 void text(const std::string& s, float x, float y, float size, Color c, bool centre = false, bool shadow = true)
 {
-    int f = fs(size);
-    float spacing = f / 10.0f;
-    Vector2 m = MeasureTextEx(GetFontDefault(), s.c_str(), (float)f, spacing);
-    float px = OX + x * S - (centre ? m.x / 2 : 0), py = OY + y * S;
-    if (shadow) DrawTextEx(GetFontDefault(), s.c_str(), {px + 2 * S, py + 2 * S}, (float)f, spacing, fade(BLACK, c.a / 255.0f * 0.7f));
-    DrawTextEx(GetFontDefault(), s.c_str(), {px, py}, (float)f, spacing, c);
+    int t = std::max(1, (int)std::lround(size * S / 10.0f));
+    Vector2 m = MeasureTextEx(GetFontDefault(), s.c_str(), 10.0f * t, (float)t);
+    float px = std::round(OX + x * S - (centre ? std::round(m.x / 2) : 0)), py = std::round(OY + y * S);
+    if (shadow) DrawTextEx(GetFontDefault(), s.c_str(), {px + t, py + t}, 10.0f * t, (float)t, Color{0, 0, 0, c.a});
+    DrawTextEx(GetFontDefault(), s.c_str(), {px, py}, 10.0f * t, (float)t, c);
 }
 
 Rectangle R(float x, float y, float w, float h) { return Rectangle{OX + x * S, OY + y * S, w * S, h * S}; }
-
-// ------------------------------------------------------------------ Memory Bar, styled per stage
-void memoryBar(Game& g)
-{
-    const int stage = g.era;
-    const int era = art::STYLE[stage];   // the bar's drawing style: 0 1-bit .. 3 smooth
-    float k = std::max(0.0f, std::min(1.0f, g.bar / 100.0f));
-    float x = 390, y = 18, w = 500, h = era == 3 ? 26 : 24;
-    if (stage == 1) {   // 4-shade: a chunky LCD bar in the four greys
-        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(art::SHADES4[3]));
-        DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(art::SHADES4[0]));
-        DrawRectangleRec(R(x + 2, y + 2, w - 4, h - 4), hexc(art::SHADES4[1]));
-        int segs = 25;
-        for (int i = 0; i < segs; ++i)
-            if ((i + 0.5f) / segs <= k) DrawRectangleRec(R(x + i * w / segs + 3, y + 3, w / segs - 3, h - 6), hexc(art::SHADES4[i % 5 == 4 ? 2 : 3]));
-    } else if (stage == 4) {   // 32-bit: a bevelled bar with a glossy gradient
-        DrawRectangleRounded(R(x - 6, y - 6, w + 12, h + 12), 0.5f, 8, hexc(0x1a1030));
-        DrawRectangleRounded(R(x - 3, y - 3, w + 6, h + 6), 0.5f, 8, hexc(0x5a4a8a));
-        DrawRectangleRounded(R(x, y, w, h), 0.4f, 8, hexc(0x241a40));
-        if (k > 0) {   // flat colour, one lighter band on top: no gloss
-            DrawRectangleRec(R(x, y, w * k, h), hexc(0x3aa0e8));
-            DrawRectangleRec(R(x, y, w * k, 6), hexc(0x7ec8f0));
-        }
-    } else if (era == 0) {
-        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xebebe1));
-        DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(0x101216));
-        int segs = 20;
-        for (int i = 0; i < segs; ++i)
-            if ((i + 0.5f) / segs <= k) DrawRectangleRec(R(x + i * w / segs + 2, y + 2, w / segs - 4, h - 4), hexc(0xebebe1));
-    } else if (era == 1) {
-        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0x0f0d1a));
-        DrawRectangleRec(R(x, y, w, h), hexc(0x26305e));
-        DrawRectangleRec(R(x, y, w * k, h), hexc(0xf28a1e));
-        DrawRectangleRec(R(x, y, w * k, 6), hexc(0xf7d73a));
-        for (int i = 1; i < 25; ++i) DrawRectangleRec(R(x + i * w / 25 - 1, y, 2, h), hexc(0x0f0d1a, 120));
-    } else if (era == 2) {
-        DrawRectangleRounded(R(x - 5, y - 5, w + 10, h + 10), 0.4f, 6, hexc(0x140f1e));
-        DrawRectangleRounded(R(x, y, w, h), 0.3f, 6, hexc(0x2a2a4a));
-        if (k > 0) DrawRectangleRec(R(x, y, w * k, h), hexc(0xe8506a));
-    } else {
-        DrawRectangleRounded(R(x - 8, y - 8, w + 16, h + 16), 1.0f, 12, fade(hexc(0x100818), 0.65f));
-        DrawRectangleRounded(R(x, y, w, h), 1.0f, 12, fade(hexc(0x3a2a4a), 0.9f));
-        if (k > 0.02f) DrawRectangleRounded(R(x, y, w * k, h), 1.0f, 12, hexc(0xffb050));
-        DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 12, 2 * S, hexc(0xfff0d0));
-    }
-    // tick marks at 25 / 50 / 75
-    Color tick = stage == 1 ? hexc(art::SHADES4[3]) : (era == 0 ? hexc(0xebebe1) : hexc(0xfaf3e6, 200));
-    for (int i = 1; i <= 3; ++i) DrawRectangleRec(R(x + w * i / 4.0f - 1, y + h, 2, 7), tick);
-    std::string label = std::string(T("bar_label")) + "  " + std::to_string((int)std::floor(g.bar)) + "%";
-    text(label, x + w / 2, y + h + 9, 16, stage == 1 ? hexc(art::SHADES4[3]) : (era == 0 ? hexc(0xebebe1) : WHITE), true);
-    text(T("era_name_" + std::to_string(stage)), x + w / 2, y + h + 29, 13, fade(WHITE, 0.75f), true);
-}
-
-// ------------------------------------------------------------------ player panels
-void playerPanel(Game& g, int p)
-{
-    const Player& pl = g.players[p];
-    float x = p == 0 ? 20 : 1280 - 290, y = 14, w = 270, h = 74;
-    Color col = g.era == 0 ? hexc(0xebebe1) : (g.era == 1 ? hexc(p == 0 ? art::SHADES4[3] : art::SHADES4[2]) : P_COL[p]);
-    Color bg = fade(hexc(g.era == 1 ? art::SHADES4[0] : 0x0f0d1a), art::smooth(g.era) ? 0.55f : 0.8f);
-    if (art::STYLE[g.era] >= 2) DrawRectangleRounded(R(x, y, w, h), 0.25f, 6, bg);
-    else DrawRectangleRec(R(x, y, w, h), bg);
-    DrawRectangleRec(R(x, y, 8, h), col);
-    if (!pl.joined) {
-        text(T("p2_join_1"), x + 20, y + 14, 18, fade(WHITE, 0.6f + 0.4f * std::sin(g.time * 4)));
-        text(T("p2_join_2"), x + 20, y + 42, 14, fade(WHITE, 0.7f));
-        return;
-    }
-    text(std::string(T(p == 0 ? "p1_name" : "p2_name")), x + 20, y + 8, 20, col);
-    if (pl.faded) {
-        text(T("faded"), x + 150, y + 10, 16, fade(WHITE, 0.6f + 0.4f * std::sin(g.time * 6)));
-        text(g.solo() ? T("faded_hint_solo") : T("faded_hint"), x + 20, y + 40, 13, fade(WHITE, 0.8f));
-        return;
-    }
-    // ability chips
-    float cx = x + 20;
-    for (int a = 0; a < AB_COUNT; ++a) {
-        if (!pl.has[a]) continue;
-        std::string n = T(std::string("ability_short_") + abilityId(a));
-        float tw = MeasureText(n.c_str(), fs(12)) / S + 12;
-        if (art::STYLE[g.era] >= 2) DrawRectangleRounded(R(cx, y + 38, tw, 22), 0.4f, 4, fade(col, 0.35f));
-        else DrawRectangleRec(R(cx, y + 38, tw, 22), fade(col, 0.35f));
-        text(n, cx + 6, y + 43, 12, WHITE, false, false);
-        cx += tw + 6;
-    }
-    if (cx == x + 20) text(T("no_abilities"), x + 20, y + 42, 12, fade(WHITE, 0.6f));
-    // status icons
-    float sx = x + 150;
-    if (pl.shield) { text(T("status_shield"), sx, y + 12, 13, hexc(0xff7aa0)); sx += 50; }
-    if (pl.speedTime > 0) { text(T("status_speed"), sx, y + 12, 13, hexc(0xf7d73a)); sx += 50; }
-    if (pl.magnetTime > 0) { text(T("status_magnet"), sx, y + 12, 13, hexc(0xc8a8ff)); sx += 50; }
-    if (pl.has[AB_TIME_SLOW] && pl.slowCooldown > 0) {
-        float k = 1 - pl.slowCooldown / config().f("abilities.time_slow_cooldown", 10.0f);
-        DrawRectangleRec(R(x + 20, y + 64, (w - 40) * k, 4), hexc(0x7fe8ff));
-    }
-}
 
 }  // namespace
 
 void Hud::drawPlaying(Game& g)
 {
     setup(g);
-    memoryBar(g);
-    playerPanel(g, 0);
-    playerPanel(g, 1);
-    text(std::string(T("score")) + " " + std::to_string(g.score), 640, 690, 16, fade(WHITE, 0.8f), true);
-
-    // boss health
-    if (g.boss.active && g.boss.state != 5) {
-        float w = 360, x = 640 - w / 2, y = 98;
-        text(T("boss_name"), 640, y - 2, 14, hexc(0xe0b0ff), true);
-        DrawRectangleRec(R(x, y + 16, w, 10), fade(BLACK, 0.7f));
-        DrawRectangleRec(R(x, y + 16, w * g.boss.hp / (float)g.boss.maxHp, 10), hexc(0xb050d0));
-        if (g.boss.state == 3) text(T("boss_hint"), 640, y + 32, 14, fade(WHITE, 0.6f + 0.4f * std::sin(g.time * 8)), true);
+    if (!listening) {
+        events().fragmentCollected.listen([](int, float) { gotFragment = true; });
+        listening = true;
     }
 
-    // banner (era transitions, memory lost, boss, power-ups)
-    if (g.bannerT > 0) {
-        float a = std::min(1.0f, std::min(g.bannerT * 3, (g.bannerLen - g.bannerT) * 4 + 0.0f));
-        a = std::min(1.0f, g.bannerT * 3);
-        float big = g.era <= 1 ? 40 : 46;
-        Color c = g.era == 0 ? hexc(0xebebe1) : (g.era == 1 ? hexc(art::SHADES4[3]) : hexc(0xfff4d8));
-        bool story = !g.bannerStory.empty();
-        int subLines = 1 + (int)std::count(g.bannerSub.begin(), g.bannerSub.end(), '\n');
-        float storyY = 340 + subLines * 30 + 10;
-        DrawRectangleRec(R(0, 250, 1280, story ? storyY - 250 + 52 : 150), fade(BLACK, (story ? 0.6f : 0.45f) * a));
-        text(g.banner, 640, 275, big, fade(c, a), true);
-        text(g.bannerSub, 640, 340, 22, fade(WHITE, a), true);
-        // the story line: warm, a beat later than the rest, so it reads as its own moment
-        if (story) {
-            float sa = std::min(a, std::max(0.0f, (g.bannerLen - g.bannerT - 0.6f) * 2.0f));
-            text(g.bannerStory, 640, storyY, 21, fade(hexc(0xf2d9a8), sa), true);
-        }
-    }
+    int top = 0;   // where the free space under the HUD starts
+    if (th.era == 0) top = stripLayout(g, false);
+    else if (th.era == 1) top = stripLayout(g, true);
+    else if (th.era == 4) top = headerLayout(g);
+    else top = cornerLayout(g);
 
-    // help line for the first seconds
-    if (g.time < 12 && !g.transActive)
-        text(T("controls_hint"), 640, 660, 14, fade(WHITE, std::min(1.0f, (12 - g.time) / 2)), true);
+    if (g.boss.active && g.boss.state != 5) bossBar(g, top);
+
+    // the gameplay hint: once, early in the first run, as Gran speaking; then never again
+    if (!hintDone && (gotFragment || g.time > kHintSeconds)) hintDone = true;
+    if (!hintDone && !g.transActive) hintBox(g, top);
+
+    if (g.bannerT > 0) banner(g);
 }
 
 void Hud::drawTitle(Game& g)
@@ -188,9 +686,9 @@ void Hud::drawTitle(Game& g)
     int e = ((int)(g.time / 3.0f)) % art::ERA_COUNT;
     const unsigned cols[art::ERA_COUNT] = {0xebebe1, art::SHADES4[3], 0xf7d73a, 0xffb0d0, 0x7ef0c0, 0xfff0d0, 0xffffff};
     Color title = hexc(cols[e]);
-    float bob = std::sin(g.time * 2) * 6;
+    float bob = std::round(std::sin(g.time * 2) * 6);
     // the title "upgrades" every few seconds, like the game does
-    float size = 106 + e * 5;
+    float size = 100 + e * 10;
     text(T("title"), 640, 150 + bob, size, title, true);
     text(T("title_sub"), 640, 290, 22, fade(WHITE, 0.9f), true);
     text(T("title_start"), 640, 400, 28, fade(WHITE, 0.55f + 0.45f * std::sin(g.time * 4)), true);
@@ -198,22 +696,22 @@ void Hud::drawTitle(Game& g)
     text(p2, 640, 450, 20, g.players[1].joined ? P_COL[1] : fade(WHITE, 0.8f), true);
     text(T("title_controls_p1"), 640, 560, 15, fade(P_COL[0], 0.95f), true);
     text(T("title_controls_p2"), 640, 586, 15, fade(P_COL[1], 0.95f), true);
-    text(T("title_controls_pad"), 640, 612, 14, fade(WHITE, 0.7f), true);
-    text(T("title_credit"), 640, 680, 13, fade(WHITE, 0.5f), true);
+    text(T("title_controls_pad"), 640, 612, 15, fade(WHITE, 0.7f), true);
+    text(T("title_credit"), 640, 680, 15, fade(WHITE, 0.5f), true);
 }
 
 void Hud::drawPause(Game& g)
 {
     setup(g);
     DrawRectangleRec(R(0, 0, 1280, 720), fade(BLACK, 0.6f));
-    text(T("pause"), 640, 220, 56, WHITE, true);
+    text(T("pause"), 640, 220, 60, WHITE, true);
     const char* items[3] = {"resume", "restart", "quit"};
     for (int i = 0; i < 3; ++i) {
         bool sel = g.pauseItem == i;
         std::string s = std::string(sel ? "> " : "  ") + T(items[i]) + (sel ? " <" : "  ");
         text(s, 640, 330 + i * 50, 30, sel ? hexc(0xf7d73a) : fade(WHITE, 0.8f), true);
     }
-    text(T("pause_hint"), 640, 520, 16, fade(WHITE, 0.6f), true);
+    text(T("pause_hint"), 640, 520, 20, fade(WHITE, 0.6f), true);
 }
 
 void Hud::drawEnding(Game& g)
@@ -235,7 +733,7 @@ void Hud::drawEnding(Game& g)
                        Rectangle{scr.x - (w - scr.width) / 2, scr.y - (h - scr.height) / 2, w, h}, {0, 0}, 0, fade(WHITE, a));
         DrawRectangleRec(R(0, 600, 1280, 120), fade(BLACK, 0.5f * a));
         text(T("ending_caption_" + std::to_string(i)), 640, 625, 30, fade(WHITE, a), true);
-        text(T("ending_sub_" + std::to_string(i)), 640, 668, 18, fade(hexc(0xffe0b0), a), true);
+        text(T("ending_sub_" + std::to_string(i)), 640, 668, 20, fade(hexc(0xffe0b0), a), true);
         return;
     }
     float rt = t - n * slide;
@@ -243,7 +741,7 @@ void Hud::drawEnding(Game& g)
     if (rt < 12) {
         for (int i = 0; i < 4; ++i) {
             float a = std::min(1.0f, std::max(0.0f, (rt - i * 2.2f) / 1.0f));
-            text(T("ending_reveal_" + std::to_string(i + 1)), 640, 220 + i * 70, i == 3 ? 40 : 28,
+            text(T("ending_reveal_" + std::to_string(i + 1)), 640, 220 + i * 70, i == 3 ? 40 : 30,
                  fade(i == 3 ? hexc(0xffd890) : WHITE, a), true);
         }
         return;
@@ -251,18 +749,18 @@ void Hud::drawEnding(Game& g)
     // credits roll
     float ct = rt - 12;
     std::string credits = T("credits");
-    float y = 720 - ct * 50;
-    text(T("credits_title"), 640, y, 44, hexc(0xffd890), true);
+    float y = std::round(720 - ct * 50);
+    text(T("credits_title"), 640, y, 40, hexc(0xffd890), true);
     y += 80;
     size_t start = 0;
     while (start <= credits.size()) {
         size_t nl = credits.find('\n', start);
         std::string line = credits.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
-        text(line, 640, y, 22, WHITE, true);
+        text(line, 640, y, 20, WHITE, true);
         y += 40;
         if (nl == std::string::npos) break;
         start = nl + 1;
     }
-    if (y < 360) text(T("thanks"), 640, 360, 34, hexc(0xfff0d0), true);
-    if (ct > 3) text(T("ending_continue"), 640, 660, 16, fade(WHITE, 0.5f + 0.5f * std::sin(g.time * 3)), true);
+    if (y < 360) text(T("thanks"), 640, 360, 30, hexc(0xfff0d0), true);
+    if (ct > 3) text(T("ending_continue"), 640, 660, 20, fade(WHITE, 0.5f + 0.5f * std::sin(g.time * 3)), true);
 }

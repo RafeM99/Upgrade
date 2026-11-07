@@ -37,7 +37,10 @@ Camera3D GameCamera::camera3D(float& nearPlane, float& farPlane) const
     // bottom of the view stays on the floor: centre y in 3D (y up, floor at 0)
     float cy = (float)LEVEL_H - (top + halfH);   // 3D y of the view centre (3D y points up)
     cy -= s * 1.2f + t * 1.6f;
-    float yaw = -0.30f * s - 0.08f * t, pitch = 0.22f * s + 0.16f * t;
+    // 2.5D looks almost straight on (a slight turn shows the block sides) so the cut-out backdrop
+    // and the path share one projection. 3D turns to a gentle 3/4 view and looks lower, so the
+    // top third of the screen is sky.
+    float yaw = -0.10f * s - 0.22f * t, pitch = 0.20f * s - 0.08f * t;
     Camera3D c{};
     if (swing <= 0.001f) {
         // flat stages: exact orthographic side view
