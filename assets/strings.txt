@@ -10,7 +10,7 @@ title_join = Player 2: press any of your buttons to join
 title_p2_ready = Player 2 is here!
 title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
 title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
-title_controls_pad = Gamepads: stick move, A jump, X attack, B ability. Start or Esc pauses.
+title_controls_pad = Gamepads: stick or d-pad move, A jump, X attack, B ability, Y second ability, Start pause. First pad plays Gran, second Sam.
 title_credit = GameJam 2026 . theme: Time
 
 p1_name = GRAN
@@ -18,6 +18,10 @@ p2_name = SAM
 p2_join_1 = Player 2?
 p2_join_2 = Press any of your buttons to join
 p2_joined = SAM IS HERE
+pad_connected = GAMEPAD CONNECTED
+pad_word = pad
+pad_disconnected = GAMEPAD DISCONNECTED
+pad_disconnected_sub = The keyboard still works. Plug it back in to carry on with the pad.
 p2_joined_sub = Two of you now. Stay close.
 
 bar_label = MEMORY
@@ -114,7 +118,7 @@ pause = PAUSED
 resume = Resume
 restart = Restart
 quit = Quit to title
-pause_hint = Up/Down to choose, Enter or Space to pick
+pause_hint = Up/Down (or stick / d-pad) to choose, Enter or A to pick, B to go back
 
 credits_title = UPGRADE
 credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code

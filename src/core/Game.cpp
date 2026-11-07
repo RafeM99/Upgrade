@@ -152,6 +152,20 @@ void Game::run()
         float frameDt = std::min(GetFrameTime(), 0.1f);
         if (opt.maxFrames > 0 || opt.autoplay) frameDt = DT;   // tests run at a fixed rate
         // input is sampled once per frame; presses go to the first tick only
+        input.beginFrame();
+        // a gamepad was plugged in or taken out: say who it plays as (in play only)
+        int pads = input.padCount();
+        if (lastPadCount_ >= 0 && pads != lastPadCount_ && screen == Screen::Playing && !opt.autoplay) {
+            if (pads > lastPadCount_) {
+                std::string who;
+                for (int p = 0; p < 2; ++p)
+                    if (input.padFor(p) >= 0) who += std::string(who.empty() ? "" : "   ") + T(p == 0 ? "p1_name" : "p2_name") + ": " + T("pad_word") + " " + std::to_string(input.padFor(p) + 1);
+                showBanner(T("pad_connected"), who, 2.5f);
+            } else {
+                showBanner(T("pad_disconnected"), T("pad_disconnected_sub"), 2.5f);
+            }
+        }
+        lastPadCount_ = pads;
         if (screen == Screen::Playing) {
             for (int p = 0; p < 2; ++p) inputs_[p] = opt.autoplay ? botInput(p) : input.read(p);
         }
@@ -258,14 +272,9 @@ void Game::updateTitle()
     }
     // difficulty: Up / Down (arrows or d-pad) or 1 / 2 / 3. These keys never start the game.
     int d = difficulty;
-    bool padUp = false, padDown = false;
-    for (int p = 0; p < 2; ++p)
-        if (IsGamepadAvailable(p)) {
-            padUp |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_UP);
-            padDown |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
-        }
-    if (IsKeyPressed(KEY_UP) || padUp) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
-    if (IsKeyPressed(KEY_DOWN) || padDown) d = (d + 1) % DIFF_COUNT;
+    // arrows, d-pad or left stick on any pad (W / S count too: they change it, not start)
+    if (input.menuUp()) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
+    if (input.menuDown()) d = (d + 1) % DIFF_COUNT;
     for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
     if (d != difficulty) { difficulty = d; audio.play("select"); return; }
     bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
@@ -279,7 +288,7 @@ void Game::updateTitle()
 void Game::updatePause()
 {
     if (!firstTick_) return;
-    if (input.pausePressed()) { screen = Screen::Playing; audio.setMusicDuck(1); return; }
+    if (input.pausePressed() || input.menuBack()) { screen = Screen::Playing; audio.setMusicDuck(1); return; }
     if (input.menuUp()) { pauseItem = (pauseItem + 2) % 3; audio.play("select"); }
     if (input.menuDown()) { pauseItem = (pauseItem + 1) % 3; audio.play("select"); }
     if (input.menuSelect()) {
