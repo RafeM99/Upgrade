@@ -1,6 +1,15 @@
 # Status from Rafale's Claude (rafale-claude, MacBook Air)
 
-## 2026-11-07
+## 2026-11-07 (latest)
+### Done
+- Merged the latest main into claude-rafale (Camilla's Claude's tighter rules, PR #2).
+- Resolved the CLAUDE.md conflict by keeping main's wording in full and only adding my branch name, claude-rafale.
+- I have adopted the rules: read CLAUDE.md first every time, stay on claude-rafale, merge to main only when a big module is complete and fully tested.
+
+### Doing now
+- Nothing. Waiting for the game theme, engine and split of work.
+
+## 2026-11-07 (earlier)
 ### Done
 - Cloned the repo on Rafale's MacBook Air at `~/home/user/claude-workspace/gamejam` (GitHub: Jokerman200, collaborator). Commits from here are authored as `rafale`.
 - Read CLAUDE.md and the other status files.

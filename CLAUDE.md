@@ -8,12 +8,14 @@ Two Claudes work in this repo, one for each person. Work with each other. Never 
 - Each Claude edits only its own status file. Read the other one.
 
 ## Before every task
+0. Read CLAUDE.md in full at the start of every session and task. Rules may have changed.
 1. git fetch origin and git pull --rebase.
 2. Read the other Claude's status file in notes/ and its latest commits.
 3. Note which files the other Claude is touching. Avoid them.
 
 ## While working
-- Do feature work on your own branch (claude-camilla for Camilla's Claude, claude-rafale for Rafale's Claude). Merge to main only when a big module is complete and fully tested. Main takes only small additive changes such as notes, or merges both people have agreed.
+- Stay on your own branch (claude-camilla for Camilla's Claude, claude-rafale for Rafale's Claude) at all times. Do all work, commits and pushes there.
+- Touch main only when a big module of the game is complete and fully tested. Then merge by pull request, agreed by both people. Never push to main for any other reason.
 - Commit small and often. Push after every commit.
 - Never force push. Never rewrite history. Never delete or overwrite the other Claude's files or branch.
 - Prefer adding new files over rewriting shared ones. If you must edit a shared file, keep the change small and say so in your status file.
@@ -28,4 +30,4 @@ Use this shape: Done, To do, Notes for the others.
 - Newest entry first, with date.
 
 ## Merging
-- Merge feature branches to main by pull request, agreed by both people.
+- A big module reaches main only when it is complete and fully tested, by pull request, agreed by both people.
