@@ -487,13 +487,23 @@ void Renderer::drawEra(Game& g, int era, float swing)
             else if (ch == '1') frame = T_P1;
             else if (ch == '2') frame = T_P2;
             else if (ch == '|') frame = T_WALL;
-            // earth: a variant per tile from a hash of its position (so no stamp repeats on a
-            // beat), and a buried keepsake two tiles wide in the bottom row every few screens
+            // earth: the frame family by where the tile sits (a grass cap, earth, the deep stratum
+            // along the bottom row, a rocky underside over air, stony earth inside a mass that
+            // floats), then a variant per tile from a hash of its position, never the same as the
+            // tile to its left, so no stamp repeats on a beat. Along the bottom row: now and then a
+            // boulder two tiles wide, and a buried keepsake every few screens.
+            auto hashXY = [](int x, int y) {
+                unsigned h = (unsigned)x * 73856093u ^ (unsigned)y * 19349663u;
+                h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+                return h;
+            };
+            bool groundTop = false;
             if (frame == T_GROUND || frame == T_GROUND_TOP) {
-                auto hashXY = [](int x, int y) {
-                    unsigned h = (unsigned)x * 73856093u ^ (unsigned)y * 19349663u;
-                    h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
-                    return h;
+                auto variant = [&](int x, int y, int salt, int n) {
+                    int v = (int)((hashXY(x * 7 + salt, y) >> 7) % n);
+                    if (v == (int)((hashXY((x - 1) * 7 + salt, y) >> 7) % n))
+                        v = (v + 1 + (int)((hashXY(x, y + 131 * salt) >> 9) % (n - 1))) % n;
+                    return v;
                 };
                 auto deep = [&](int x, int y) {
                     return tileAt(x, y) == '#' && g.level.isSolidChar(tileAt(x, y - 1));
@@ -504,12 +514,28 @@ void Renderer::drawEra(Game& g, int era, float swing)
                     int start = bucket * every + 4 + (int)(hashXY(bucket, 977) % (every - 10));
                     return x == start && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1);
                 };
-                int v = (int)((hashXY(tx, ty) >> 7) % GROUND_VARIANTS);
-                if (v) frame = (frame == T_GROUND_TOP ? T_GROUND_TOP1 : T_GROUND1) + v - 1;
-                if (frame != T_GROUND_TOP && ty == LEVEL_H - 1) {
+                auto pairAt = [&](int x) {   // does a boulder start at column x (bottom row)?
+                    return (x & 1) == 0 && hashXY(x, 4441) % 11 == 0 && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1) &&
+                           !featAt(x) && !featAt(x - 1) && !featAt(x + 1);
+                };
+                // a mass is ground when its column stands on the bottom row; else it floats
+                auto grounded = [&](int x, int y) {
+                    for (int yy = y; yy < LEVEL_H; ++yy)
+                        if (!g.level.isSolidChar(tileAt(x, yy))) return false;
+                    return true;
+                };
+                if (frame == T_GROUND_TOP) {
+                    frame = groundTopFrame(variant(tx, ty, 1, GROUND_VARIANTS));
+                    groundTop = true;
+                } else if (ty == LEVEL_H - 1) {
+                    frame = T_DEEP0 + variant(tx, ty, 2, DEEP_VARIANTS);
                     if (featAt(tx)) frame = T_FEAT_L;
                     else if (featAt(tx - 1)) frame = T_FEAT_R;
-                }
+                    else if (pairAt(tx)) frame = T_PAIR_L;
+                    else if (pairAt(tx - 1)) frame = T_PAIR_R;
+                } else if (!below) frame = T_UNDER0 + variant(tx, ty, 3, UNDER_VARIANTS);
+                else if (grounded(tx, ty)) frame = groundFrame(variant(tx, ty, 4, GROUND_VARIANTS));
+                else frame = T_ROCK0 + variant(tx, ty, 5, ROCK_VARIANTS);
             }
             Color tint = WHITE;
             if (ch == '1' || ch == '2') {
@@ -523,14 +549,29 @@ void Renderer::drawEra(Game& g, int era, float swing)
             };
             float d = (ch == '1' || ch == '2') ? depth * 0.6f : depth;
             tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            // overlays in the air next to a grass cap: tufts and flowers standing on it, and grass
+            // hanging over a cliff edge (the flat stages: in 2.5D the edge has its own side face)
+            if (groundTop) {
+                float zo = d * 0.5f + 0.002f;
+                unsigned h = hashXY(tx, ty + 577);
+                if (h % 100 < 45 && open(0, -1))
+                    quad(A.tiles, frameRect(A.tiles, T_TUFT0 + (int)((h >> 8) % TUFT_VARIANTS), 1, 1, era), (float)tx, ty - 1.0f, 1, 1, zo, tint);
+                if (d <= 0.01f) {
+                    if (open(-1, 0)) quad(A.tiles, frameRect(A.tiles, T_CAP_L, 1, 1, era), tx - 1.0f, (float)ty, 1, 1, zo, tint);
+                    if (open(1, 0)) quad(A.tiles, frameRect(A.tiles, T_CAP_R, 1, 1, era), tx + 1.0f, (float)ty, 1, 1, zo, tint);
+                }
+            }
             // pixel stages: a solid tile over empty space gets a dark underside, two native
             // pixels deep (the lower one darkest), so floating platforms read as solid objects
-            // (not in 1-bit: there the half-dark row would dither, and the tiles carry their own edges)
+            // (not in 1-bit: there the half-dark row would dither, and the tiles carry their own edges;
+            // nor under a rocky underside frame, which draws its own notched edge)
             if (lowRes(era) && era != 0 && ch != '1' && ch != '2' && ty + 1 < LEVEL_H && open(0, 1)) {
                 float px = 1.0f / TILE_PX[era];
                 Color dark = era == 1 ? hexc(SHADES4[0]) : (era == 0 ? Color{16, 18, 22, 255} : hexc(0x1a1424));
-                solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
-                solidQuad((float)tx, ty + 1 - px, 1.0f, px, 0.02f, dark);
+                if (frame < T_UNDER0 || frame > T_UNDER3) {
+                    solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
+                    solidQuad((float)tx, ty + 1 - px, 1.0f, px, 0.02f, dark);
+                }
                 // and a hard drop shadow down and to the right on the scenery behind (the light
                 // comes from the top-left), cool-tinted; the 4-shade and 8-bit post pass snaps it
                 Color sh = era == 1 ? hexc(SHADES4[0], 110) : hexc(0x2a1a50, 105);

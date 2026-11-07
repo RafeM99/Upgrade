@@ -1725,111 +1725,685 @@ void drawStoryBoss(Canvas& c, int frame)
 }
 
 // ------------------------------------------------------------------ tiles
-// The earth of one stage: a few colours, hue-shifted (shadows lean blue-purple, light leans yellow).
-// The 8-bit stage reuses colours so each tile keeps to four of its 16.
-struct EarthCols { Col grassL, grass, grassD, moss, dirt, deep, stone, stoneD, root; };
+// ---- The ground, painted pixel by pixel at each stage's own tile size.
+// Grass caps, earth, the deep stratum, stony earth inside floating masses and rocky undersides.
+// Every frame meets every other at its edges: strata lines reach the tile sides at fixed heights,
+// the edge columns of the grass lip are fixed, and stones and roots keep one pixel off the sides,
+// so the renderer can put any variant next to any other and the joins never show.
+
+// The colours of one stage's ground. Shadows lean blue-purple, light leans yellow.
+struct EarthCols {
+    Col grassL, grass, grassD, grassDD;   // lit blade tips, the grass, the lip, the lip's shadow
+    Col soil, soilL, soilD;               // topsoil under the grass: base, fleck, shadow
+    Col earth, earthL, earthD;            // the earth below it: base, lighter lens, seam and speck
+    Col deep, deepD;                      // the deep stratum along the bottom row
+    Col stoneL, stone, stoneD;            // stones: lit top-left, body, rim
+    Col root, rootE;                      // roots in the topsoil, roots in the earth
+    Col edge;                             // the darkest edge, under a ledge
+    Col flowerA, flowerB;                 // flowers in the tufts
+};
 EarthCols earthCols()
 {
+    EarthCols k;
     switch (g_era) {
-    case 1: return {tone(3), tone(2), tone(1), tone(0), tone(1), tone(0), tone(2), tone(0), tone(0)};
-    case 2: return {hex(0x6fdc4a), hex(0x6fdc4a), hex(0x1e8a4c), hex(0x1e8a4c), hex(0x8c4a2f), hex(0x8c4a2f),
-                    hex(0xb8b6c8), hex(0x0f0d1a), hex(0x6a2c6e)};
-    case 3: return {hex(0xd0e870), hex(0x8ac84a), hex(0x4a9a3a), hex(0x2a6a3a), hex(0x9a5a30), hex(0x6a3a22),
-                    hex(0xa8a4d0), hex(0x463a66), hex(0x3a2018)};
-    case 4: return {hex(0xd8ec78), hex(0x74cc48), hex(0x3a9440), hex(0x22583a), hex(0x96522e), hex(0x5c3026),
-                    hex(0xbcb8cc), hex(0x5a5078), hex(0x36201c)};
-    default: return {hex(0xe0ec80), hex(0x86c64a), hex(0x4a9038), hex(0x2a5a30), hex(0x9c6a3a), hex(0x64402e),
-                     hex(0xc4bcb0), hex(0x6a5e70), hex(0x3c2a1e)};
+    case 0: {   // 1-bit: two tones, the ground is drawn by hand (see groundOneBit)
+        Col d = ONEBIT_DARK, l = ONEBIT_LIGHT;
+        k = {l, l, l, d, d, l, d, d, l, d, d, d, l, l, d, l, l, d, l, l};
+        break;
+    }
+    case 1:   // 4-shade: light grass on a mid topsoil, the earth in the darkest grey
+        k.grassL = tone(3); k.grass = tone(2); k.grassD = tone(2); k.grassDD = tone(0);
+        k.soil = tone(1); k.soilL = tone(2); k.soilD = tone(0);
+        k.earth = tone(0); k.earthL = tone(1); k.earthD = tone(0);
+        k.deep = tone(0); k.deepD = tone(0);
+        k.stoneL = tone(3); k.stone = tone(2); k.stoneD = tone(1);
+        k.root = tone(0); k.rootE = tone(1); k.edge = tone(0);
+        k.flowerA = tone(3); k.flowerB = tone(3);
+        break;
+    case 2:   // 8-bit: a handful of the 16 colours: two greens, brown, plum, grey stone, black
+        k.grassL = hex(0x6fdc4a); k.grass = hex(0x6fdc4a); k.grassD = hex(0x1e8a4c); k.grassDD = hex(0x0f0d1a);
+        k.soil = hex(0x8c4a2f); k.soilL = hex(0x6a2c6e); k.soilD = hex(0x6a2c6e);
+        k.earth = hex(0x8c4a2f); k.earthL = hex(0x8c4a2f); k.earthD = hex(0x6a2c6e);
+        k.deep = hex(0x5a5468); k.deepD = hex(0x0f0d1a);
+        k.stoneL = hex(0xb8b6c8); k.stone = hex(0xb8b6c8); k.stoneD = hex(0x5a5468);
+        k.root = hex(0x6a2c6e); k.rootE = hex(0x6a2c6e); k.edge = hex(0x0f0d1a);
+        k.flowerA = hex(0xf7d73a); k.flowerB = hex(0xfaf3e6);
+        break;
+    case 3:   // 16-bit: ramps from the 32-colour palette
+        k.grassL = hex(0xd0e870); k.grass = hex(0x8ac84a); k.grassD = hex(0x4a9a3a); k.grassDD = hex(0x2a6a3a);
+        k.soil = hex(0x9a5a30); k.soilL = hex(0xc88a4a); k.soilD = hex(0x6a3a22);
+        k.earth = hex(0x6a3a22); k.earthL = hex(0x9a5a30); k.earthD = hex(0x3a2018);
+        k.deep = hex(0x3a2018); k.deepD = hex(0x140f1e);
+        k.stoneL = hex(0xf4f0e6); k.stone = hex(0xa8a4d0); k.stoneD = hex(0x6e6a9e);
+        k.root = hex(0x3a2018); k.rootE = hex(0x3a2018); k.edge = hex(0x140f1e);
+        k.flowerA = hex(0xf8d070); k.flowerB = hex(0xf0a0b0);
+        break;
+    case 4:   // 32-bit: richer, hue-shifted ramps
+        k.grassL = hex(0xd8ec78); k.grass = hex(0x74cc48); k.grassD = hex(0x3a9440); k.grassDD = hex(0x22583a);
+        k.soil = hex(0xa45e32); k.soilL = hex(0xc47e44); k.soilD = hex(0x7a402c);
+        k.earth = hex(0x7a402c); k.earthL = hex(0x8e5234); k.earthD = hex(0x56303a);
+        k.deep = hex(0x4e2c34); k.deepD = hex(0x321c2a);
+        k.stoneL = hex(0xf0ecf0); k.stone = hex(0xbcb8cc); k.stoneD = hex(0x7c7698);
+        k.root = hex(0x4a2622); k.rootE = hex(0x3a1e22); k.edge = hex(0x24141e);
+        k.flowerA = hex(0xf8e070); k.flowerB = hex(0xf08ab0);
+        break;
+    default:  // 2.5D (and the unused 3D frames): soft, warm and smooth
+        k.grassL = hex(0xe4ee88); k.grass = hex(0x8cc850); k.grassD = hex(0x4e9238); k.grassDD = hex(0x2c5c30);
+        k.soil = hex(0xa8743e); k.soilL = hex(0xc4904e); k.soilD = hex(0x7e5232);
+        k.earth = hex(0x7e5232); k.earthL = hex(0x926446); k.earthD = hex(0x5c3a2c);
+        k.deep = hex(0x5a3a32); k.deepD = hex(0x3a2626);
+        k.stoneL = hex(0xf4f0e6); k.stone = hex(0xccc4b8); k.stoneD = hex(0x8a8090);
+        k.root = hex(0x4a3020); k.rootE = hex(0x3c2a1e); k.edge = hex(0x2a1e24);
+        k.flowerA = hex(0xf8e070); k.flowerB = hex(0xf4a0c0);
+        break;
+    }
+    return k;
+}
+
+bool sameCol(Col a, Col b) { return std::fabs(a.r - b.r) + std::fabs(a.g - b.g) + std::fabs(a.b - b.b) < 0.01f && a.a > 0 && b.a > 0; }
+
+// A small seeded random stream for laying out one frame.
+struct GRng {
+    uint32_t s;
+    GRng(int a, int b, int c) : s(hash3(a, b, c) | 1u) {}
+    float f() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s & 0xffffff) / 16777216.0f; }
+    int i(int lo, int hi) { return hi <= lo ? lo : lo + std::min(hi - lo, (int)(f() * (hi - lo + 1))); }
+    bool p(float pr) { return f() < pr; }
+};
+
+// W x N pixels painted one by one, then copied into the canvas (W is 2N for the two-tile frames).
+struct GroundPx {
+    int W, N;
+    std::vector<Col> p;
+    GroundPx(int w, int n) : W(w), N(n), p((size_t)w * n) {}
+    bool in(int x, int y) const { return x >= 0 && y >= 0 && x < W && y < N; }
+    void set(int x, int y, Col c) { if (in(x, y)) p[(size_t)y * W + x] = c; }
+    Col get(int x, int y) const { return in(x, y) ? p[(size_t)y * W + x] : Col{}; }
+    void fill(Col c) { std::fill(p.begin(), p.end(), c); }
+    // paints over pixels of one colour only (so lenses and specks never cover stones or roots)
+    void over(int x, int y, Col c, Col onlyOn) { if (in(x, y) && sameCol(get(x, y), onlyOn)) set(x, y, c); }
+    void put(Canvas& c, int x0 = 0) const
+    {
+        for (int y = 0; y < N; ++y)
+            for (int x = 0; x < N; ++x) {
+                Col col = get(x0 + x, y);
+                if (col.a > 0) c.dot((x + 0.5f) / c.tpu, (y + 0.5f) / c.tpu, col);
+            }
+    }
+};
+
+// A strata line across the frame: wavy and stepped inside, exactly at yEdge (a fraction of N)
+// at both sides. Returns the first row of the lower layer for each column.
+std::vector<int> strataLine(const GroundPx& g, float yEdge, float amp, GRng& r)
+{
+    const float P = 3.14159265f;
+    std::vector<int> b(g.W);
+    float a1 = (r.f() * 2 - 1) * amp, a2 = (r.f() * 2 - 1) * amp * 0.6f, a3 = (r.f() * 2 - 1) * amp * 0.35f;
+    int j = 0;
+    for (int x = 0; x < g.W; ++x) {
+        float t = (x + 0.5f) / g.W;
+        if (x > 1 && x < g.W - 2 && r.p(0.2f)) j = r.i(-1, 1);
+        if (x <= 1 || x >= g.W - 2) j = 0;
+        b[x] = (int)std::lround((yEdge + a1 * std::sin(P * t) + a2 * std::sin(2 * P * t) + a3 * std::sin(3 * P * t)) * g.N) + j;
+    }
+    b[0] = b[g.W - 1] = (int)std::lround(yEdge * g.N);
+    return b;
+}
+
+// Fills everything below a strata line. The stages with few colours get one checker row above it.
+void fillBelow(GroundPx& g, const std::vector<int>& b, Col c)
+{
+    for (int x = 0; x < g.W; ++x) {
+        for (int y = std::max(0, b[x]); y < g.N; ++y) g.set(x, y, c);
+        if ((g_era == 1 || g_era == 2) && ((x + b[x]) & 1) == 0 && x > 0 && x < g.W - 1) g.set(x, b[x] - 1, c);
     }
 }
 
-// One buried stone: a dark rim below-right, the body, a warm lit pixel top-left (16-bit on).
-void earthStone(Canvas& c, const EarthCols& k, float x, float y, float rx, float ry)
+// The darker step of the layer a pixel sits in (for the shade under a stone).
+Col layerShade(const EarthCols& k, Col base)
 {
-    float px = 1.0f / c.tpu;
-    c.ellipse(x + px * 0.6f, y + px, rx, ry, solid(k.stoneD));
-    c.ellipse(x, y, rx, ry, solid(k.stone));
-    if (g_era >= 3) c.dot(x - rx * 0.45f, y - ry * 0.5f, warmLight(k.stone));
+    if (sameCol(base, k.soil)) return k.soilD;
+    if (sameCol(base, k.deep)) return k.deepD;
+    return k.earthD;
 }
 
-// A bent line made of short pieces (roots, cracks), at least one pixel wide.
+// One stone, w x h pixels around (cx, cy): rim at the bottom and right, lit pixels top-left from
+// 16-bit on, and a pixel of shade under it in the earth.
+void gStone(GroundPx& g, const EarthCols& k, float cx, float cy, float w, float h)
+{
+    if (w <= 4.5f && h <= 2.5f) {   // a pebble, laid by hand: a lit top row over a rimmed bottom row
+        int iw = std::max(2, (int)std::lround(w)), ih = std::max(1, (int)std::lround(h));
+        int x0 = (int)std::lround(cx - iw * 0.5f), y0 = (int)std::lround(cy - ih * 0.5f);
+        Col under = g.get(x0 + 1, y0 + ih);
+        if (ih == 2)
+            for (int x = x0 + 1; x < x0 + iw - (iw > 2 ? 1 : 0); ++x) g.set(x, y0, (g_era >= 3 && x == x0 + 1) ? k.stoneL : k.stone);
+        for (int x = x0; x < x0 + iw; ++x) g.set(x, y0 + ih - 1, x == x0 + iw - 1 ? k.stoneD : k.stone);
+        if (g_era >= 3 && under.a > 0)
+            for (int x = x0 + 1; x < x0 + iw; ++x) g.set(x, y0 + ih, layerShade(k, under));
+        return;
+    }
+    auto inS = [&](int x, int y) {
+        float dx = (x + 0.5f - cx) / (w * 0.5f), dy = (y + 0.5f - cy) / (h * 0.5f);
+        return dx * dx + dy * dy <= 1.05f;
+    };
+    int x0 = (int)std::floor(cx - w / 2) - 1, x1 = (int)std::ceil(cx + w / 2) + 1;
+    int y0 = (int)std::floor(cy - h / 2) - 1, y1 = (int)std::ceil(cy + h / 2) + 1;
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            if (!inS(x, y)) {
+                if (g_era >= 3 && inS(x, y - 1) && inS(x - 1, y - 1) && !inS(x, y)) {
+                    Col under = g.get(x, y);
+                    if (under.a > 0 && !sameCol(under, k.stone) && !sameCol(under, k.stoneD) && !sameCol(under, k.stoneL))
+                        g.set(x, y, layerShade(k, under));
+                }
+                continue;
+            }
+            bool rim = (!inS(x, y + 1) && h > 1.5f) || (!inS(x + 1, y) && w > 1.5f);
+            Col c = rim ? k.stoneD : k.stone;
+            if (g_era >= 3 && !rim && (!inS(x, y - 1) || !inS(x - 1, y)) && x + 0.5f < cx && y + 0.5f < cy) c = k.stoneL;
+            g.set(x, y, c);
+        }
+}
+
+// A main stone with one to three smaller ones leaning on it, kept inside the given box.
+void gCluster(GroundPx& g, const EarthCols& k, GRng& r, float cx, float cy, float size, int yMin, int yMax)
+{
+    struct S { float x, y, w, h; };
+    std::vector<S> st;
+    float mw = std::max(2.0f, std::round(size)), mh = std::max(1.0f, std::round(size * (0.5f + 0.2f * r.f())));
+    int n = r.i(1, 3);
+    float side = r.p(0.5f) ? -1.0f : 1.0f;
+    for (int i = 0; i < n; ++i) {
+        float w = std::max(1.0f, std::round(size * (0.3f + 0.35f * r.f()))), h = std::max(1.0f, std::round(w * (0.5f + 0.3f * r.f())));
+        float x = side * (mw * 0.5f + w * 0.35f + i * w * 0.4f), y = mh * 0.5f - h * 0.5f + (i == 0 ? 0.0f : -h * 0.6f);
+        if (i == 2) { x = -side * (mw * 0.5f + w * 0.3f); y = mh * 0.5f - h * 0.5f; }
+        st.push_back({x, y, w, h});
+    }
+    st.push_back({0, 0, mw, mh});
+    // shift the whole cluster to fit the box (one pixel off the sides)
+    float bx0 = 1e9f, bx1 = -1e9f, by0 = 1e9f, by1 = -1e9f;
+    for (auto& s : st) {
+        bx0 = std::min(bx0, s.x - s.w / 2); bx1 = std::max(bx1, s.x + s.w / 2);
+        by0 = std::min(by0, s.y - s.h / 2); by1 = std::max(by1, s.y + s.h / 2 + 1);
+    }
+    cx = std::max(1.0f - bx0, std::min((float)g.W - 1 - bx1, cx));
+    cy = std::max((float)yMin - by0, std::min((float)yMax + 1 - by1, cy));
+    for (auto& s : st) gStone(g, k, std::round(cx + s.x - s.w / 2) + s.w / 2, std::round(cy + s.y - s.h / 2) + s.h / 2, s.w, s.h);
+}
+
+// A root: one pixel wide (two at the start in the 64 px stages), wandering down, maybe one fork.
+void gRoot(GroundPx& g, GRng& r, int x, int y, int len, Col c, int yMax, bool fork = true)
+{
+    const int S = g.N >= 48 ? 2 : 1;
+    for (int i = 0; i < len && y <= yMax; ++i) {
+        g.set(x, y, c);
+        if (S == 2 && i < len / 2) g.set(x + 1, y, c);
+        if (r.p(0.32f)) {
+            int nx = std::max(1, std::min(g.W - 1 - S, x + (r.p(0.5f) ? -1 : 1)));
+            if (nx != x && r.p(0.5f)) g.set(nx, y, c);   // a solid step now and then, else diagonal
+            x = nx;
+        }
+        ++y;
+        if (fork && i > 1 && i < len - 2 && r.p(0.14f)) {
+            fork = false;
+            gRoot(g, r, std::max(1, std::min(g.W - 2, x + (r.p(0.5f) ? -1 : 1))), y, std::max(2, len / 3), c, yMax, false);
+        }
+    }
+}
+
+// A thin lens of other earth lying flat, its ends tapering.
+void gLens(GroundPx& g, GRng& r, int cx, int cy, int w, int h, Col c, Col onlyOn)
+{
+    for (int row = 0; row < h; ++row) {
+        float k = h == 1 ? 1.0f : 1.0f - 0.45f * std::fabs(row - (h - 1) * 0.5f) / (h * 0.5f);
+        int half = std::max(1, (int)std::lround(w * 0.5f * k)), off = row == 0 ? 0 : r.i(-1, 1);
+        for (int x = cx - half + off; x <= cx + half + off; ++x)
+            if (x >= 1 && x <= g.W - 2) g.over(x, cy + row, c, onlyOn);
+    }
+}
+
+// Clods: little lumps in the earth, each a lit pixel up-left and a shaded one down-right (two by
+// two in the 64 px stages), scattered in one or two loose groups between rows yMin and yMax.
+void gClods(GroundPx& g, GRng& r, int n, Col light, Col dark, Col onlyOn, int yMin, int yMax)
+{
+    const int S = g.N >= 48 ? 2 : 1;
+    int groups = n > 3 ? 2 : 1;
+    for (int gi = 0; gi < groups; ++gi) {
+        int cx = r.i(2, g.W - 3), cy = r.i(yMin, std::max(yMin, yMax)), rad = std::max(2, g.N / 4);
+        for (int i = gi; i < n; i += groups) {
+            int x = cx + (int)std::lround((r.f() + r.f() - 1) * rad), y = cy + (int)std::lround((r.f() + r.f() - 1) * rad * 0.5f);
+            x = std::max(1, std::min(g.W - 2 - 2 * S, x));
+            y = std::max(std::max(1, yMin), std::min(std::min(g.N - 2 - 2 * S, yMax), y));
+            int w = r.p(0.4f) ? 2 : 1;   // some lumps are wider
+            for (int sy = 0; sy < S; ++sy)
+                for (int sx = 0; sx < S * w; ++sx) {
+                    if (!sameCol(light, onlyOn)) g.over(x + sx, y + sy, light, onlyOn);
+                    g.over(x + sx + S, y + sy + S, dark, onlyOn);
+                }
+        }
+    }
+}
+
+// A loose group of specks around (cx, cy): never on a beat.
+void gSpecks(GroundPx& g, GRng& r, int cx, int cy, int rad, int n, Col c, Col onlyOn)
+{
+    for (int i = 0; i < n; ++i) {
+        int x = cx + (int)std::lround((r.f() + r.f() - 1) * rad), y = cy + (int)std::lround((r.f() + r.f() - 1) * rad * 0.6f);
+        if (x >= 1 && x <= g.W - 2 && y >= 1 && y <= g.N - 2) g.over(x, y, c, onlyOn);
+        if (g.N >= 48 && x + 1 <= g.W - 2) g.over(x + 1, y, c, onlyOn);
+    }
+}
+
+// Pixel rows for the 1-bit stage: '#' light, '.' dark, ' ' left empty.
+void gRows(GroundPx& g, const Rows& rows, int ox = 0, int oy = 0)
+{
+    for (int y = 0; y < (int)rows.size(); ++y)
+        for (int x = 0; x < (int)rows[y].size(); ++x) {
+            char ch = rows[y][x];
+            if (ch == '#') g.set(ox + x, oy + y, ONEBIT_LIGHT);
+            else if (ch == '.') g.set(ox + x, oy + y, ONEBIT_DARK);
+        }
+}
+
+enum GroundFam { G_TOP, G_EARTH, G_DEEP, G_UNDER, G_ROCK, G_PAIR, G_TUFT, G_CAP };
+
+// 1-bit: black earth under one white surface line. Hanging blade pixels under the line, a pebble
+// now and then, a white edge under a ledge; never a mark on a fixed beat.
+void groundOneBit(GroundPx& g, int fam, int v)
+{
+    const Col D = ONEBIT_DARK, L = ONEBIT_LIGHT;
+    GRng r(v, fam, 811);
+    if (fam != G_TUFT && fam != G_CAP) g.fill(D);
+    switch (fam) {
+    case G_TOP: {
+        for (int x = 0; x < g.W; ++x) g.set(x, 0, L);
+        // blades hanging under the line: clumps, one or two pixels long
+        int clumps = 1 + v % 3;
+        for (int i = 0; i < clumps; ++i) {
+            int x = r.i(1, g.W - 3);
+            g.set(x, 1, L);
+            if (r.p(0.6f)) g.set(x + 1, 1, L);
+            if (r.p(0.45f)) g.set(x + (r.p(0.5f) ? 1 : 0), 2, L);
+        }
+        if (v == 3 || v == 6) gRows(g, {"##", ".#"}, r.i(2, 5), r.i(4, 5));   // a pebble
+        break;
+    }
+    case G_EARTH:
+        if (v == 2) gRows(g, {"##"}, r.i(1, 5), r.i(2, 5));
+        if (v == 5) gRows(g, {"###"}, r.i(1, 4), r.i(3, 6));
+        if (v == 7) g.set(r.i(1, 6), r.i(1, 6), L);
+        break;
+    case G_DEEP:   // the deep: darkest, nearly bare
+        if (v == 1) g.set(r.i(1, 6), r.i(3, 6), L);
+        break;
+    case G_ROCK:   // stony: outlined pebbles
+        gRows(g, {".##.", "#..#", ".##."}, r.i(1, 3), r.i(1, 2));
+        if (v % 2) gRows(g, {".#", "#.#"}, r.i(3, 4), 5);
+        break;
+    case G_UNDER: {   // a white edge along the bottom, notched, with a rock tooth or two above it
+        for (int x = 0; x < g.W; ++x) g.set(x, g.N - 1, L);
+        int notch = r.i(2, 5);
+        g.set(notch, g.N - 1, D);
+        if (v % 2) g.set(r.i(1, 6), g.N - 2, L);
+        if (v >= 2) gRows(g, {"#.#"}, r.i(1, 4), g.N - 2);
+        break;
+    }
+    case G_PAIR:   // a boulder outline across the two tiles
+        gRows(g, {"....####....", "...#....#...", "..#......#..", "..#.....##..", "...######..."}, 2, 2);
+        break;
+    case G_TUFT: {   // a few blades standing on the line
+        int n = 1 + v % 2;
+        for (int i = 0; i < n; ++i) {
+            int x = r.i(0, g.W - 2), h = r.i(1, 2);
+            for (int y = 0; y < h; ++y) g.set(x + (y == 1 && v == 2 ? 1 : 0), g.N - 1 - y, L);
+            if (r.p(0.5f)) g.set(x + 2, g.N - 1, L);
+        }
+        if (v == 3) gRows(g, {"#", "#"}, r.i(1, 6), g.N - 2);
+        break;
+    }
+    case G_CAP: {   // the line runs one pixel past the edge, a strand hangs from it
+        int e = v == 0 ? g.W - 1 : 0, in = v == 0 ? g.W - 2 : 1;
+        g.set(e, 0, L);
+        g.set(in, 0, L);
+        g.set(e, 1, L);
+        g.set(e, 2, L);
+        break;
+    }
+    }
+}
+
+// The grass cap: topsoil under a grass lip, the earth below a ragged strata line.
+void groundTop(GroundPx& g, const EarthCols& k, int v)
+{
+    GRng r(v, g_era, 401);
+    const int N = g.N, W = g.W;
+    g.fill(k.soil);
+    auto b = strataLine(g, 0.66f, 0.09f, r);
+    fillBelow(g, b, k.earth);
+    int bMin = N;
+    for (int y : b) bMin = std::min(bMin, y);
+    const int T = std::max(2, (int)std::lround(N * 0.19f));   // the grass band: 3, 4, 6, 12 px
+    // a little in the soil and the earth: flecks, a pebble, a stone now and then
+    if (v % 2 == 0) gSpecks(g, r, r.i(3, W - 4), r.i(T + 2, bMin - 1), std::max(2, N / 6), 3 + N / 16, k.soilL, k.soil);
+    gClods(g, r, 1 + v % 3, k.earthL, k.earthD, k.earth, bMin + 1, N - 3);
+    if (v == 1 || v == 4) gCluster(g, k, r, (float)r.i(3, W - 4), (float)r.i(bMin + 1, N - 3), std::max(3.0f, N * 0.16f), bMin, N - 2);
+    if (v == 6) gStone(g, k, (float)r.i(3, W - 5) + 0.5f, (float)T + 3.5f, std::max(3.0f, std::round(N * 0.14f)), std::max(2.0f, std::round(N * 0.08f)));
+    if ((v == 3 || v == 7) && N >= 32) gLens(g, r, r.i(4, W - 5), bMin + 2, N / 3, 2, k.earthL, k.earth);
+    // roots from the grass into the soil: sparse, never on every tile
+    int roots = (v == 0 || v == 5) ? 0 : (v % 3 == 2 ? 2 : 1);
+    for (int i = 0; i < roots; ++i)
+        gRoot(g, r, r.i(2, W - 3), T, r.i(std::max(2, N / 6), std::max(3, (int)(N * 0.45f))), k.root, N - 3);
+    // the lip: how far down the grass reaches in each column, fixed at the sides
+    std::vector<int> lip(W, T);
+    int bump = 0;
+    for (int x = 2; x < W - 2; ++x) {
+        if (r.p(0.25f)) bump = r.i(0, 1);
+        lip[x] = T + bump;
+    }
+    int tufts = 2 + r.i(0, 2);
+    for (int i = 0; i < tufts; ++i) {   // tufts of blades hanging over the lip
+        int c = r.i(2, W - 3), len = 1 + r.i(1, std::max(2, (int)(N * 0.16f))), hw = r.i(1, std::max(1, N / 12));
+        for (int x = c - hw; x <= c + hw; ++x) {
+            if (x < 2 || x > W - 3) continue;
+            int d = std::abs(x - c);
+            lip[x] = std::max(lip[x], T + std::max(0, len - d - ((x + i) & 1)));
+        }
+    }
+    for (int i = r.i(1, 3); i > 0; --i) {   // single long blades
+        int x = r.i(2, W - 3);
+        lip[x] = std::max(lip[x], T + r.i(2, std::max(2, N / 5)));
+    }
+    lip[0] = lip[W - 1] = T;
+    lip[1] = std::min(lip[1], T + 1);
+    lip[W - 2] = std::min(lip[W - 2], T + 1);
+    // the soil in the lip's shade
+    for (int x = 0; x < W; ++x) {
+        int y = lip[x];
+        if (sameCol(g.get(x, y), k.soil) || sameCol(g.get(x, y), k.root)) g.set(x, y, k.soilD);
+        if (g_era >= 3 && N >= 32 && lip[x] > T && sameCol(g.get(x, y + 1), k.soil)) g.set(x, y + 1, k.soilD);
+    }
+    // the grass: a lit top row, the body, the darker lip and its blades
+    for (int x = 0; x < W; ++x)
+        for (int y = 0; y < lip[x]; ++y) {
+            Col c = y == 0 ? k.grassL : (y < T - 1 ? k.grass : k.grassD);
+            if (g_era >= 4 && y == lip[x] - 1 && lip[x] > T + 1) c = k.grassDD;   // the shaded blade tip
+            g.set(x, y, c);
+        }
+    // texture in the band: gaps in the lit row, lit and shaded blades (none in 4-shade: too small)
+    if (g_era >= 2) {
+        for (int x = 1; x < W - 1; ++x)
+            if (r.p(0.2f)) { g.set(x, 0, k.grass); if (r.p(0.4f) && x + 1 < W - 1) g.set(++x, 0, k.grass); }
+    }
+    if (g_era >= 3) {
+        int strokes = W / 5 + r.i(0, 2);
+        for (int i = 0; i < strokes; ++i) {
+            int x = r.i(1, W - 2);
+            if (r.p(0.5f)) for (int y = 1; y < std::min(T - 1, 1 + std::max(1, T / 3)); ++y) g.set(x, y, k.grassL);
+            else for (int y = std::max(1, T - 1 - std::max(1, T / 3)); y < T - 1; ++y) g.set(x, y, k.grassD);
+        }
+    }
+}
+
+// Earth with a mix of what lies in it: clods everywhere, and each variant its own few things,
+// placed at random.
+void groundEarth(GroundPx& g, const EarthCols& k, int v)
+{
+    GRng r(v, g_era, 402);
+    const int N = g.N, W = g.W;
+    g.fill(k.earth);
+    const bool wide = N >= 32;   // room for lenses of other earth
+    float big = std::max(4.0f, N * 0.32f), mid = std::max(3.0f, N * 0.22f), small = std::max(3.0f, N * 0.14f);
+    gClods(g, r, 2 + (v * 5) % 4, k.earthL, k.earthD, k.earth, 2, N - 3);
+    switch (v) {
+    case 0:
+        gSpecks(g, r, r.i(3, W - 4), r.i(3, N - 4), std::max(2, N / 5), 2 + N / 12, k.earthD, k.earth);
+        if (wide) gLens(g, r, r.i(4, W - 5), r.i(2, N - 4), N / 3, 2, k.earthL, k.earth);
+        break;
+    case 1: gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(N / 3, N - 3), mid, 1, N - 2); break;
+    case 2:
+        if (wide) gLens(g, r, r.i(4, W - 5), r.i(N / 2, N - 4), N / 2, 2, k.earthD, k.earth);
+        gRoot(g, r, r.i(2, W - 3), r.i(1, N / 4), r.i(N / 4, N / 2), k.rootE, N - 3);
+        break;
+    case 3: gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)r.i(2, N - 4) + 0.5f, small, std::max(2.0f, std::round(small * 0.6f))); break;
+    case 4: gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(N / 4, N - 4), big, 1, N - 2); break;
+    case 5:
+        gClods(g, r, 3, k.earthL, k.earthD, k.earth, N / 2, N - 3);
+        if (wide) gLens(g, r, r.i(4, W - 5), r.i(2, N / 3), N / 2, 2, k.earthL, k.earth);
+        break;
+    case 6:
+        gRoot(g, r, r.i(2, W - 3), r.i(1, N / 3), r.i(N / 5, N / 3 + 1), k.rootE, N - 3);
+        gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)r.i(N / 2, N - 4) + 0.5f, small, std::max(2.0f, std::round(small * 0.5f)));
+        break;
+    default:
+        gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(2, N / 2), mid, 1, N - 2);
+        break;
+    }
+}
+
+// The deep stratum along the bottom row: the earth turns darker under a ragged line.
+// `features` false paints the bare layers (under the buried keepsake).
+void groundDeep(GroundPx& g, const EarthCols& k, int v, bool features = true)
+{
+    GRng r(v, g_era, 403);
+    const int N = g.N, W = g.W;
+    g.fill(k.earth);
+    auto b = strataLine(g, 0.34f, 0.1f, r);
+    fillBelow(g, b, k.deep);
+    int bMin = N, bMax = 0;
+    for (int y : b) { bMin = std::min(bMin, y); bMax = std::max(bMax, y); }
+    // clods in both layers: the deep ones lit with the earth colour
+    gClods(g, r, 1 + v % 2, k.earthL, k.earthD, k.earth, 1, std::max(1, bMin - 3));
+    gClods(g, r, 2 + (v * 3) % 3, k.earth, k.deepD, k.deep, bMax + 1, N - 3);
+    if (!features) return;
+    switch (v) {
+    case 0:   // sediment: a lens of earth lying in the deep, or a few specks of it
+        if (N >= 32) gLens(g, r, r.i(4, W - 5), r.i(bMax + 2, N - 4), N / 2, 2, k.earth, k.deep);
+        else gSpecks(g, r, r.i(3, W - 4), r.i(bMax + 2, N - 3), std::max(2, N / 5), 3, k.earth, k.deep);
+        break;
+    case 1:   // a stone settled in the deep
+        gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(bMax + 2, N - 3), std::max(3.0f, N * 0.17f), bMax + 1, N - 2);
+        break;
+    case 2:   // a pebble sitting on the line between the layers
+        gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)bMin + 0.5f, std::max(3.0f, std::round(N * 0.14f)), std::max(2.0f, std::round(N * 0.08f)));
+        break;
+    default:  // a root reaching down into the deep
+        gRoot(g, r, r.i(2, W - 3), 1, r.i(N / 3, (int)(N * 0.7f)), sameCol(k.rootE, k.deep) ? k.earth : k.rootE, N - 3);
+        break;
+    }
+}
+
+// Stony earth inside a floating mass: stones packed in the earth, a crack.
+void groundRock(GroundPx& g, const EarthCols& k, int v)
+{
+    GRng r(v, g_era, 404);
+    const int N = g.N, W = g.W;
+    g.fill(k.earth);
+    gClods(g, r, 2, k.earthL, k.earthD, k.earth, 2, N - 3);
+    gCluster(g, k, r, (float)r.i(2, W / 2), (float)r.i(2, N / 2), std::max(3.0f, N * (0.26f + 0.08f * (v % 2))), 1, N - 2);
+    gCluster(g, k, r, (float)r.i(W / 2, W - 3), (float)r.i(N / 2, N - 3), std::max(3.0f, N * 0.2f), 1, N - 2);
+    if (v >= 2) gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)r.i(2, N - 4) + 0.5f, std::max(3.0f, N * 0.14f), std::max(2.0f, std::round(N * 0.09f)));
+    // a crack through the earth between the stones
+    int x = r.i(2, W - 3), y = r.i(1, N / 3);
+    for (int i = 0; i < N / 2; ++i) {
+        g.over(x, y, k.earthD, k.earth);
+        y += 1;
+        if (r.p(0.45f)) x = std::max(1, std::min(W - 2, x + (r.p(0.5f) ? -1 : 1)));
+        if (y > N - 2) break;
+    }
+}
+
+// The underside of a ledge: earth, then a band of shaded stones packed in dark rock, and the
+// darkest edge along the bottom, notched here and there so the silhouette is not a ruler.
+void groundUnder(GroundPx& g, const EarthCols& k, int v)
+{
+    GRng r(v, g_era, 405);
+    const int N = g.N, W = g.W;
+    g.fill(k.earth);
+    gClods(g, r, 2, k.earthL, k.earthD, k.earth, 2, N / 2);
+    auto b = strataLine(g, g_era <= 2 ? 0.7f : 0.62f, 0.08f, r);
+    Col rock = g_era == 1 ? k.edge : k.deep;   // (8-bit: grey rock round light stones)
+    for (int x = 0; x < W; ++x)
+        for (int y = std::max(0, b[x]); y < N; ++y) g.set(x, y, rock);
+    // the stones of the band: uneven sizes, lit on top (the light comes from above), shaded below
+    int x = 1;
+    while (x < W - 2) {
+        int w = r.i(std::max(3, N / 5), std::max(4, (int)(N * 0.4f)));
+        if (x + w > W - 2) w = W - 2 - x;
+        if (w < 2) break;
+        int top = b[std::min(W - 1, x + w / 2)] + r.i(0, std::max(1, N / 12)), bot = N - 2 - r.i(0, std::max(1, N / 10));
+        if (bot - top < 1) top = bot - 1;
+        for (int yy = top; yy <= bot; ++yy)
+            for (int xx = x; xx < x + w; ++xx) {
+                // round the corners: one pixel off each, two in the 64 px stages
+                int cr = N >= 48 ? 2 : 1, ex = std::min(xx - x, x + w - 1 - xx), ey = std::min(yy - top, bot - yy);
+                if (ex + ey < cr) continue;
+                Col c = yy == top ? k.stone : k.stoneD;
+                if (g_era >= 3 && yy == top && xx == x + 1) c = k.stoneL;
+                if (g_era >= 3 && yy == bot) c = mixc(k.stoneD, k.edge, 0.4f);
+                if (g_era == 1) c = yy == top ? tone(2) : tone(1);
+                if (g_era == 2) c = yy == bot ? k.edge : k.stone;
+                g.set(xx, yy, c);
+            }
+        x += w + (r.p(0.3f) ? 2 : 1);
+    }
+    // the bottom edge, notched
+    for (int xx = 0; xx < W; ++xx) g.set(xx, N - 1, k.edge);
+    for (int i = r.i(1, 2); i > 0; --i) {
+        int nx = r.i(2, W - 4), nw = r.i(1, std::max(1, N / 10));
+        for (int xx = nx; xx < nx + nw && xx < W - 1; ++xx) {
+            g.set(xx, N - 1, Col{});
+            g.set(xx, N - 2, k.edge);
+        }
+    }
+    // a pebble or a root in the earth above
+    if (v % 2) gStone(g, k, (float)r.i(2, W - 5) + 0.5f, (float)r.i(2, std::max(3, N / 3)) + 0.5f, std::max(3.0f, N * 0.14f), std::max(2.0f, std::round(N * 0.08f)));
+    if (v >= 2) gRoot(g, r, r.i(2, W - 3), 1, r.i(N / 4, N / 2), k.rootE, std::max(2, b[W / 2] - 1));
+}
+
+// A boulder two tiles wide, half sunk in the deep stratum (W = 2N).
+void groundPair(GroundPx& g, const EarthCols& k)
+{
+    groundDeep(g, k, 0, false);
+    GRng r(1, g_era, 406);
+    const int N = g.N;
+    float cx = (float)N, cy = N * 0.58f, w = N * 1.05f, h = N * 0.62f;
+    gStone(g, k, cx - N * 0.62f, cy + N * 0.16f, N * 0.3f, N * 0.2f);
+    gStone(g, k, cx, cy, w, h);
+    // a few cracks and lit facets on the big stone
+    if (g_era >= 2) {
+        int x = (int)(cx + w * 0.12f), y = (int)(cy - h * 0.4f);
+        for (int i = 0; i < N / 3; ++i) {
+            g.over(x, y, k.stoneD, k.stone);
+            ++y;
+            if (r.p(0.5f)) ++x;
+        }
+    }
+    gStone(g, k, cx + N * 0.6f, cy + N * 0.22f, N * 0.22f, N * 0.14f);
+}
+
+// Grass and flowers standing in the air tile above a grass cap (transparent elsewhere).
+void groundTuft(GroundPx& g, const EarthCols& k, int v)
+{
+    GRng r(v, g_era, 407);
+    const int N = g.N, W = g.W;
+    const int H = std::max(2, (int)std::lround(N * 0.26f));
+    int tufts = 1 + r.i(0, 2) + (v == 0 ? 1 : 0);
+    for (int i = 0; i < tufts; ++i) {
+        int cx = r.i(2, W - 3), blades = r.i(2, 4);
+        for (int bI = 0; bI < blades; ++bI) {
+            int bx = cx + bI - blades / 2, h = r.i(std::max(1, H / 3), H), lean = r.i(-1, 1);
+            Col c = bI % 2 ? k.grassD : k.grass;
+            if (g_era == 1) c = bI % 2 ? tone(1) : tone(2);
+            for (int y = 0; y < h; ++y) {
+                int x = bx + (y >= h * 2 / 3 ? lean : 0);
+                g.set(x, N - 1 - y, (g_era >= 3 && y == h - 1 && bI % 2 == 0) ? k.grassL : c);
+                if (N >= 48 && y < h / 2) g.set(x + 1, N - 1 - y, c);
+            }
+        }
+    }
+    if (v == 1 || v == 3) {   // a flower or two
+        int flowers = v == 3 ? 2 : 1;
+        for (int i = 0; i < flowers; ++i) {
+            int fx = r.i(2, W - 3), fh = r.i(std::max(2, H / 2), H + 1);
+            Col petal = (i + v) % 2 ? k.flowerA : k.flowerB;
+            for (int y = 1; y < fh; ++y) g.set(fx, N - y, g_era == 1 ? tone(1) : k.grassD);
+            int fy = N - fh;
+            if (N >= 32) {
+                int s = N >= 48 ? 2 : 1;
+                for (int dy = -s; dy <= s; ++dy)
+                    for (int dx = -s; dx <= s; ++dx)
+                        if (std::abs(dx) + std::abs(dy) <= s) g.set(fx + dx, fy + dy, petal);
+                g.set(fx, fy, k.flowerA.r == petal.r ? k.stoneL : k.flowerA);
+            } else {
+                g.set(fx, fy, petal);
+                if (N >= 16) g.set(fx + 1, fy, petal);
+            }
+        }
+    }
+}
+
+// Grass hanging over a cliff edge, in the air tile beside it: the band runs a pixel or two past
+// the edge and a few blades hang down the face (drawn for the left air tile, mirrored for right).
+void groundCap(GroundPx& g, const EarthCols& k, int side)
+{
+    GRng r(side, g_era, 408);
+    const int N = g.N, W = g.W;
+    const int T = std::max(2, (int)std::lround(N * 0.19f));
+    const int out = std::max(1, N / 12);
+    auto at = [&](int dx, int y, Col c) { g.set(side == 0 ? W - 1 - dx : dx, y, c); };
+    for (int dx = 0; dx < out; ++dx)
+        for (int y = (dx == out - 1 ? 1 : 0); y < T + 1 - dx; ++y)
+            at(dx, y, y == 0 ? k.grassL : (y < T - 1 ? k.grass : k.grassD));
+    // blades hanging down the face
+    int lens[3] = {T + r.i(2, std::max(3, N / 4)), T + r.i(0, std::max(1, N / 8)), T - 1 + r.i(0, std::max(1, N / 10))};
+    for (int i = 0; i < 3 && i < W; ++i)
+        for (int y = 1; y < lens[i]; ++y) at(i, y, (g_era >= 4 && y == lens[i] - 1) ? k.grassDD : (y < T - 1 ? k.grass : k.grassD));
+}
+
+// Draws one ground frame (family, variant) into the 1 x 1 tile canvas.
+void drawGround(Canvas& c, int fam, int v)
+{
+    const int N = (int)std::lround(c.tpu);
+    GroundPx g(fam == G_PAIR ? 2 * N : N, N);
+    if (g_era == 0) {
+        groundOneBit(g, fam, v);
+        g.put(c, fam == G_PAIR ? v * N : 0);
+        return;
+    }
+    const EarthCols k = earthCols();
+    switch (fam) {
+    case G_TOP: groundTop(g, k, v); break;
+    case G_EARTH: groundEarth(g, k, v); break;
+    case G_DEEP: groundDeep(g, k, v); break;
+    case G_UNDER: groundUnder(g, k, v); break;
+    case G_ROCK: groundRock(g, k, v); break;
+    case G_PAIR: groundPair(g, k); break;
+    case G_TUFT: groundTuft(g, k, v); break;
+    default: groundCap(g, k, v); break;
+    }
+    g.put(c, fam == G_PAIR ? v * N : 0);
+}
+
+// Which ground frame a tile frame is, if any.
+bool groundFrameOf(int t, int& fam, int& v)
+{
+    struct R { int first, last, fam, v0; };
+    static const R rs[] = {
+        {T_GROUND_TOP, T_GROUND_TOP, G_TOP, 0}, {T_GROUND, T_GROUND, G_EARTH, 0},
+        {T_GROUND_TOP1, T_GROUND_TOP3, G_TOP, 1}, {T_GROUND1, T_GROUND3, G_EARTH, 1},
+        {T_GROUND_TOP4, T_GROUND_TOP7, G_TOP, 4}, {T_GROUND4, T_GROUND7, G_EARTH, 4},
+        {T_DEEP0, T_DEEP3, G_DEEP, 0}, {T_UNDER0, T_UNDER3, G_UNDER, 0}, {T_ROCK0, T_ROCK3, G_ROCK, 0},
+        {T_PAIR_L, T_PAIR_R, G_PAIR, 0}, {T_TUFT0, T_TUFT3, G_TUFT, 0}, {T_CAP_L, T_CAP_R, G_CAP, 0}};
+    for (const R& q : rs)
+        if (t >= q.first && t <= q.last) { fam = q.fam; v = q.v0 + t - q.first; return true; }
+    return false;
+}
+// A bent line made of short pieces (roots, nails), at least one pixel wide.
 void earthLine(Canvas& c, std::initializer_list<Vector2> pts, Col col, float widthPx = 1.0f)
 {
     float r = std::max(0.5f, widthPx * 0.55f) / c.tpu;
     const Vector2* p = pts.begin();
     for (size_t i = 1; i < pts.size(); ++i) c.capsule(p[i - 1].x, p[i - 1].y, p[i].x, p[i].y, r, solid(col));
-}
-
-// Earth tiles. `top`: the grass-capped surface tile. `v`: variant 0..3, each with its own
-// stones, roots and cracks; every variant meets every other at the tile edges (straight grass
-// bands, the dark layer's edge height fixed at the sides), so any order joins seamlessly.
-void drawEarth(Canvas& c, bool top, int v)
-{
-    const EarthCols k = earthCols();
-    const float px = 1.0f / c.tpu;
-    if (top) {
-        c.rect(0, 0, 1, 1, solid(k.dirt));
-        // the dark lower layer: its edge is 0.74 at both sides, the sine terms vanish there
-        float a1 = 0.04f + 0.05f * rnd(v, 1, 301), a2 = (rnd(v, 2, 301) - 0.5f) * 0.1f, a3 = (rnd(v, 3, 301) - 0.5f) * 0.06f;
-        c.shape(0, 0.5f, 1, 1, [&](Frag& f) {
-            const float P = 3.14159265f;
-            return f.y > 0.74f - a1 * std::sin(f.x * P) + a2 * std::sin(f.x * 2 * P) + a3 * std::sin(f.x * 3 * P);
-        }, solid(k.deep));
-        // dark roots and darker moss under the grass lip, different on every variant
-        int roots = 1 + (v % 2);
-        for (int i = 0; i < roots; ++i) {
-            float rx = 0.18f + 0.64f * rnd(v, 10 + i, 302), len = 0.18f + 0.22f * rnd(v, 20 + i, 302);
-            float bend = (rnd(v, 30 + i, 302) - 0.5f) * 0.2f;
-            earthLine(c, {{rx, 0.26f}, {rx + bend * 0.5f, 0.26f + len * 0.5f}, {rx + bend, 0.26f + len}}, k.root);
-            if (g_era >= 3 && rnd(v, 40 + i, 302) > 0.4f)   // a side rootlet
-                earthLine(c, {{rx + bend * 0.5f, 0.26f + len * 0.5f}, {rx + bend * 0.5f + 0.1f, 0.3f + len * 0.6f}}, k.root);
-        }
-        if ((v == 3 || v == 1) && g_era != 2) earthStone(c, k, 0.3f + 0.4f * rnd(v, 5, 303), 0.5f + 0.08f * rnd(v, 6, 303), 0.075f, 0.05f);
-        for (int i = 0; i < 3; ++i) {   // moss clumps hanging below the lip
-            float mx = 0.12f + 0.76f * rnd(v, 50 + i, 304), mw = 0.06f + 0.08f * rnd(v, 60 + i, 304);
-            c.ellipse(mx, 0.27f, mw, 0.05f + 0.05f * rnd(v, 70 + i, 304), solid(k.moss));
-        }
-        // the grass: a light top line, the body, a dark lip (straight bands: they join any variant)
-        c.rect(0, 0, 1, 0.27f, [&](const Frag& f) { return f.y < 0.07f ? k.grassL : (f.y < 0.2f ? k.grass : k.grassD); });
-        // blades hanging over the lip at uneven places
-        int blades = 3 + v % 2;
-        for (int i = 0; i < blades; ++i) {
-            float gx = (i + 0.2f + 0.6f * rnd(v, 80 + i, 305)) / blades, len = 0.31f + 0.08f * rnd(v, 90 + i, 305);
-            gx = std::min(0.92f, std::max(0.08f, gx));
-            c.poly({{gx - 0.045f, 0.25f}, {gx + 0.045f, 0.25f}, {gx + 0.01f, len}}, solid(k.grassD));
-        }
-        // light flecks in the grass, never on a fixed beat
-        for (int i = 0; i < 2; ++i) c.dot(0.1f + 0.8f * rnd(v, 100 + i, 306), 0.1f, k.grassL);
-        return;
-    }
-    // deep earth: one dark layer (no stripe per row), with stones, cracks, roots and flecks
-    c.rect(0, 0, 1, 1, solid(k.deep));
-    for (int i = 0; i < 2 + v % 2; ++i) {   // lighter flecks of dirt
-        float fx = 0.1f + 0.8f * rnd(v, 110 + i, 307), fy = 0.1f + 0.8f * rnd(v, 120 + i, 307);
-        c.rect(fx, fy, 2 * px, px, solid(k.deep.r == k.dirt.r ? k.root : k.dirt));
-    }
-    switch (v) {
-    case 0:   // one big stone and a pebble
-        earthStone(c, k, 0.32f, 0.62f, 0.13f, 0.08f);
-        earthStone(c, k, 0.78f, 0.2f, 0.06f, 0.045f);
-        break;
-    case 1:   // a crack running down and a dark root
-        earthLine(c, {{0.2f, 0.12f}, {0.3f, 0.34f}, {0.24f, 0.52f}, {0.36f, 0.7f}}, k.stoneD);
-        earthLine(c, {{0.3f, 0.34f}, {0.44f, 0.4f}}, k.stoneD);
-        earthLine(c, {{0.62f, 0.2f}, {0.7f, 0.42f}, {0.66f, 0.62f}, {0.78f, 0.82f}}, k.root, g_era >= 4 ? 2.0f : 1.0f);
-        break;
-    case 2:   // a cluster of three pebbles high up, a scratch low down
-        earthStone(c, k, 0.6f, 0.28f, 0.08f, 0.055f);
-        earthStone(c, k, 0.74f, 0.34f, 0.06f, 0.045f);
-        earthStone(c, k, 0.65f, 0.44f, 0.05f, 0.035f);
-        earthLine(c, {{0.12f, 0.74f}, {0.24f, 0.7f}, {0.32f, 0.78f}}, k.stoneD);
-        break;
-    default:  // a flat slate on its side, low, and a hair root
-        c.rect(0.46f + px, 0.8f + px, 0.3f, 0.07f, solid(k.stoneD));
-        c.rect(0.46f, 0.8f, 0.3f, 0.07f, solid(k.stone));
-        earthLine(c, {{0.2f, 0.1f}, {0.26f, 0.3f}, {0.22f, 0.44f}}, k.root);
-        break;
-    }
 }
 
 // The buried keepsake, two tiles wide; `half` 0 draws the left tile, 1 the right one.
@@ -1841,8 +2415,13 @@ void drawFeature(Canvas& c, int half)
         else stamp(c, {"........", "........", "........", "......#.", "#####..#", ".......#", "####..#.", "....##.."}, 0, 0);
         return;
     }
-    drawEarth(c, false, 3 - half * 3);   // plain variants under it
     const EarthCols k = earthCols();
+    {   // the bare deep stratum under it, two tiles wide so the layers run on through both halves
+        const int N = (int)std::lround(c.tpu);
+        GroundPx g(2 * N, N);
+        groundDeep(g, k, 2, false);
+        g.put(c, half * N);
+    }
     c.tox = -(float)half;   // draw in 2 x 1 space; the canvas clips to this tile
     switch (g_era) {
     case 1: {   // a rusty old key
@@ -1864,10 +2443,10 @@ void drawFeature(Canvas& c, int half)
         break;
     }
     case 3: {   // a long gnarled root with side shoots
-        earthLine(c, {{0.05f, 0.18f}, {0.4f, 0.32f}, {0.8f, 0.28f}, {1.2f, 0.46f}, {1.6f, 0.5f}, {1.95f, 0.7f}}, k.root, 2.0f);
-        earthLine(c, {{0.4f, 0.32f}, {0.5f, 0.55f}, {0.44f, 0.75f}}, k.root);
-        earthLine(c, {{1.2f, 0.46f}, {1.26f, 0.7f}, {1.4f, 0.86f}}, k.root);
-        earthLine(c, {{0.8f, 0.28f}, {0.9f, 0.14f}}, k.root);
+        earthLine(c, {{0.05f, 0.18f}, {0.4f, 0.32f}, {0.8f, 0.28f}, {1.2f, 0.46f}, {1.6f, 0.5f}, {1.95f, 0.7f}}, k.earthL, 2.0f);
+        earthLine(c, {{0.4f, 0.32f}, {0.5f, 0.55f}, {0.44f, 0.75f}}, k.earthL);
+        earthLine(c, {{1.2f, 0.46f}, {1.26f, 0.7f}, {1.4f, 0.86f}}, k.earthL);
+        earthLine(c, {{0.8f, 0.28f}, {0.9f, 0.14f}}, k.earthL);
         break;
     }
     case 4: {   // a lost horseshoe and two bent nails
@@ -1921,60 +2500,11 @@ bool powerUpFrame(Canvas& c, int t)
 
 void drawTile(Canvas& c, int t)
 {
-    if (t >= T_FEAT_L) { drawFeature(c, t - T_FEAT_L); return; }
+    if (t == T_FEAT_L || t == T_FEAT_R) { drawFeature(c, t - T_FEAT_L); return; }
     if (t >= T_PU_SHIELD && t <= T_PU_SPEED && powerUpFrame(c, t)) return;   // pickups: see powerUpFrame
-    if (g_era == 0 && t >= T_GROUND_TOP1) {
-        // 1-bit variants: the same black earth and surface line, now and then a tiny light detail
-        c.rect(0, 0, 1, 1, solid(ONEBIT_DARK));
-        int v = t >= T_GROUND1 ? t - T_GROUND1 : t - T_GROUND_TOP1;
-        if (t < T_GROUND1) {
-            stamp(c, {"########"}, 0, 0);
-            if (v == 0) stamp(c, {"", "...#....", "...#....", "....#..."}, 0, 0);   // a root under the line
-        } else {
-            if (v == 0) stamp(c, {"", "", "..##....", ".#..#...", "..##...."}, 0, 0);
-        }
-        return;
-    }
-    if (t >= T_GROUND_TOP1 && t < T_GROUND1) { drawEarth(c, true, t - T_GROUND_TOP1 + 1); return; }
-    if (t >= T_GROUND1) { drawEarth(c, false, t - T_GROUND1 + 1); return; }
+    int fam = 0, v = 0;
+    if (groundFrameOf(t, fam, v)) { drawGround(c, fam, v); return; }   // the ground: see drawGround
     switch (t) {
-    case T_GROUND_TOP:
-    case T_GROUND: {
-        if (g_era != 0 && g_era != LAST_ERA) { drawEarth(c, t == T_GROUND_TOP, 0); break; }
-        if (g_era == 0) {
-            // 1-bit: plain black earth under one solid white surface line, exactly 1 px thick.
-            // (A pebble here would repeat every 8 px and read as a dotted rail, so none.)
-            c.rect(0, 0, 1, 1, solid(ONEBIT_DARK));
-            if (t == T_GROUND_TOP) stamp(c, {"########"}, 0, 0);
-            break;
-        }
-        // hand-placed earth: a base colour, a darker wavy layer low down, two pebbles and a root
-        Col dirt = eraCol(0x8c4a2f, 0.0f), dirtDark = mixc(eraCol(0x5e3020, 0.0f), hex(0x3a2a5a), 0.2f);
-        Col stone = eraCol(0xb8b6c8, 1.0f), stoneDark = mixc(stone, hex(0x4a3a6a), 0.45f), root = eraCol(0x5a3a22, 0.0f);
-        c.rect(0, 0, 1, 1, solid(dirt));
-        c.shape(0, 0.5f, 1, 1, [&](Frag& f) {
-            f.nx = 0; f.ny = 0;
-            return f.y > 0.62f + 0.06f * std::sin(f.x * 6.2831853f * 2);   // tiles across: whole periods
-        }, solid(dirtDark));
-        c.ellipse(0.27f, 0.42f, 0.11f, 0.075f, solid(stoneDark));
-        c.ellipse(0.25f, 0.4f, 0.09f, 0.055f, solid(stone));
-        c.ellipse(0.74f, 0.8f, 0.08f, 0.055f, solid(stoneDark));
-        c.ellipse(0.73f, 0.78f, 0.06f, 0.04f, solid(stone));
-        c.capsule(0.55f, 0.3f, 0.62f, 0.48f, 0.022f, solid(root));
-        c.capsule(0.62f, 0.48f, 0.56f, 0.6f, 0.02f, solid(root));
-        if (t == T_GROUND_TOP) {
-            Col grass = eraCol(0x6fdc4a, 1.0f), grassDark = mixc(eraCol(0x1e8a4c, 1.0f), hex(0x1a3a5a), 0.15f);
-            Col grassLight = mixc(grass, hex(0xfff0a0), 0.35f);
-            // light top line, grass body, then a dark lip where it overhangs the earth
-            c.rect(0, 0, 1, 0.28f, [&](const Frag& f) { return f.y < 0.07f ? grassLight : (f.y < 0.21f ? grass : grassDark); });
-            for (int i = 0; i < 5; ++i) {   // uneven blades hanging over the lip
-                float gx = 0.1f + i * 0.2f, len = 0.33f + 0.06f * ((i * 7) % 3);
-                c.poly({{gx - 0.05f, 0.26f}, {gx + 0.05f, 0.26f}, {gx + 0.01f, len}}, solid(grassDark));
-            }
-            for (int i = 0; i < 3; ++i) c.dot(0.18f + i * 0.31f, 0.12f, grassLight);
-        }
-        break;
-    }
     case T_BLOCK:
     case T_CRACKED: {
         // each stage builds its platforms from a different material, with a dark underside
