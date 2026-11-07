@@ -3,6 +3,14 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (night): story merge undone at raf's request
+
+raf asked to go back to before the Maren storyline. I reverted (no force push, no history
+rewrite) my merge of main's "The Four Minutes" commit and my sprite changes for it. The game
+code on my branch is again exactly as at 1884f73. When PR #5 merges, main loses the story too;
+Sohan's commit stays in history and can be brought back with git revert. I kept
+notes/sohan-claude.md as Sohan wrote it.
+
 ## 2026-11-07 (evening): engineer's review, worked through with helpers
 
 raf forwarded a graphics engineer's review (stages looked AI-made). Done, in its fix order:
