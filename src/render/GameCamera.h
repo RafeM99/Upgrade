@@ -22,8 +22,11 @@ struct GameCamera {
     float viewW() const { return viewH * aspect; }
     float left() const { return x - viewW() / 2; }
     float right() const { return x + viewW() / 2; }
-    // targetTop: the view top the players want (the camera never shows below the floor or past minLeft)
-    void update(float targetX, float targetTop, float spread, float minLeft, float dt);
+    float lastTargetTop = 3; // the last view top asked for (before the 3D lift)
+    // targetTop: the view top the players want (the camera never shows below the floor or past minLeft).
+    // floorY: the floor under the lowest player (world y, tiles), kept in view; < 0 for none.
+    void update(float targetX, float targetTop, float spread, float minLeft, float dt, float floorY = -1);
+    float lookDown() const;  // how far below the view centre the 2.5D / 3D view aims, in tiles
     void setFocus(float minX, float maxX, float top, float bottom) { focusMinX = minX; focusMaxX = maxX; focusTop = top; focusBottom = bottom; hasFocus = true; }
     void addShake(float s) { if (s > shake) shake = s; }
     Camera3D camera3D(float& nearPlane, float& farPlane) const;

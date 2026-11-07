@@ -105,7 +105,6 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
         if (!forcedName_.empty()) {
             for (auto& ch : pool_)
                 if (ch.name == forcedName_) pick = &ch;
-            if (pick) TraceLog(LOG_INFO, "UPGRADE: placed %s at column %d", pick->name.c_str(), level.endCol());
             forcedName_.clear();
         }
         // Right after an ability unlocks, the next chunk uses it.
