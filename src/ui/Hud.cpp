@@ -601,7 +601,7 @@ void bossBar(Game& g, int top)
     const int barH = th.pixel ? std::max(2 * U, capH(th.ts)) : 8 * U;
     const int h = snap(pad + capH(th.ts) + 3 * U + barH + pad);
     panel(x, y, w, h);
-    std::string n = T("boss_name");
+    std::string n = T("boss_name_" + std::to_string(g.era));   // each memory has its own boss
     Color nc = th.era <= 1 ? th.fg : (th.era == 6 ? hexc(0x8a3ab0) : hexc(0xe0b0ff));
     txt(n, x + (w - textW(n, th.ts)) / 2, y + pad, th.ts, nc);
     float k = g.boss.hp / (float)std::max(1, g.boss.maxHp);
@@ -673,9 +673,9 @@ void Hud::drawPlaying(Game& g)
 
     if (g.boss.active && g.boss.state != 5) bossBar(g, top);
 
-    // the gameplay hint: once, early in the first run, as Gran speaking; then never again
-    if (!hintDone && (gotFragment || g.time > kHintSeconds)) hintDone = true;
-    if (!hintDone && !g.transActive) hintBox(g, top);
+    // The old "Gran speaking" hint box is no longer drawn: the story has its own UI (ui/Story.*)
+    // and the controls hint rides on the level banner at the start of a run.
+    (void)hintBox;
 
     if (g.bannerT > 0) banner(g);
 }

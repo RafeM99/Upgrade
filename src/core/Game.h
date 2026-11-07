@@ -1,5 +1,5 @@
 // Game.h: game state and the main loop at a fixed 60 updates per second.
-// Screens: title -> playing (with era transitions and pause) -> ending.
+// Screens: title -> story card -> playing (with era transitions and pause) -> story card -> ... -> ending.
 #pragma once
 #include "audio/Audio.h"
 #include "enemies/Enemy.h"
@@ -11,12 +11,13 @@
 #include "render/Particles.h"
 #include "render/Renderer.h"
 #include "ui/Hud.h"
+#include "ui/Story.h"
 
 #include <random>
 #include <string>
 #include <vector>
 
-enum class Screen { Title, Playing, Paused, Ending };
+enum class Screen { Title, Playing, Paused, Story, Ending };
 
 enum PowerType { PU_SHIELD, PU_SLOW, PU_MAGNET, PU_PHOTO, PU_SPEED, PU_COUNT };
 
@@ -34,7 +35,7 @@ struct PowerUp {
 };
 
 struct Options {
-    bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false;
+    bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false, story = true;
     int startEra = 0, maxFrames = 0, shotEvery = 0;
     unsigned seed = 0;
     std::string shot, shotPrefix;
@@ -96,10 +97,19 @@ public:
     Particles particles;
     Renderer renderer;
     Hud hud;
+    Story story;
     float hitPause = 0;
 
     void startRun();
     void showBanner(const std::string& title, const std::string& sub, float seconds);
+    bool storyOn() const;
+
+    // story: the memory card to open once the next frame is drawn (its photograph is taken then)
+    std::vector<int> pendingCards;
+    // the level banner (stage name, new abilities) waits until the story card is closed
+    std::string heldBanner, heldBannerSub;
+    float heldBannerLen = 0;
+    void levelBanner(const std::string& title, const std::string& sub, float seconds);
 
 private:
     std::mt19937 rng_;
@@ -107,12 +117,15 @@ private:
     int frameNo_ = 0;
     PlayerInput inputs_[2];
     bool firstTick_ = true;
+    bool prologueSeen_ = false;
 
     void update(float dt);
     void updateTitle();
     void updatePlaying(float dt);
     void updatePause();
     void updateEnding(float dt);
+    void updateStory(float dt);
+    bool storyPressed();
     PlayerInput botInput(int p);
 
     void spawnMarkers();

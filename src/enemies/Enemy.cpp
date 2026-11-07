@@ -123,9 +123,11 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
 }
 
 // ------------------------------------------------------------------ Boss
-void Boss::start(float camX, int era, int hpBase, int hpPerEra)
+void Boss::start(float camX, int era, int hpBase, int hpPerEra, int kind_)
 {
     active = true;
+    kind = kind_;
+    landed = false;
     defeated = false;
     maxHp = hp = hpBase + era * hpPerEra;
     state = 0;
@@ -148,6 +150,7 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
     stateTime += dt;
     hurt = std::max(0.0f, hurt - dt);
     wantsSpawn = false;
+    landed = false;
     auto ease = [](float k) { k = std::min(1.0f, std::max(0.0f, k)); return k * k * (3 - 2 * k); };
     float hoverX = camLeft + (camRight - camLeft) * 0.7f;
 
@@ -160,10 +163,20 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         break;
     }
     case 1: {   // hover, follow the camera, spit minions
-        x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 2.0f * dt;
-        y = 4.0f + std::sin(t * 2.0f) * 0.6f;
+        if (kind == 0) {
+            // the clock ticks: it jumps from place to place twice a second
+            if (std::fmod(t, 0.5f) < dt) x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 0.6f;
+            y = 4.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
+        } else if (kind == 1) {
+            // the shirt flutters wide and slow, like washing in the wind
+            x += (hoverX + std::sin(t * 0.6f) * 5 - x) * 1.5f * dt;
+            y = 4.0f + std::sin(t * 1.3f) * 1.0f;
+        } else {
+            x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 2.0f * dt;
+            y = 4.0f + std::sin(t * 2.0f) * 0.6f;
+        }
         spawnTimer -= dt;
-        if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = 4.5f - era * 0.5f; }
+        if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = (4.5f - era * 0.5f) * (kind == 5 ? 0.7f : 1.0f); }
         if (stateTime > 2.6f - era * 0.25f) {
             // pick a target player and swoop
             float tx = x;
@@ -174,6 +187,14 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
             fromX = x; fromY = y;
             toX = tx;
             toY = (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
+            // The train charges along the ground only where the line is flat all the way from
+            // where it drops to the target; anywhere else it swoops like the others.
+            charge = false;
+            if (kind == 4 && gt >= 0) {
+                int a = (int)std::floor(std::min(x, tx)), b = (int)std::floor(std::max(x, tx));
+                charge = true;
+                for (int c = a; c <= b && charge; ++c) charge = level.groundTop(c) == gt;
+            }
             state = 6;
             stateTime = 0;
         }
@@ -182,17 +203,29 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
     case 6:     // aim: a warning marker shows where it will land
         x += (fromX - x) * 0.5f * dt;
         y = fromY + std::sin(t * 30) * 0.05f;
-        if (stateTime > 0.85f - era * 0.08f) { state = 2; stateTime = 0; fromX = x; fromY = y; }
+        // the storm takes longer to aim, then strikes much faster
+        if (stateTime > 0.85f - era * 0.08f + (kind == 3 ? 0.35f : 0.0f)) { state = 2; stateTime = 0; fromX = x; fromY = y; }
         break;
     case 2: {   // swoop down
-        float k = ease(stateTime / 0.75f);
-        x = fromX + (toX - fromX) * k;
-        y = fromY + (toY - fromY) * k * k;
-        if (stateTime > 0.75f) { state = 3; stateTime = 0; }
+        float k = std::min(1.0f, stateTime / swoopLen());
+        if (kind == 4 && charge) {
+            // the train drops onto the line where it is, then charges along the ground
+            if (k < 0.3f) { float d = ease(k / 0.3f); x = fromX; y = fromY + (toY - fromY) * d; }
+            else { x = fromX + (toX - fromX) * ease((k - 0.3f) / 0.7f); y = toY; }
+        } else if (kind == 1) {
+            // the shirt glides in on the wind
+            x = fromX + (toX - fromX) * std::sin(k * 1.5707963f);
+            y = fromY + (toY - fromY) * k * k * k;
+        } else {
+            float e = ease(k);
+            x = fromX + (toX - fromX) * e;
+            y = fromY + (toY - fromY) * e * e;
+        }
+        if (stateTime > swoopLen()) { state = 3; stateTime = 0; landed = true; }
         break;
     }
-    case 3:     // resting on the ground: stomp it now
-        if (stateTime > 2.0f - era * 0.2f) { state = 4; stateTime = 0; fromX = x; fromY = y; }
+    case 3:     // resting on the ground: stomp it now (the bell rests a little longer after it rings)
+        if (stateTime > 2.0f - era * 0.2f + (kind == 2 ? 0.4f : 0.0f)) { state = 4; stateTime = 0; fromX = x; fromY = y; }
         break;
     case 4: {   // rise again
         float k = ease(stateTime / 0.8f);

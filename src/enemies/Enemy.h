@@ -4,6 +4,11 @@
 //   Fog Brute    - 3 hits, from the 8-bit era on. Walks; from 16-bit on it winds up and charges.
 //   The Forgetting (boss) - appears when the Memory Bar is full. Hovers, swoops down at a player,
 //                  rests on the ground where it can be stomped, then rises. Beat it to restore the memory.
+//                  Each memory has its own boss (Boss::kind = the stage), with its own way of moving:
+//                  0 the 3 a.m. clock ticks from place to place; 1 the empty shirt flutters wide and glides in;
+//                  2 the school bell rings when it lands and knocks you back; 3 the storm strikes fast like
+//                  lightning and rains flyers; 4 the last train drops at one side and charges along the ground;
+//                  5 the scarecrow calls crows (flyers); 6 the Forgetting itself, as it always was.
 #pragma once
 #include <vector>
 
@@ -52,10 +57,15 @@ struct Boss {
     float fromX = 0, fromY = 0, toX = 0, toY = 0;
     bool wantsSpawn = false;   // the Game spawns a minion when this is set
     bool defeated = false;
+    int kind = 6;              // which memory's boss this is (the stage it appears in)
+    bool landed = false;       // set for one update when a swoop ends on the ground
+    bool charge = false;       // the train: this swoop drops, then charges along flat ground
 
-    void start(float camX, int era, int hpBase, int hpPerEra);
+    void start(float camX, int era, int hpBase, int hpPerEra, int kind);
     void update(float dt, float camLeft, float camRight, const Level& level, const Player* players, int era, float timeScale);
     bool vulnerable() const { return state == 3 && hurt <= 0; }
     bool dangerous() const { return state == 2; }        // only the swoop hurts; a resting boss just pushes you back
     bool aiming() const { return state == 6 || state == 2; }
+    bool spawnsFlyers() const { return kind == 3 || kind == 5; }
+    float swoopLen() const { return kind == 3 ? 0.45f : (kind == 4 ? 1.1f : 0.75f); }
 };

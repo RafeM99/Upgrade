@@ -29,6 +29,31 @@ Abilities: P1 gets double jump (8-bit), ground pound (16-bit, Ability in the air
 P2 gets dash (8-bit, Ability), wall jump (16-bit, jump against a wall) and the time-slow pulse (2.5D, Down + Ability).
 Playing alone, Player 1 gets both sets so every chunk can be passed.
 
+## The story
+Gran (Edie, 80) has Alzheimer's. It takes the newest memories first and keeps the oldest longest.
+Her grandson Sam walks back through her life with her, one memory per stage, newest first:
+last winter (1-bit), 2014, 2006, 1979, 1964, 1958, and her earliest memory, 1951 (full 3D).
+Every memory she gets back, she sees more clearly: that is the graphics upgrade.
+
+The story has its own UI (`src/ui/Story.*`), separate from the level HUD:
+- a memory card before each stage: a photograph of that memory taken from the game, its year,
+  a few lines from Gran and Sam, and a timeline that moves further back each time;
+- black cinematic bars when a boss arrives and when a memory comes back;
+- the ending: an album of the seven photographs, then the present day.
+
+Each memory has its own boss, the Forgetting in the shape of something from it:
+| Stage | Memory | Boss | How it fights |
+|---|---|---|---|
+| 1-bit | The night she got lost | The 3 a.m. Clock | ticks from place to place |
+| 4-shade | Arthur's shirts | The Empty Shirt | flutters wide, glides in on the wind |
+| 8-bit | Sam's first day at school | The School Bell | rings when it lands and throws you back |
+| 16-bit | The camping trip | The Storm | aims longer, strikes like lightning, rains flyers |
+| 32-bit | The train to the city | The Last Train | drops at one side, charges along the ground |
+| 2.5D | The hay meadow | The Scarecrow | calls crows |
+| 3D | Home | The Forgetting | as before |
+
+All the words are in `assets/strings.txt`. `--no-story` (or `[story] enabled = 0`) turns the story UI off.
+
 ## How a run goes
 1. Run right. Jump on the creatures of the Forgetting. They drop memory fragments that fill the Memory Bar.
 2. The Forgetting Wall comes from the left. Touch it and you are Faded: touch your partner to come back.
@@ -61,6 +86,6 @@ cmake --build build --target assetgen
 ## Test options
 `--autoplay` (bots play), `--two` (P2 joined), `--fill` (bar fills fast), `--era N` (start in stage 0-6:
 0 1-bit, 1 4-shade, 2 8-bit, 3 16-bit, 4 32-bit, 5 2.5D, 6 3D),
-`--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
+`--no-story`, `--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
 Example: `./build/upgrade --autoplay --two --fill --era 4` shows the 2.5D swing and then the full 3D stage.
 The Memory Bar speed is `memory.fill_speed` in `assets/config.ini` (2.0 = twice the old speed).
