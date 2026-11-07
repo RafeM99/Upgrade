@@ -3,6 +3,27 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (late night): Blender models for stage 6 (Gran and the bat boss)
+
+- raf asked for Blender-made 3D models for the last stage only. tools/blender/make_models.py builds
+  Gran (coat, scarf, glasses, bun, jointed arms and legs) and a bat boss (furry body, tall ears,
+  two-part wings) and exports one .glb per moving part into assets/models/.
+  Later the same night the bat was replaced by the Forgetting itself: a big floating tentacle
+  alien (one huge eye, eye stalks, glowing antennae, eight waving tentacles)..
+- Rebuild them: pip install bpy (Blender as a Python module, ~400 MB), then
+  python tools/blender/make_models.py assets/models. The .glb files are committed, so playing
+  needs nothing extra.
+- src/render/Models3D.*: loads the parts, run cycle for Gran, wing beats for the bat; falls back
+  to the old primitive models if the files are missing. Stage 6 only.
+
+## 2026-11-07 (late night): backgrounds repainted from raf's reference pictures
+
+- Merged claude-camilla (boss powers, difficulty) after PR #5 went to main.
+- Each stage's background painter now lives in tools/assetgen/bg/eraN.inc (included into
+  SpriteGen.cpp before bgLayer). New scenes in the cluster-tree / treehouse style raf sent:
+  0 winter night street, 1 garden and washing line, 2 school street with chunky trees,
+  3 treehouse woodland (camping trip), 4 railway town and viaduct, 5 hay meadow, 6 morning hills.
+
 ## 2026-11-07 (night): story merge undone at raf's request
 
 raf asked to go back to before the Maren storyline. I reverted (no force push, no history
