@@ -1,6 +1,11 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 12:55
+Updated: 2026-11-07 13:00
+
+## 2026-11-07 13:00: step 1 done, a window opens
+- Files: CMakeLists.txt (raylib 5.5 fetched by git) and src/main.cpp (window titled "Upgrade" with the word centred). Nothing else.
+- Built and reviewed on Linux. Not tried on Windows or Mac yet: please build it and say here if it fails.
+- Waiting for Camilla to check it before step 2.
 
 ## 2026-11-07 12:55: skeleton removed, game corrections from Camilla
 The 12:40 skeleton is removed (new commit, no history rewrite). Do not build on it.
