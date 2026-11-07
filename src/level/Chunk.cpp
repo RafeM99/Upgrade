@@ -299,19 +299,6 @@ struct Gen {
         (void)vx;
         flat(2);
     }
-    void pieceWallClimb()
-    {
-        // wall jump: a chimney of two walls hanging over the path (its foot two tiles above the
-        // floor, so everyone walks under it), with fragments at the top. Only the fragments need
-        // the wall jump; the path never does.
-        if (!has(AB_WALL_JUMP) || room() < 8 || ground - 9 < 1) { pieceRun(); return; }
-        flat(1, false);
-        int wx = x;
-        flat(5, false);
-        for (int y = ground - 9; y <= ground - 3; ++y) { set(wx, y, '|'); set(wx + 4, y, '|'); }
-        for (int y = ground - 8; y <= ground - 6; y += 2) mark(wx + 2, y, 'F');
-        flat(2);
-    }
     void pieceGlideGap()
     {
         // glide: a high ledge before a long gap, fragments trailing down the glide
@@ -355,7 +342,6 @@ Chunk generateChunk(std::mt19937& rng, int era, unsigned mask, int difficulty)
             {5, 2},                                  // hill
             {6, era >= 1 ? 2 : 0},                   // tunnel
             {7, g.has(AB_GROUND_POUND) ? 2 : 0},     // vault
-            {8, g.has(AB_WALL_JUMP) ? 1 : 0},        // wall climb
             {9, g.has(AB_GLIDE) ? 2 : 0},            // glide gap
         };
         int total = 0;
@@ -376,7 +362,6 @@ Chunk generateChunk(std::mt19937& rng, int era, unsigned mask, int difficulty)
         case 5: g.pieceHill(); break;
         case 6: g.pieceTunnel(); break;
         case 7: g.pieceVault(); break;
-        case 8: g.pieceWallClimb(); break;
         case 9: g.pieceGlideGap(); break;
         }
     }
