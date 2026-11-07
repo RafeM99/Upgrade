@@ -25,6 +25,11 @@ Color lit(Color base, float face, float x, float y)
 {
     if (g_lightAmount <= 0) return base;
     float r = 0.5f + 0.5f * face, gg = r, b = r;
+    {
+        // era 3: a warm key light from the upper left, cool fill in the shade
+        float t = std::min(1.0f, std::max(0.0f, (face - 0.5f) / 0.6f));
+        r *= 0.86f + 0.18f * t; gg *= 0.9f + 0.1f * t; b *= 1.08f - 0.14f * t;
+    }
     for (const auto& l : g_lights) {
         float d = std::hypot(l.x - x, l.y - y);
         if (d >= l.radius) continue;
@@ -81,7 +86,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     if (openTop) {
-        Color c = lit(tint, 1.15f, x + 0.5f, y);
+        Color c = lit(tint, 1.12f, x + 0.5f, y);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x, Y3(y), zb);
         rlTexCoord2f(u0, vTop); rlVertex3f(x, Y3(y), zf);
@@ -89,7 +94,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
         rlTexCoord2f(u1, v0); rlVertex3f(x + 1, Y3(y), zb);
     }
     if (openLeft) {
-        Color c = lit(tint, 0.55f, x, y + 0.5f);
+        Color c = lit(tint, 0.78f, x, y + 0.5f);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x, Y3(y), zb);
         rlTexCoord2f(u0, v1); rlVertex3f(x, Y3(y + 1), zb);
@@ -97,7 +102,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
         rlTexCoord2f(u1, v0); rlVertex3f(x, Y3(y), zf);
     }
     if (openRight) {
-        Color c = lit(tint, 0.45f, x + 1, y + 0.5f);
+        Color c = lit(tint, 0.42f, x + 1, y + 0.5f);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x + 1, Y3(y), zf);
         rlTexCoord2f(u0, v1); rlVertex3f(x + 1, Y3(y + 1), zf);
@@ -114,18 +119,46 @@ void shadow(float cx, float floorY, float r, float alpha)
     if (alpha <= 0.01f) return;
     rlSetTexture(rlGetTextureIdDefault());
     rlBegin(RL_TRIANGLES);
-    const int N = 16;
-    for (int i = 0; i < N; ++i) {
-        float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
-        rlColor4ub(0, 0, 0, (unsigned char)(alpha * 120));
-        rlVertex3f(cx, Y3(floorY) + 0.02f, -0.3f);
-        rlColor4ub(0, 0, 0, 0);
-        rlVertex3f(cx + std::cos(a1) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a1) * r * 0.6f);
-        rlVertex3f(cx + std::cos(a0) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a0) * r * 0.6f);
+    const int N = 20;
+    // cool-tinted shadow: a soft outer pool and a tight, darker contact core
+    const unsigned char sr = 26, sg = 22, sb = 48;
+    for (int pass = 0; pass < 2; ++pass) {
+        float rr = pass == 0 ? r * 1.25f : r * 0.55f;
+        unsigned char a = (unsigned char)(alpha * (pass == 0 ? 110 : 170));
+        for (int i = 0; i < N; ++i) {
+            float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
+            rlColor4ub(sr, sg, sb, a);
+            rlVertex3f(cx, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f);
+            rlColor4ub(sr, sg, sb, 0);
+            rlVertex3f(cx + std::cos(a1) * rr, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f + std::sin(a1) * rr * 0.55f);
+            rlVertex3f(cx + std::cos(a0) * rr, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f + std::sin(a0) * rr * 0.55f);
+        }
     }
     rlEnd();
     rlSetTexture(0);
 }
+
+// A soft round dot (era 3 particles and light motes), facing the camera.
+void softDot(float cx, float cy, float r, float z, Color c)
+{
+    rlSetTexture(rlGetTextureIdDefault());
+    rlBegin(RL_TRIANGLES);
+    const int N = 10;
+    for (int i = 0; i < N; ++i) {
+        float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
+        rlColor4ub(c.r, c.g, c.b, c.a);
+        rlVertex3f(cx, Y3(cy), z);
+        rlColor4ub(c.r, c.g, c.b, 0);
+        rlVertex3f(cx + std::cos(a0) * r, Y3(cy + std::sin(a0) * r), z);
+        rlVertex3f(cx + std::cos(a1) * r, Y3(cy + std::sin(a1) * r), z);
+    }
+    rlEnd();
+    rlSetTexture(0);
+}
+
+// Era 3 landing dust: remembers whether each player was on the ground last frame.
+bool g_wasGround[2] = {true, true};
+float g_lastVy[2] = {0, 0};
 
 void ring(float cx, float cy, float r, Color c, float z = 0.05f)
 {
@@ -202,7 +235,7 @@ Rectangle Renderer::screenRect() const
 // ------------------------------------------------------------------ background
 void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
 {
-    const float parallax[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
+    const float parallax[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.03f, 0.1f, 0.24f}};
     for (int l = 0; l < BG_LAYERS; ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
         float scale = (float)h / t.height;
@@ -258,12 +291,38 @@ void Renderer::drawEra(Game& g, int era, float swing)
 
     // lights: the players glow warm and cool, the boss eye glows
     g_lights.clear();
+    if (era == 3) {
+        // era 3: gentle warm/cool character glows only; the key light lives in lit()
+        for (int p = 0; p < 2; ++p)
+            if (g.players[p].joined)
+                g_lights.push_back({g.players[p].cx(), g.players[p].cy(), p == 0 ? 0.16f : 0.06f, p == 0 ? 0.11f : 0.1f,
+                                    p == 0 ? 0.04f : 0.18f, 4});
+        if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.18f, 0.14f, 0.05f, 6});
+    } else {
     g_lights.push_back({g.cam.x, 4, 0.12f, 0.1f, 0.05f, 40});   // soft fill
     for (int p = 0; p < 2; ++p)
         if (g.players[p].joined)
             g_lights.push_back({g.players[p].cx(), g.players[p].cy(), p == 0 ? 0.55f : 0.15f, p == 0 ? 0.32f : 0.3f,
                                 p == 0 ? 0.1f : 0.6f, 6});
     if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.4f, 0.35f, 0.1f, 7});
+    }
+
+    // era 3 polish: puffs of dust when a player lands
+    if (era == 3 && swing > 0.5f) {
+        for (int p = 0; p < 2; ++p) {
+            const Player& pl = g.players[p];
+            if (!pl.joined) continue;
+            if (pl.onGround && !g_wasGround[p] && g_lastVy[p] > 6.0f) {
+                for (int i = 0; i < 7; ++i) {
+                    float s = (i - 3) / 3.0f;
+                    g.particles.add({pl.cx() + s * 0.25f, pl.bottom() - 0.05f, s * 2.6f, -0.6f - 0.4f * (1 - std::fabs(s)), 0.45f,
+                                     0.45f, 0.22f, 2.0f, Color{236, 214, 190, 150}});
+                }
+            }
+            g_wasGround[p] = pl.onGround;
+            if (!pl.onGround) g_lastVy[p] = pl.vy;
+        }
+    }
 
     BeginTextureMode(rt);
     ClearBackground(era == 0 ? Color{16, 18, 22, 255} : BLACK);
@@ -323,7 +382,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             const Player& pl = g.players[p];
             if (!pl.joined) continue;
             float fy = floorBelow(pl.cx(), pl.bottom());
-            if (fy >= 0) shadow(pl.cx(), fy, 0.45f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
+            if (fy >= 0) shadow(pl.cx(), fy, 0.5f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
         }
         for (const auto& e : g.enemies) {
             float fy = floorBelow(e.cx(), e.y + e.h);
@@ -424,7 +483,21 @@ void Renderer::drawEra(Game& g, int era, float swing)
     for (const auto& pa : g.particles.all()) {
         Color c = pa.color;
         c.a = (unsigned char)(c.a * std::min(1.0f, pa.life / (pa.maxLife * 0.5f)));
-        solidQuad(pa.x - pa.size / 2, pa.y - pa.size / 2, pa.size, pa.size, 0.2f, c);
+        if (era == 3) softDot(pa.x, pa.y, pa.size * 0.8f, 0.2f, c);
+        else solidQuad(pa.x - pa.size / 2, pa.y - pa.size / 2, pa.size, pa.size, 0.2f, c);
+    }
+    if (era == 3) {
+        // drifting light motes: a few warm specks floating slowly in the air, front and back
+        float L = g.cam.left() - 2, span = g.cam.right() - g.cam.left() + 4;
+        for (int i = 0; i < 26; ++i) {
+            float h1 = std::fabs(std::fmod(std::sin(i * 12.9898f) * 43758.5453f, 1.0f));
+            float h2 = std::fabs(std::fmod(std::sin(i * 78.233f) * 12345.678f, 1.0f));
+            float sx = std::fmod(h1 * 97.0f + g.time * (0.15f + 0.2f * h2), span);
+            float sy = 2.0f + h2 * (LEVEL_H - 4) + std::sin(g.time * (0.4f + h1) + i) * 0.6f;
+            float tw = 0.5f + 0.5f * std::sin(g.time * (1.2f + h2) + i * 2.1f);
+            float z = -2.5f + h1 * 3.5f;
+            softDot(L + sx, sy, 0.07f + 0.06f * h2, z, Color{255, 226, 170, (unsigned char)(swing * (40 + 80 * tw))});
+        }
     }
 
     // ---- the Forgetting Wall: rows of static/fog with a wavy leading edge
@@ -440,14 +513,15 @@ void Renderer::drawEra(Game& g, int era, float swing)
             // the textured leading strip
             quad(wt, src, edge - wq, y, wq, 0.5f, 0.6f, WHITE);
             // the solid body behind it
-            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : hexc(0x1a1030, era == 3 ? 235 : 255));
+            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : (era == 3 ? hexc(0x2a2640, 240) : hexc(0x1a1030, 255)));
             if (edge - wq > left) solidQuad(left, y, edge - wq - left, 0.5f, 0.6f, body);
         }
         // glitch sparks at the edge
         if (era >= 1) {
             for (int i = 0; i < 6; ++i) {
                 float yy = std::fmod(g.time * (3 + i) * 1.7f + i * 2.3f, (float)LEVEL_H);
-                solidQuad(g.wallX + 0.2f + std::sin(g.time * 9 + i) * 0.4f, yy, 0.18f, 0.18f, 0.7f, hexc(i % 2 ? 0xe8364f : 0x8a7fb4, 200));
+                solidQuad(g.wallX + 0.2f + std::sin(g.time * 9 + i) * 0.4f, yy, 0.18f, 0.18f, 0.7f,
+                          era == 3 ? hexc(i % 2 ? 0xf0b080 : 0xb0a8d0, 170) : hexc(i % 2 ? 0xe8364f : 0x8a7fb4, 200));
             }
         }
     }

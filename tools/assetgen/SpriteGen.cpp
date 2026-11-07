@@ -70,6 +70,13 @@ const Col ONEBIT_DARK = hex(0x101216);
 const Col ONEBIT_LIGHT = hex(0xebebe1);
 
 int g_era = 0;
+// Era 3 "modern indie" look: on only while the era 3 sheets are generated (not the endings).
+bool g_era3Look = false;
+
+// Era 3 palette: one warm-dusk family. Warm key light from the upper left, cool shadows.
+const uint32_t E3_SHADOW = 0x2e2b4a;   // cool shadow tint
+const uint32_t E3_LIGHT = 0xffe2b8;    // warm key light
+const uint32_t E3_INK = 0x241f33;      // outline / darkest ink
 
 // ------------------------------------------------------------------ canvas
 struct Frag {
@@ -189,6 +196,7 @@ struct Canvas {
     // Glitch: shift horizontal bands of target pixels sideways.
     void glitchRows(int seed, float maxShiftUnits)
     {
+        if (g_era3Look) return;   // clean silhouettes in the modern era
         int bandH = std::max(1, ss * (int)std::max(1.0f, tpu / 8));
         std::vector<Col> row(w);
         for (int y0 = 0; y0 < h; y0 += bandH) {
@@ -225,6 +233,19 @@ Fill shade(Col c, float strength = 1.0f)
             o.a = c.a;
             return o;
         }
+        if (g_era3Look) {
+            // Soft two-tone: a clean lit side and a cool shadow side with a short smooth
+            // terminator. No specular hot spots, no noise.
+            float l = -0.55f * f.nx - 0.8f * f.ny;              // towards the upper-left light
+            float t = 0.5f + 0.5f * std::tanh(l * 2.2f);         // 0 shadow .. 1 lit
+            Col shadow = mixc(mul(c, 0.72f), hex(E3_SHADOW), 0.22f);
+            Col light = mixc(c, hex(E3_LIGHT), 0.10f);
+            Col o = mixc(shadow, light, 1.0f + (t - 1.0f) * strength);
+            float rim = f.nx * f.nx + f.ny * f.ny;                // soft occlusion at the edge
+            o = mixc(o, mul(o, 0.85f), clamp01((rim - 0.75f) * 2.0f) * strength);
+            o.a = c.a;
+            return o;
+        }
         float nz2 = 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f;
         float nz = std::sqrt(std::max(0.0f, nz2));
         float lx = -0.45f, ly = -0.65f, lz = 0.62f;
@@ -242,6 +263,7 @@ Fill shade(Col c, float strength = 1.0f)
 // Pixel-sized TV static between two colours, seeded by frame so it flickers.
 Fill staticFill(Col a, Col b, int seed, float density = 0.5f)
 {
+    if (g_era3Look) return shade(mixc(a, b, density * 0.5f));
     return [a, b, seed, density](const Frag& f) {
         float r = rnd(f.ix, f.iy, seed);
         Col c = r < density ? b : a;
@@ -334,6 +356,36 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
                     if (nx >= 0 && ny >= 0 && nx < tw && ny < th && out[(size_t)ny * tw + nx].a > 0) near = true;
                 }
                 if (near) res[(size_t)y * tw + x] = oc;
+            }
+        out = res;
+    }
+    if (outline && g_era3Look) {
+        // A soft ink outline (about 2 px) under the sprite so it reads against any background.
+        std::vector<Col> res = out;
+        Col ink = hex(E3_INK);
+        for (int y = 0; y < th; ++y)
+            for (int x = 0; x < tw; ++x) {
+                float m = 0;
+                for (int dy = -2; dy <= 2; ++dy)
+                    for (int dx = -2; dx <= 2; ++dx) {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= tw || ny >= th) continue;
+                        float d = std::sqrt((float)(dx * dx + dy * dy));
+                        float w = clamp01(2.6f - d);
+                        m = std::max(m, out[(size_t)ny * tw + nx].a * w);
+                    }
+                Col s = out[(size_t)y * tw + x];
+                float oa = m * 0.9f;
+                // sprite over ink
+                float a = s.a + oa * (1 - s.a);
+                Col c{};
+                if (a > 0) {
+                    c.r = (s.r * s.a + ink.r * oa * (1 - s.a)) / a;
+                    c.g = (s.g * s.a + ink.g * oa * (1 - s.a)) / a;
+                    c.b = (s.b * s.a + ink.b * oa * (1 - s.a)) / a;
+                    c.a = a;
+                }
+                res[(size_t)y * tw + x] = c;
             }
         out = res;
     }
@@ -540,6 +592,7 @@ void drawFlyer(Canvas& c, int frame)
     Col wing = eraCol(0x3c9cf0, 0.45f);
     Col eye = eraCol(0xfaf3e6, 1.0f);
     Col pupil = eraCol(0x0f0d1a, 0.0f);
+    if (g_era3Look) { body = hex(0xe0695a); wing = hex(0x9fb6d8); }   // era 3 palette
     if (frame == FF_HURT) { body = eraCol(0xfaf3e6, 1.0f); wing = eraCol(0xf7d73a, 0.9f); }
     float flap = std::sin(frame * 1.5707963f);
     float wy = 0.5f - 0.3f * flap;
@@ -615,7 +668,15 @@ void drawBoss(Canvas& c, int frame)
 }
 
 // ------------------------------------------------------------------ tiles
+void drawTileOld(Canvas& c, int t);
+void drawTile3(Canvas& c, int t);
 void drawTile(Canvas& c, int t)
+{
+    if (g_era3Look) { drawTile3(c, t); return; }
+    drawTileOld(c, t);
+}
+
+void drawTileOld(Canvas& c, int t)
 {
     switch (t) {
     case T_GROUND_TOP:
@@ -768,6 +829,114 @@ void drawTile(Canvas& c, int t)
     }
 }
 
+// ------------------------------------------------------------------ era 3 tiles
+// Era 3 (modern indie) terrain: flat colour fields with clean bevels, a limited warm palette,
+// no random speckle. Light comes from the upper left; shadows lean cool.
+void drawTile3(Canvas& c, int t)
+{
+    auto bevel = [](Col base, float hi, float lo) {
+        return [base, hi, lo](const Frag& f) {
+            // flat face, a lit top/left edge and a cool bottom/right edge
+            float ex = std::fabs(f.nx), ey = std::fabs(f.ny);
+            Col o = base;
+            if (f.ny < -0.78f || f.nx < -0.84f) o = mixc(base, hex(E3_LIGHT), hi);
+            else if (f.ny > 0.74f || f.nx > 0.82f) o = mixc(mul(base, 0.78f), hex(E3_SHADOW), lo);
+            (void)ex; (void)ey;
+            o.a = base.a;
+            return o;
+        };
+    };
+    switch (t) {
+    case T_GROUND_TOP:
+    case T_GROUND: {
+        // earth in three soft strata, darker with depth
+        Col e0 = hex(0xa0694b), e1 = hex(0x86553f), e2 = hex(0x6c4537);
+        c.rect(0, 0, 1, 1, [&](const Frag& f) {
+            float y = f.y + 0.035f * std::sin(f.x * 6.2831853f);   // tiles join on x
+            Col d = y < 0.42f ? e0 : (y < 0.76f ? e1 : e2);
+            return d;
+        });
+        // two smooth pebbles at fixed spots, same on every tile so it reads as pattern, not noise
+        c.ellipse(0.28f, 0.6f, 0.07f, 0.045f, shade(hex(0xc39a7a), 0.8f));
+        c.ellipse(0.74f, 0.86f, 0.055f, 0.035f, shade(hex(0xb48a6c), 0.8f));
+        if (t == T_GROUND_TOP) {
+            Col g0 = hex(0x9cc06a), g1 = hex(0x6f9a52), lip = hex(0x557a45);
+            c.rect(0, 0, 1, 0.27f, [&](const Frag& f) {
+                if (f.y < 0.07f) return mixc(g0, hex(E3_LIGHT), 0.25f);   // sunlit rim
+                return mixc(g0, g1, clamp01((f.y - 0.07f) / 0.2f));
+            });
+            // a scalloped grass lip hanging over the earth, periodic so tiles join
+            c.shape(0, 0.2f, 1, 0.42f, [&](Frag& f) {
+                float w = 0.33f + 0.05f * std::sin(f.x * 6.2831853f * 4);
+                f.nx = 0; f.ny = 0;
+                return f.y < w;
+            }, solid(lip));
+            c.shape(0, 0.2f, 1, 0.42f, [&](Frag& f) {
+                float w = 0.30f + 0.05f * std::sin(f.x * 6.2831853f * 4);
+                f.nx = 0; f.ny = 0;
+                return f.y < w;
+            }, solid(g1));
+        }
+        break;
+    }
+    case T_BLOCK:
+    case T_CRACKED: {
+        // warm terracotta bricks (block) or cool stone (cracked), matte with a crisp bevel
+        Col brick = t == T_BLOCK ? hex(0xc4775a) : hex(0xa49cb0);
+        Col mortar = t == T_BLOCK ? hex(0x7a4c45) : hex(0x5c566e);
+        c.rect(0, 0, 1, 1, solid(mortar));
+        for (int row = 0; row < 2; ++row)
+            for (int col = -1; col < 2; ++col) {
+                float off = row ? 0.25f : -0.25f;
+                float x = col * 0.5f + 0.25f + off;
+                c.rect(x + 0.035f, row * 0.5f + 0.04f, 0.43f, 0.42f, bevel(brick, 0.35f, 0.25f), 0.04f);
+            }
+        if (t == T_CRACKED) {
+            Col crack = hex(E3_INK);
+            c.capsule(0.5f, 0.0f, 0.38f, 0.32f, 0.03f, solid(crack));
+            c.capsule(0.38f, 0.32f, 0.6f, 0.58f, 0.03f, solid(crack));
+            c.capsule(0.6f, 0.58f, 0.46f, 1.0f, 0.03f, solid(crack));
+            c.capsule(0.6f, 0.58f, 0.85f, 0.7f, 0.025f, solid(crack));
+        }
+        break;
+    }
+    case T_P1:
+    case T_P2: {   // translucent memory glass: amber for Gran, sky blue for Sam
+        Col base = t == T_P1 ? hex(0xeea35a) : hex(0x6aa8dc);
+        Col glow = t == T_P1 ? hex(0xffe0a8) : hex(0xcfeaff);
+        c.rect(0.02f, 0.02f, 0.96f, 0.52f, bevel(withA(base, 0.86f), 0.45f, 0.3f), 0.1f);
+        c.rect(0.14f, 0.1f, 0.72f, 0.08f, solid(withA(glow, 0.9f)), 0.04f);
+        for (int i = 0; i < 3; ++i) c.circle(0.22f + i * 0.28f, 0.37f, 0.035f, solid(withA(glow, 0.8f)));
+        break;
+    }
+    case T_WALL: {   // climbable stone pillar with a single tidy vine
+        Col stone = hex(0x9a96a8), dark = hex(0x4e4a62);
+        c.rect(0, 0, 1, 1, solid(dark));
+        c.rect(0.05f, 0.04f, 0.9f, 0.42f, bevel(stone, 0.3f, 0.25f), 0.05f);
+        c.rect(0.05f, 0.54f, 0.9f, 0.42f, bevel(stone, 0.3f, 0.25f), 0.05f);
+        Col vine = hex(0x557a45), leaf = hex(0x86ad5e);
+        c.capsule(0.22f, 0.0f, 0.3f, 0.5f, 0.03f, solid(vine));
+        c.capsule(0.3f, 0.5f, 0.2f, 1.0f, 0.03f, solid(vine));
+        c.ellipse(0.38f, 0.28f, 0.07f, 0.04f, shade(leaf));
+        c.ellipse(0.14f, 0.74f, 0.07f, 0.04f, shade(leaf));
+        break;
+    }
+    case T_FRAG0:
+    case T_FRAG1: {   // a clean golden memory shard with a soft halo
+        float s = t == T_FRAG0 ? 1.0f : 0.88f;
+        Col gold = hex(0xf6c75e), white = hex(0xfff4d8);
+        c.circle(0.5f, 0.5f, 0.44f, [&](const Frag& f) {
+            float d = std::sqrt(f.nx * f.nx + f.ny * f.ny);
+            return withA(hex(0xffd88a), (1 - d) * (1 - d) * 0.5f);
+        });
+        c.poly({{0.5f, 0.5f - 0.34f * s}, {0.5f + 0.21f * s, 0.5f}, {0.5f, 0.5f + 0.34f * s}, {0.5f - 0.21f * s, 0.5f}}, shade(gold, 0.8f));
+        c.poly({{0.5f, 0.5f - 0.34f * s}, {0.5f, 0.5f + 0.34f * s}, {0.5f - 0.21f * s, 0.5f}}, solid(withA(white, 0.45f)));
+        break;
+    }
+    default: drawTileOld(c, t); break;   // pickups keep their shapes, shaded with the era 3 light
+    }
+}
+
 // ------------------------------------------------------------------ backgrounds
 // Background layers are drawn straight into pixels (no shapes), tiling on x.
 struct Px {
@@ -798,8 +967,128 @@ float ridge(float x, int w, int seed, float a1, float a2, float a3)
 
 Col q(Col c, int x, int y) { return quantize(c, x, y); }
 
+
+// Era 3 backgrounds: a smooth dusk sky and three silhouette layers that get lighter, bluer
+// and less saturated with distance (atmospheric perspective). One palette, no rainbow.
+void bgLayer3(Px& p, int layer)
+{
+    const int W = p.w, H = p.h;
+    const Col skyTop = hex(0x46557a), skyMid = hex(0x9a8aa6), skyLow = hex(0xf0bf93), haze = hex(0xe9c3a6);
+    auto smooth = [](float e0, float e1, float x) { float t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+    if (layer == 0) {
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                float t = (float)y / H;
+                Col c = mixc(skyTop, skyMid, smooth(0.0f, 0.5f, t));
+                c = mixc(c, skyLow, smooth(0.38f, 0.78f, t));
+                // a big soft sun low on the horizon (twice across the tiling width)
+                float dx = (float)(x % (W / 2)) - W * 0.3f, dy = y - H * 0.6f;
+                float d = std::sqrt(dx * dx + dy * dy) / H;
+                c = mixc(c, hex(0xffe6bf), clamp01(0.42f - d) * 1.1f);
+                if (d < 0.07f) c = mixc(c, hex(0xfff3dc), smooth(0.07f, 0.06f, d));
+                p.set(x, y, c);
+            }
+        // a few long, soft cloud bands catching the light
+        for (int i = 0; i < 5; ++i) {
+            float cy = H * (0.18f + 0.07f * (i % 3)), cx = (i + 0.2f) * W / 5.0f, len = W * 0.12f, th = H * 0.018f;
+            for (int y = (int)(cy - th * 2); y <= cy + th * 2; ++y)
+                for (int x = (int)(cx - len); x <= cx + len; ++x) {
+                    float nx = (x - cx) / len, ny = (y - cy) / th;
+                    float k = 1 - (nx * nx + ny * ny * 0.6f);
+                    if (k <= 0) continue;
+                    Col cc = mixc(hex(0xf6d2b4), hex(0xb79ab0), clamp01(0.5f + ny * 0.4f));
+                    p.set(x, y, withA(cc, clamp01(k * 1.5f) * 0.55f));
+                }
+        }
+        return;
+    }
+    // silhouette colour per layer, mixed toward the haze with distance
+    const Col sil[4] = {Col{}, hex(0x8c7f9c), hex(0x5f5574), hex(0x3a3550)};
+    const float hazeK[4] = {0, 0.55f, 0.28f, 0.08f};
+    Col layerCol = mixc(sil[layer], haze, hazeK[layer]);
+    auto put = [&](int x, int y, Col c, float a = 1.0f) { p.set(x, y, withA(c, a)); };
+    // ground silhouettes: rolling hills, each fading slightly into haze at the base
+    for (int x = 0; x < W; ++x) {
+        float top;
+        if (layer == 1) top = H * 0.56f + ridge((float)x, W, 3, 22, 10, 3);
+        else if (layer == 2) top = H * 0.70f + ridge((float)x, W, 7, 12, 5, 2);
+        else top = H * 0.86f + ridge((float)x, W, 11, 6, 3, 1);
+        for (int y = (int)top; y < H; ++y) {
+            float d = (y - top) / (H - top + 1);
+            Col c = mixc(layerCol, haze, d * 0.12f * (4 - layer));
+            if (y - top < 3) c = mixc(c, hex(E3_LIGHT), 0.12f);   // a faint sunlit rim
+            float cover = clamp01(y + 1 - top);                   // anti-aliased skyline
+            put(x, y, c, cover);
+        }
+    }
+    auto ell = [&](float cx, float cy, float rx, float ry, Col c) {
+        for (int y = (int)(cy - ry - 1); y <= cy + ry + 1; ++y)
+            for (int x = (int)(cx - rx - 1); x <= cx + rx + 1; ++x) {
+                float nx = (x + 0.5f - cx) / rx, ny = (y + 0.5f - cy) / ry;
+                float r = std::sqrt(nx * nx + ny * ny);
+                float a = clamp01((1 - r) * std::min(rx, ry));   // anti-aliased edge
+                if (a <= 0) continue;
+                put(x, y, c, a);
+            }
+    };
+    auto rect = [&](float x0, float y0, float w, float h, Col c) {
+        for (int y = (int)y0; y < y0 + h; ++y)
+            for (int x = (int)x0; x < x0 + w; ++x) put(x, y, c);
+    };
+    if (layer == 1) {   // distant hilltop trees, tiny and hazy
+        for (int i = 0; i < 18; ++i) {
+            float x = (i + 0.5f) * W / 18.0f + rnd(i, 1, 31) * 20;
+            float y = H * 0.56f + ridge(x, W, 3, 22, 10, 3);
+            ell(x, y - 3, 5 + rnd(i, 2, 31) * 3, 5, layerCol);
+        }
+    }
+    if (layer == 2) {   // a quiet row of houses, gable roofs, a few warm windows
+        Col house = layerCol, roof = mixc(layerCol, hex(0x2e2b4a), 0.18f);
+        for (int i = 0; i < 9; ++i) {
+            float x = i * W / 9.0f + rnd(i, 3, 3) * 30, w = 64 + rnd(i, 4, 4) * 30, hgt = 44 + rnd(i, 5, 5) * 26;
+            float y = H * 0.74f - hgt;
+            rect(x, y, w, hgt + 40, house);
+            float rh = w * 0.42f;
+            for (int r = 0; r < (int)rh; ++r) {
+                float half = (w * 0.5f + 5) * (r / rh);
+                rect(x + w * 0.5f - half, y - rh + r, half * 2, 1, roof);
+            }
+            rect(x + w * 0.62f, y - rh * 0.9f, 7, rh * 0.6f, roof);   // chimney
+            for (int wx = 0; wx < 2; ++wx)
+                if (rnd(i, wx, 7) < 0.55f) {
+                    float wxp = x + 12 + wx * (w - 34), wyp = y + 12;
+                    rect(wxp - 1, wyp - 1, 12, 15, mixc(house, hex(0x2e2b4a), 0.2f));
+                    rect(wxp, wyp, 10, 13, hex(0xf6cf8e));
+                }
+        }
+    }
+    if (layer == 3) {   // near: round trees and lamp posts, the darkest and most saturated layer
+        Col trunk = mixc(layerCol, hex(0x2e2b4a), 0.2f), leaf = mixc(hex(0x48506a), layerCol, 0.4f);
+        for (int i = 0; i < 10; ++i) {
+            float x = (i + 0.5f) * W / 10.0f + rnd(i, 9, 3) * 30;
+            float baseY = H * 0.86f + ridge(x, W, 11, 6, 3, 1);
+            if (i % 3 != 2) {
+                rect(x - 2.5f, baseY - 36, 5, 38, trunk);
+                float r = 20 + rnd(i, 10, 3) * 8;
+                ell(x, baseY - 36 - r * 0.6f, r, r * 0.9f, leaf);
+                ell(x - r * 0.5f, baseY - 30 - r * 0.4f, r * 0.6f, r * 0.55f, leaf);
+            } else {   // lamp post with a soft round glow
+                rect(x - 1.5f, baseY - 52, 3, 54, trunk);
+                rect(x - 5, baseY - 56, 10, 4, trunk);
+                for (int y = -26; y <= 26; ++y)
+                    for (int xx = -26; xx <= 26; ++xx) {
+                        float d = std::sqrt((float)(xx * xx + y * y)) / 26.0f;
+                        if (d < 1) put((int)x + xx, (int)baseY - 50 + y, hex(0xffd9a0), (1 - d) * (1 - d) * 0.35f);
+                    }
+                ell(x, baseY - 50, 3.2f, 3.2f, hex(0xfff0d0));
+            }
+        }
+    }
+}
+
 void bgLayer(Px& p, int era, int layer)
 {
+    if (era == 3 && g_era3Look) { bgLayer3(p, layer); return; }
     const int W = p.w, H = p.h;
     float s = H / 112.0f;   // scale relative to the 1-bit size
     if (layer == 0) {       // sky
@@ -976,6 +1265,12 @@ Image wallTexture(int era)
                 c = mixc(hex(0x1a1030), era == 2 ? hex(0x8a7fb4) : hex(0xb0a8d0), n);
                 if (era == 2) c = quantize(c, x, y);
             }
+            if (era == 3 && g_era3Look) {
+                // soft, slow fog: two low-frequency layers in the cool shadow colour, no grain
+                int per = 4;
+                float n = vnoise(y / (float)H * per, fx * 2, per, 3) * 0.7f + vnoise(y / (float)H * per * 2, fx * 3, per * 2, 4) * 0.3f;
+                c = mixc(hex(0x2a2640), hex(0x8f88aa), n * 0.8f);
+            }
             c.a = 1.0f;
             if (era == 3) c.a = clamp01(1.2f - fx * 0.6f);
             d[(size_t)y * W + x] = toColor(c);
@@ -1104,6 +1399,7 @@ int generateSprites(const std::string& dir)
     };
     for (int era = 0; era < ERA_COUNT; ++era) {
         g_era = era;
+        g_era3Look = era == 3;
         std::string d = eraDir(dir, era);
         for (int who = 0; who < 2; ++who)
             save(makeSheet(PF_COUNT, PLAYER_FW, PLAYER_FH, true, [&](Canvas& c, int f) { drawPlayer(c, who, f); }),
@@ -1131,6 +1427,7 @@ int generateSprites(const std::string& dir)
         }
         save(wallTexture(era), d + "wall.png");
     }
+    g_era3Look = false;
     for (int i = 0; i < ENDING_COUNT; ++i) save(endingPicture(i), dir + "/art/ending_" + std::to_string(i) + ".png");
     return n;
 }
