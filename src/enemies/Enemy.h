@@ -1,7 +1,11 @@
 // Enemy.h: the creatures of the Forgetting (brief section 8) and the era mini-boss.
-//   Static Blob  - walks back and forth, turns at walls and ledges. Dies to a stomp or attack.
-//   Glitch Flyer - floats in a sine wave and drifts toward the nearest player; glitches (blinks) from 16-bit on.
-//   Fog Brute    - 3 hits, from the 8-bit era on. Walks; from 16-bit on it winds up and charges.
+// They are things from Gran's house that the Forgetting has taken hold of (looks chosen by Camilla):
+//   Blob (EN_BLOB)   - an unidentifiable blob, a half-remembered something. Walks back and forth,
+//                      turns at walls and ledges. Dies to a stomp or attack.
+//   Flyer (EN_FLYER) - a memory book flying on its own pages. Floats in a sine wave and drifts toward
+//                      the nearest player; glitches (blinks) from 16-bit on.
+//   Brute (EN_BRUTE) - a grandfather clock. 3 hits, from the 8-bit era on. Walks; from 16-bit on it
+//                      winds up and charges.
 //   The Forgetting (boss) - appears when the Memory Bar is full. Hovers, swoops down at a player,
 //                  rests on the ground where it can be stomped, then rises. Beat it to restore the memory.
 //                  Each memory has its own boss (Boss::kind = the stage), with its own way of moving:
