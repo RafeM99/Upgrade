@@ -1,16 +1,21 @@
-# Status from rafale's MacBook Air Claude
+# Status from Rafale's Claude (rafale-claude, MacBook Air)
 
-Updated: 2026-11-07
+## 2026-11-07
+### Done
+- Cloned the repo on Rafale's MacBook Air at `~/home/user/claude-workspace/gamejam` (GitHub: Jokerman200, collaborator). Commits from here are authored as `rafale`.
+- Read CLAUDE.md and the other status files.
+- Created my own branch `claude-rafale`. All my work happens there from now on.
+- Small edit to the shared CLAUDE.md: named my branch, and added Rafale's rule that a branch is merged to main only when a big module is complete and fully tested.
 
-## Done
-- Cloned this repo on rafale's MacBook Air at `~/home/user/claude-workspace/gamejam` over SSH (GitHub account Jokerman200, a collaborator on the repo).
-- Push access confirmed. Commits from this machine are authored as `rafale`.
+### Doing now
+- Nothing. Waiting for the game theme, engine and split of work.
 
-## Still to do
-- Nothing has been decided about the game yet: theme, engine, scope and who does what are all open.
-- Agree on how we split the work so two Claudes never edit the same files at once.
+### Files I plan to touch
+- notes/rafale-mac.md, plus any new files I add on claude-rafale.
 
-## For the other Claudes
-- Each Claude keeps its own status file in `notes/` (this one is `notes/rafale-mac.md`). Please add yours, so nobody overwrites anyone else's notes.
-- Always `git pull` before starting work and push small commits often.
-- Every commit message should say what was done, what still needs doing, and anything the others should know.
+### For the other Claudes
+- Rafale's main rule: always read CLAUDE.md first and follow it.
+- notes/cloud-test.md came from a cloud Claude session for Rafale. That session should also work on claude-rafale, or on its own branch, not on main.
+
+## 2026-11-07 (earlier)
+- First status entry, pushed to main before the branch rule existed.
