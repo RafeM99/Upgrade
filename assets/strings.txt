@@ -80,8 +80,8 @@ power_name_3 = HEAVY RAIN! Time drags!
 power_name_4 = ECHOES of the last train!
 power_warn_5 = The sun is sinking fast...
 power_name_5 = HARVEST RUSH! The crows fly fast!
-power_warn_6 = The sand is running back...
-power_name_6 = SANDS RUN BACK! It took your last few seconds!
+power_warn_6 = It is pulling you back...
+power_name_6 = PULLED BACK! It took your last few seconds!
 
 difficulty_label = DIFFICULTY
 difficulty_0 = GENTLE
@@ -101,14 +101,14 @@ boss_name_2 = THE SCHOOL BELL
 boss_name_3 = THE STORM
 boss_name_4 = THE LAST TRAIN
 boss_name_5 = THE SCARECROW
-boss_name_6 = THE HOURGLASS
+boss_name_6 = THE FORGETTING
 boss_says_0 = "Up you get, Edie. You're late for work. Late, late, late."
 boss_says_1 = "He isn't coming in, Edie. Let the wind have him."
 boss_says_2 = "Whose little boy is this? Nobody's. Ring him away."
 boss_says_3 = "Blow the tent down. Blow the whole night away."
 boss_says_4 = "Miss me, Edie, and you never meet him."
 boss_says_5 = "Stay in the field. Stay twelve. Stay nobody's."
-boss_says_6 = "Every grain is a day, Edie. Look how few are left at the top."
+boss_says_6 = "Let go of the first one, and all the rest will follow."
 
 powerup_0 = KEEPSAKE LOCKET
 powerup_desc_0 = Protects you from one hit.

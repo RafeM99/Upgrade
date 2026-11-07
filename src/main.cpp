@@ -13,7 +13,7 @@
 //   --size W H        window size
 //   --settings        open the Settings screen at start
 //   --set KEY=VALUE   override a setting (keys as in settings.ini, e.g. retro=2)
-// Test runs (--frames / --autoplay) open a hidden window and ignore settings.ini.
+// Test runs (--frames / --autoplay) open a hidden window and ignore settings.ini; add --show to watch one.
 //   --cutscenes       play the boss scenes even with --autoplay (they auto-advance)
 #include "core/Game.h"
 
@@ -27,6 +27,7 @@ int main(int argc, char** argv)
         auto is = [&](const char* s) { return std::strcmp(argv[i], s) == 0; };
         auto next = [&]() { return i + 1 < argc ? argv[++i] : ""; };
         if (is("--autoplay")) o.autoplay = true;
+        else if (is("--show")) o.show = true;   // akshat: watch a test run in a normal window
         else if (is("--two")) o.twoPlayers = true;
         else if (is("--fill")) o.fill = true;
         else if (is("--era")) o.startEra = std::atoi(next());

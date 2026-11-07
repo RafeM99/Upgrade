@@ -5,11 +5,11 @@
 # FORMAT
 #   [scene_name]            starts a scene. Add  vs=<boss>  for the wild-battle "VS" intro.
 #   speaker: text           one line of dialogue. Long text wraps and pages by itself.
-#   Speakers: gran, sam, school_bell, last_train, hourglass, narrator.
+#   Speakers: gran, sam, school_bell, last_train, forgetting, narrator.
 #   A line with no "speaker:" is spoken by the narrator. Lines starting with # are comments.
 #
 # The game plays these scene names (each once per run):
-#   boss_<id>_intro    the boss appears (stage 2 school_bell, stage 4 last_train, stage 6 hourglass)
+#   boss_<id>_intro    the boss appears (stage 2 school_bell, stage 4 last_train, stage 6 forgetting)
 #   boss_<id>_defeat   the boss is beaten, before the world upgrades (or the ending)
 # Which stages have a boss: [boss] stages in config.ini.
 # Remove a scene (or all its lines) and the game just skips it.
@@ -41,16 +41,16 @@ gran: He stood up and gave me his seat. He said he'd get off wherever I did.
 sam: And did he?
 gran: Every stop, love. Every stop for sixty years.
 
-# ---- Stage 6, full 3D: home, the oldest memory (1951). The final boss.
-[boss_hourglass_intro vs=hourglass]
-hourglass: Trickle, trickle. Every grain is a day, Edie. Look how few are left at the top.
-gran: Oh, I know you. You sat on Mother's mantelpiece and never said a word.
-sam: Gran, it's running out. It wants the oldest one. The cottage.
-hourglass: The oldest go last. But they all go. Then I turn over, and start again with nothing.
-gran: Then I'll hold on to the bit that matters. Hold my hand, Sam. Tight.
+# ---- Stage 6, full 3D: home, the oldest memory (1951). The final boss: the Forgetting itself.
+[boss_forgetting_intro vs=forgetting]
+forgetting: There you are, Edie. The first one. The last one. I saved it till the end.
+gran: I know you. You're the one who takes the days back. You took this morning.
+sam: Gran, it's after the cottage. If that goes, it all goes.
+forgetting: Let go of the first one, and all the rest will follow. Every clock runs back to me.
+gran: Then it can run back without me. Hold my hand, Sam. Tight.
 
-[boss_hourglass_defeat]
-hourglass: You can't stop the sand, Edie... nobody can...
-gran: No. But I can sit with it a while. With him.
+[boss_forgetting_defeat]
+forgetting: You can't keep them... not for ever...
+gran: No. Not for ever. Just for now. Now is enough.
 sam: The cottage is still there, Gran. Your mum's at the gate.
 gran: Then let's not keep her waiting. Tea's at five.

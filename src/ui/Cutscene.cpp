@@ -64,7 +64,7 @@ const Voice VOICES[] = {
     {"sam", 1.32f, 44, 0x3c9cf0},
     {"school_bell", 1.18f, 34, 0xd8a030},
     {"last_train", 0.62f, 30, 0x3a9a5c},
-    {"hourglass", 0.5f, 26, 0xc89a50},
+    {"forgetting", 0.5f, 26, 0xa070e0},
     {"narrator", 1.0f, 40, 0xb8b0c8},
 };
 const Voice& voice(const std::string& id)
@@ -73,7 +73,7 @@ const Voice& voice(const std::string& id)
     return VOICES[5];
 }
 // The three bosses and the stage each belongs to (Boss::kind).
-int bossKindOf(const std::string& id) { return id == "school_bell" ? 2 : id == "last_train" ? 4 : id == "hourglass" ? 6 : -1; }
+int bossKindOf(const std::string& id) { return id == "school_bell" ? 2 : id == "last_train" ? 4 : id == "forgetting" ? 6 : -1; }
 bool isBoss(const std::string& id) { return bossKindOf(id) >= 0; }
 std::string speakerName(const std::string& id)
 {
@@ -126,17 +126,10 @@ void portrait(Game& g, const std::string& who, float cx, float bottom, float h, 
         int fr = talking ? art::PF_IDLE0 + ((int)(t * 5) % 2) : art::PF_IDLE0;
         sprite(tex, frameRect(tex, fr, art::PLAYER_FW, art::PLAYER_FH, e), e, cx, bottom, h, flip, tint);
     } else if (isBoss(who)) {
-        // this memory's own boss sheet; the full-3D stage has none, so the Hourglass brings its own
+        // this memory's own boss sheet; the full-3D stage uses its Forgetting sprite (enemy_boss.png)
         const bool own = A.storyBoss.id && bossKindOf(who) == e;
         const Texture2D* tex = own ? &A.storyBoss : nullptr;
         bool smooth = false;
-        if (!tex && who == "hourglass" && g_hourglass) {
-            if (g_hourglass->id == 0) {
-                *g_hourglass = LoadTexture(assetPath("art/era3/enemy_boss_hourglass.png").c_str());
-                SetTextureFilter(*g_hourglass, TEXTURE_FILTER_BILINEAR);
-            }
-            if (g_hourglass->id) { tex = g_hourglass; smooth = true; }
-        }
         if (!tex) tex = A.storyBoss.id ? &A.storyBoss : &A.boss;
         // the hourglass sheet's fourth frame is its dizzy face; the others' is their grey hurt frame
         int hurtFr = smooth ? art::XF_SLAM : art::XF_HURT;
@@ -233,7 +226,7 @@ void drawBars(float p, bool in)
 // ------------------------------------------------------------------ script file
 std::string Cutscene::bossId(int kind)
 {
-    return kind == 2 ? "school_bell" : kind == 4 ? "last_train" : kind == 6 ? "hourglass" : "";
+    return kind == 2 ? "school_bell" : kind == 4 ? "last_train" : kind == 6 ? "forgetting" : "";
 }
 
 void Cutscene::unload()

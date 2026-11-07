@@ -37,6 +37,7 @@ struct PowerUp {
 };
 
 struct Options {
+    bool show = false;       // akshat: --show, a test run in a visible window you can watch
     bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false, story = true;
     int startEra = 0, maxFrames = 0, shotEvery = 0;
     int difficulty = -1;   // --difficulty; -1: use [boss] difficulty in config.ini

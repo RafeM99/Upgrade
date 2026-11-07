@@ -38,7 +38,7 @@ void Game::init(const Options& o)
 {
     opt = o;
     // automated runs (--frames / --autoplay) open no visible window; screenshots still work
-    const bool hidden = opt.maxFrames > 0 || opt.autoplay;
+    const bool hidden = (opt.maxFrames > 0 || opt.autoplay) && !opt.show;
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | (hidden ? FLAG_WINDOW_HIDDEN : 0));
     InitWindow(opt.width, opt.height, "Upgrade");
     // akshat: a normal run always comes to the front, even when started from a terminal or a
