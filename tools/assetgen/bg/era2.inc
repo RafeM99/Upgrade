@@ -19,137 +19,176 @@ static void e2_block(Scene& sc, int x, int y, int b, uint32_t c)
         for (int i = 0; i < b; ++i) sc.put(x + i, y + j, hex(c));
 }
 
-struct E2Ell { float cx, cy, rx, ry; };
+// Leaf colour sets (lit, mid, shadow): shadows lean blue or purple, light leans yellow. It is
+// early September, so a few trees have started to turn.
+struct E2Hue { uint32_t lit, mid, dark; };
+static const E2Hue E2_HUES[6] = {
+    {e2::C_LIME, e2::C_GREEN, e2::C_NAVY},      // 0 summer green
+    {e2::C_LIME, e2::C_GREEN, e2::C_SLATE},     // 1 green with a purple-grey shade
+    {e2::C_YELLOW, e2::C_LIME, e2::C_GREEN},    // 2 turning, yellow-lit
+    {e2::C_YELLOW, e2::C_ORANGE, e2::C_BROWN},  // 3 autumn
+    {e2::C_ORANGE, e2::C_BROWN, e2::C_PLUM},    // 4 copper beech
+    {e2::C_GREEN, e2::C_SLATE, e2::C_NAVY}};    // 5 dark evergreen
 
-// A canopy made of block clusters: the union of a few ellipses (in block units, relative to
-// the tree base), jagged at the edge, lit from the top left with clustered three-tone shading.
-static void e2_canopy(Scene& sc, int x0, int y0, int b, const E2Ell* e, int n, int seed,
-                      uint32_t lit, uint32_t mid, uint32_t dark)
+// A crown (ellipse, in pixels) filled with clumps; appended to bl.
+static void e2_crown(std::vector<E1Blob>& bl, float cx, float cy, float rx, float ry, int seed)
 {
-    float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
-    for (int i = 0; i < n; ++i) {
-        minx = std::min(minx, e[i].cx - e[i].rx); maxx = std::max(maxx, e[i].cx + e[i].rx);
-        miny = std::min(miny, e[i].cy - e[i].ry); maxy = std::max(maxy, e[i].cy + e[i].ry);
-    }
-    for (int by = (int)std::floor(miny) - 1; by <= (int)std::ceil(maxy) + 1; ++by) {
-        int off = (int)(rnd(by / 2, 7, seed) * 2);   // clusters stagger row to row
-        for (int bx = (int)std::floor(minx) - 1; bx <= (int)std::ceil(maxx) + 1; ++bx) {
-            float mx = bx + 0.5f, my = by + 0.5f;
-            float best = 1e9f, nx = 0, ny = 0;
-            for (int i = 0; i < n; ++i) {
-                float dx = (mx - e[i].cx) / e[i].rx, dy = (my - e[i].cy) / e[i].ry;
-                float d = dx * dx + dy * dy;
-                if (d < best) { best = d; nx = dx; ny = dy; }
-            }
-            float jit = (rnd(bx, by, seed + 1) - 0.5f) * 0.35f;
-            if (best > 1.0f + jit) continue;
-            float cl = rnd((bx + off) / 2 + 50, (by + 40) / 2, seed + 2) - 0.5f;
-            float sh = -0.55f * nx - 0.8f * ny + 0.55f * cl + (rnd(bx, by, seed + 3) - 0.5f) * 0.12f;
-            uint32_t c = sh > 0.32f ? lit : sh < -0.42f ? dark : mid;
-            e2_block(sc, x0 + bx * b, y0 + by * b, b, c);
+    std::vector<E1Blob> c;
+    float m = std::min(rx, ry);
+    c.push_back({cx, cy, m * 0.6f});
+    for (int ring = 0; ring < 2; ++ring) {
+        int n = ring == 0 ? 5 : 8 + (ry > rx * 1.2f ? 3 : 0) + (rx > ry * 1.2f ? 2 : 0);
+        float d = ring == 0 ? 0.4f : 0.72f;
+        for (int i = 0; i < n; ++i) {
+            float a = (i + 0.5f * ring) * 6.2831853f / n + (rnd(i, seed + ring, 61) - 0.5f) * 0.5f;
+            float rr = m * (0.28f + 0.1f * rnd(i, seed + ring, 62));
+            c.push_back({cx + std::cos(a) * rx * d, cy + std::sin(a) * ry * d, rr});
         }
     }
+    std::sort(c.begin() + 1, c.end(), [](const E1Blob& p, const E1Blob& q) { return p.y < q.y; });
+    for (auto& q : c) bl.push_back(q);
 }
 
-// A straight 2-block trunk, lighter on the left, from the base up `h` blocks.
-static void e2_trunk(Scene& sc, int x0, int y0, int b, int h)
+static void e2_paintCanopy(Scene& sc, const std::vector<E1Blob>& bl, const E2Hue& h)
 {
-    for (int j = 1; j <= h; ++j) {
-        e2_block(sc, x0 - b, y0 - j * b, b, e2::C_BROWN);
-        e2_block(sc, x0, y0 - j * b, b, e2::C_PLUM);
-    }
+    clumpCanopy(bl, 1, 2, [&](int x, int y, int l, bool) { sc.put(x, y, hex(l == 0 ? h.lit : l == 1 ? h.mid : h.dark)); });
 }
 
-static void e2_tuft(Scene& sc, int x0, int y0, int b, int w, int seed)
+// A straight trunk tw pixels wide, lighter on the left, from the base up h pixels.
+static void e2_trunk(Scene& sc, int x0, int y0, int tw, int h)
+{
+    for (int j = 1; j <= h; ++j)
+        for (int i = 0; i < tw; ++i) sc.put(x0 - tw / 2 + i, y0 - j, hex(i < (tw + 1) / 2 ? e2::C_BROWN : e2::C_PLUM));
+}
+
+// A grass tuft at a tree's foot: a short, calm row of blades.
+static void e2_tuft(Scene& sc, int x0, int y0, int w, int seed)
 {
     for (int i = -w; i < w; ++i) {
-        float r = rnd(i, 3, seed);
-        uint32_t c = r < 0.45f ? e2::C_LIME : r < 0.85f ? e2::C_GREEN : e2::C_NAVY;
-        e2_block(sc, x0 + i * b, y0 - b, b, c);
-        if (std::abs(i) < w - 1 && rnd(i, 4, seed) < 0.45f)
-            e2_block(sc, x0 + i * b, y0 - 2 * b, b, rnd(i, 5, seed) < 0.5f ? e2::C_LIME : e2::C_GREEN);
+        int h = 1 + (int)(rnd(i, 4, seed) * 2.5f) * (std::abs(i) < w - 2 ? 1 : 0);
+        for (int j = 1; j <= h; ++j) sc.put(x0 + i, y0 - j, hex(j == h && (i + seed) % 3 == 0 ? e2::C_LIME : e2::C_GREEN));
     }
 }
 
 // The six tree kinds of the reference: 0 round, 1 tall oval, 2 stepped pine, 3 forked with two
-// canopies, 4 wide round, 5 tall narrow. b = block size in pixels, k = size in blocks.
-static void e2_tree(Scene& sc, float xf, float yf, int kind, int b, float k, int seed)
+// canopies, 4 wide round, 5 tall narrow. k = size (1 = about 16 px crown), hue = E2_HUES index,
+// flip mirrors the tree, so no two neighbours are the same.
+static void e2_tree(Scene& sc, float xf, float yf, int kind, float k, int seed, int hue, bool flip)
 {
-    const uint32_t L = e2::C_LIME, M = e2::C_GREEN, D = e2::C_NAVY;
+    const E2Hue& H = E2_HUES[hue];
     int x0 = (int)xf, y0 = (int)yf;
+    float f = flip ? -1.0f : 1.0f;
     auto K = [&](float v) { return v * k; };
-    if (kind == 2) {   // pine: stepped tiers, each wider at its bottom
-        e2_trunk(sc, x0, y0, b, (int)std::lround(K(4)));
+    int tw = std::max(2, (int)std::lround(K(2.2f)));
+    std::vector<E1Blob> bl;
+    if (kind == 2) {   // pine: stepped tiers, each wider at its bottom, clean three-tone shading
+        e2_trunk(sc, x0, y0, tw, (int)K(7));
         int tiers = 5;
-        float baseY = -K(3.5f), tierH = K(5.0f), step = K(3.6f);
+        float baseY = -K(6), tierH = K(10), step = K(7);
         for (int t = 0; t < tiers; ++t) {
-            float ty = baseY - t * step;                  // bottom of this tier (blocks)
-            float hw = K(9.0f) * (1.0f - t * 0.17f);       // half width at the bottom
-            for (int r = 0; r < (int)std::lround(tierH); ++r) {
-                int by = (int)std::lround(ty) - 1 - r;
-                float half = std::max(0.7f, hw * (1.0f - (float)r / tierH * 0.8f));
+            float ty = baseY - t * step;
+            float hw = K(16.0f) * (1.0f - t * 0.17f);
+            int rows = (int)std::lround(tierH);
+            for (int r = 0; r < rows; ++r) {
+                int y = y0 + (int)std::lround(ty) - 1 - r;
+                float half = std::max(1.0f, hw * (1.0f - (float)r / tierH * 0.8f));
                 int hb = (int)std::lround(half);
+                if (r == 0 && rnd(t, seed, 5) < 0.5f) hb -= 1;
                 for (int bx = -hb; bx < hb; ++bx) {
-                    if (std::abs(bx) == hb - 1 && rnd(bx, by, seed) < 0.3f) continue;   // ragged tips
-                    float nx = (bx + 0.5f) / std::max(1.0f, half);
-                    float ny = 1.0f - 2.0f * r / tierH;
-                    float cl = rnd((bx + 30) / 2, (by + 60) / 2, seed + 2) - 0.5f;
-                    float sh = -0.45f * nx - 0.75f * ny + 0.5f * cl + 0.1f;
-                    e2_block(sc, x0 + bx * b, y0 + by * b, b, sh > 0.3f ? L : sh < -0.4f ? D : M);
+                    float nx = f * (bx + 0.5f) / std::max(1.0f, half);
+                    uint32_t c = H.mid;
+                    if (nx < -0.3f && r > 1) c = H.lit;
+                    if (nx > 0.4f || r < 2) c = H.dark;
+                    if (r < 2 && nx < -0.5f) c = H.mid;
+                    sc.put(x0 + bx, y, hex(c));
                 }
             }
         }
-        int top = (int)std::lround(baseY - (tiers - 1) * step - tierH);
-        e2_block(sc, x0 - b, y0 + (top - 1) * b, b, L);
-        e2_block(sc, x0, y0 + (top - 1) * b, b, M);
-        e2_block(sc, x0 - b, y0 + (top - 2) * b, b, M);
-        e2_tuft(sc, x0, y0, b, 5, seed + 9);
+        int top = y0 + (int)std::lround(baseY - (tiers - 1) * step - tierH);
+        for (int j = 1; j <= (int)K(3); ++j) sc.put(x0 - 1, top - j, hex(H.mid));
+        e2_tuft(sc, x0, y0, (int)K(9), seed + 9);
         return;
     }
-    if (kind == 3) {   // forked: trunk splits into a Y, one big canopy and one smaller
-        int th = (int)std::lround(K(5));
-        e2_trunk(sc, x0, y0, b, th);
-        for (int j = 0; j < (int)std::lround(K(6)); ++j) {   // left branch
-            int bx = -1 - (int)(j * 0.6f), by = -th - 1 - j;
-            e2_block(sc, x0 + bx * b, y0 + by * b, b, e2::C_BROWN);
-            e2_block(sc, x0 + (bx + 1) * b, y0 + by * b, b, e2::C_PLUM);
+    if (kind == 3) {   // forked: the trunk splits into a Y, a big canopy and a smaller one
+        int th = (int)K(10);
+        e2_trunk(sc, x0, y0, tw, th);
+        for (int j = 0; j < (int)K(12); ++j) {
+            int bx = (int)(f * (-1 - j * 0.6f)), by = -th - 1 - j;
+            for (int i = 0; i < std::max(2, tw - 1); ++i) sc.put(x0 + bx + i - 1, y0 + by, hex(i == 0 ? e2::C_BROWN : e2::C_PLUM));
         }
-        for (int j = 0; j < (int)std::lround(K(4)); ++j) {   // right branch
-            int bx = 1 + (int)(j * 1.1f), by = -th - 1 - (int)(j * 0.6f);
-            e2_block(sc, x0 + (bx - 1) * b, y0 + by * b, b, e2::C_BROWN);
-            e2_block(sc, x0 + bx * b, y0 + by * b, b, e2::C_PLUM);
+        for (int j = 0; j < (int)K(8); ++j) {
+            int bx = (int)(f * (1 + j * 1.1f)), by = -th - 1 - (int)(j * 0.6f);
+            for (int i = 0; i < std::max(2, tw - 1); ++i) sc.put(x0 + bx + i - 1, y0 + by, hex(i == 0 ? e2::C_BROWN : e2::C_PLUM));
         }
-        E2Ell a[1] = {{K(-4.5f), K(-18), K(7), K(6.5f)}};
-        E2Ell c[1] = {{K(5.5f), K(-13.5f), K(5.5f), K(5.5f)}};
-        e2_canopy(sc, x0, y0, b, c, 1, seed + 20, L, M, D);
-        e2_canopy(sc, x0, y0, b, a, 1, seed, L, M, D);
-        e2_tuft(sc, x0, y0, b, 5, seed + 9);
+        e2_crown(bl, x0 + f * K(11), y0 - K(27), K(11), K(11), seed + 20);
+        e2_paintCanopy(sc, bl, H);
+        bl.clear();
+        e2_crown(bl, x0 - f * K(9), y0 - K(36), K(14), K(13), seed);
+        e2_paintCanopy(sc, bl, H);
+        e2_tuft(sc, x0, y0, (int)K(9), seed + 9);
         return;
     }
-    E2Ell e[2];
-    int n = 1, th = 6;
+    float cx = 0, cy = -26, rx = 16, ry = 14, th = 14;
     switch (kind) {
-    case 0: e[0] = {0, K(-13), K(8), K(7)}; th = (int)K(7); break;
-    case 1: e[0] = {0, K(-17), K(6.5f), K(10.5f)}; th = (int)K(7); break;
-    case 4: e[0] = {0, K(-12.5f), K(10.5f), K(7.5f)}; th = (int)K(6); break;
-    default: e[0] = {0, K(-17), K(5.5f), K(11)}; e[1] = {K(-0.5f), K(-27), K(4), K(4.5f)}; n = 2; th = (int)K(7); break;
+    case 0: break;
+    case 1: cy = -34; rx = 13; ry = 21; break;
+    case 4: cy = -25; rx = 21; ry = 15; th = 12; break;
+    default: cy = -36; rx = 11; ry = 24; break;   // tall narrow
     }
-    e2_trunk(sc, x0, y0, b, th);
-    e2_canopy(sc, x0, y0, b, e, n, seed, L, M, D);
-    e2_tuft(sc, x0, y0, b, 5, seed + 9);
+    e2_trunk(sc, x0, y0, tw, (int)K(th) + (int)K(ry * 0.5f));
+    e2_crown(bl, x0 + f * K(cx), y0 + K(cy), K(rx), K(ry), seed);
+    if (kind == 5) e2_crown(bl, x0 - f * K(1), y0 + K(cy - ry * 0.95f), K(rx * 0.6f), K(ry * 0.35f), seed + 3);
+    e2_paintCanopy(sc, bl, H);
+    e2_tuft(sc, x0, y0, (int)K(9), seed + 9);
 }
 
-// A low bush: one wide cluster canopy, sometimes with flowers.
-static void e2_bush(Scene& sc, float x, float y, int b, float w, int seed, bool flowers)
+// A low bush: a wide clump canopy, sometimes with flowers. w = half width in pixels.
+static void e2_bush(Scene& sc, float x, float y, float w, int seed, int hue, bool flowers)
 {
-    E2Ell e[2] = {{0, -3.2f, w, 3.4f}, {w * 0.35f, -4.0f, w * 0.55f, 3.0f}};
-    e2_canopy(sc, (int)x, (int)y, b, e, 2, seed, e2::C_LIME, e2::C_GREEN, e2::C_NAVY);
-    if (!flowers) return;
-    for (int i = 0; i < (int)(w * 1.5f); ++i) {
-        int fx = (int)x + (int)((rnd(i, 1, seed) * 2 - 1) * w * 0.8f) * b;
-        int fy = (int)y - (int)(1.5f + rnd(i, 2, seed) * 4) * b;
-        sc.put(fx, fy, hex(i % 2 ? e2::C_PINK : e2::C_YELLOW));
+    std::vector<E1Blob> bl;
+    float h = w * (0.45f + 0.15f * rnd(seed, 1, 7));
+    float f = rnd(seed, 2, 7) < 0.5f ? -1.0f : 1.0f;
+    e2_crown(bl, x, y - h * 0.9f, w, h, seed);
+    bl.push_back({x + f * w * 0.45f, y - h * 1.3f, h * 0.7f});
+    e2_paintCanopy(sc, bl, E2_HUES[hue]);
+    for (int i = 0; flowers && i < (int)(w * 0.6f); ++i) {
+        int fx = (int)x + (int)((rnd(i, 1, seed) * 2 - 1) * w * 0.8f);
+        int fy = (int)y - (int)(2 + rnd(i, 2, seed) * h * 1.2f);
+        sc.put(fx, fy, hex(i % 2 ? e2::C_PINK : e2::C_WHITE));
     }
+}
+
+// A stepped cloud in 2-px blocks, each one its own shape (puff count, sizes and spread from
+// seed). White top, warm peach underside in the morning light.
+static void e2_cloud(Scene& sc, float cx, float cy, float size, int seed, float stretch)
+{
+    const int b = 2;
+    struct P { float x, y, r; };
+    std::vector<P> puffs;
+    int n = 2 + (int)(rnd(seed, 1, 91) * 4);
+    float span = size * (1.0f + stretch);
+    int big = (int)(rnd(seed, 2, 91) * n);
+    for (int i = 0; i < n; ++i) {
+        float t = n == 1 ? 0 : (float)i / (n - 1) * 2 - 1;
+        float r = size * (0.45f + 0.35f * rnd(seed, 10 + i, 91)) * (i == big ? 1.4f : 1.0f);
+        puffs.push_back({cx + t * span + (rnd(seed, 20 + i, 91) - 0.5f) * size * 0.5f, cy + size * 0.35f - r * 0.75f, r});
+    }
+    float bottom = cy + size * 0.4f;
+    auto in = [&](int gx, int gy) {
+        float mx = (gx + 0.5f) * b, my = (gy + 0.5f) * b;
+        if (my > bottom) return false;
+        for (auto& p : puffs)
+            if ((mx - p.x) * (mx - p.x) + (my - p.y) * (my - p.y) * 1.6f < p.r * p.r) return true;
+        return false;
+    };
+    int gx0 = (int)std::floor((cx - span - size * 2) / b), gx1 = (int)std::ceil((cx + span + size * 2) / b);
+    int gy0 = (int)std::floor((cy - size * 2.5f) / b), gy1 = (int)std::ceil(bottom / b) + 1;
+    for (int gy = gy0; gy <= gy1; ++gy)
+        for (int gx = gx0; gx <= gx1; ++gx) {
+            if (!in(gx, gy)) continue;
+            bool under = !in(gx, gy + 1) || (!in(gx, gy + 2) && (gx + seed) % 3 != 0);
+            e2_block(sc, gx * b, gy * b, b, under ? e2::C_PEACH : e2::C_WHITE);
+        }
 }
 
 // 3x5 letters for the school sign.
@@ -245,48 +284,52 @@ bool bgEra2(Scene& sc, int layer)
     const int W = sc.W, H = sc.H;
     sc.fade = 0;   // every colour below is already a palette colour; depth comes from the choice
     if (layer == 0) {
-        e2_rect(sc, 0, 0, W, H, C_BLUE);
-        // a pale morning sun, stepped
-        int sx = (int)(W * 0.80f), sy = (int)(H * 0.16f);
+        // a hazy September morning: lilac-grey sky, warm peach low down behind the hills
+        for (int y = 0; y < H; ++y) {
+            bool low = y >= (int)(H * 0.42f) || (y >= (int)(H * 0.4f) && ((y + 0) & 1) == 0 && ((y / 2) % 2 == 0));
+            e2_rect(sc, 0, y, W, 1, low ? C_PEACH : C_GREY);
+        }
+        // a pale morning sun, stepped, white with a yellow ring
+        int sx = (int)(W * 0.80f), sy = (int)(H * 0.27f);
         for (int y = -10; y <= 10; ++y)
             for (int x = -10; x <= 10; ++x) {
                 int bx = x / 2 * 2, by = y / 2 * 2;
                 float d = std::sqrt((float)(bx * bx + by * by));
                 if (d < 9) sc.put(sx + x, sy + y, hex(d < 6 ? C_WHITE : C_YELLOW));
             }
-        const float cl[6][3] = {{0.08f, 0.16f, 9}, {0.27f, 0.09f, 6}, {0.45f, 0.22f, 8}, {0.62f, 0.10f, 5}, {0.93f, 0.25f, 7}, {0.36f, 0.33f, 4}};
-        for (auto& c : cl) sc.cloud(W * c[0], H * c[1], c[2] * sc.s, hex(C_WHITE), hex(C_GREY));
-        // a few birds
-        const int birds[4][2] = {{180, 30}, {188, 26}, {196, 32}, {420, 20}};
+        // clouds kept below the top ~13% (the HUD), every one a different shape
+        const float cl[6][4] = {{0.08f, 0.21f, 8, 0.8f}, {0.27f, 0.17f, 5, 2.2f}, {0.45f, 0.26f, 7, 0.3f},
+                                {0.62f, 0.19f, 4, 1.4f}, {0.93f, 0.25f, 6, 0.6f}, {0.36f, 0.33f, 3.5f, 2.8f}};
+        int ci = 0;
+        for (auto& c : cl) e2_cloud(sc, W * c[0], H * c[1], c[2] * sc.s, 17 + 11 * ci++, c[3]);
+        const int birds[4][2] = {{180, 40}, {188, 36}, {196, 42}, {420, 34}};
         for (auto& bd : birds) {
-            sc.put(bd[0] - 2, bd[1] - 1, hex(C_NAVY)); sc.put(bd[0] - 1, bd[1], hex(C_NAVY));
-            sc.put(bd[0], bd[1] - 1, hex(C_NAVY)); sc.put(bd[0] + 1, bd[1], hex(C_NAVY)); sc.put(bd[0] + 2, bd[1] - 1, hex(C_NAVY));
+            sc.put(bd[0] - 2, bd[1] - 1, hex(C_SLATE)); sc.put(bd[0] - 1, bd[1], hex(C_SLATE));
+            sc.put(bd[0], bd[1] - 1, hex(C_SLATE)); sc.put(bd[0] + 1, bd[1], hex(C_SLATE)); sc.put(bd[0] + 2, bd[1] - 1, hex(C_SLATE));
         }
         return true;
     }
     if (layer == 1) {
-        // far hills: a pale grey range, then lavender hills, then a dotted band of distant woods
+        // far mountains: lavender, faces turned to the morning sun catch a warm peach light
+        auto mtop = [&](int x) { int sx = ((x % W) + W) % W / 4 * 4; return (int)(H * 0.47f + ridge((float)sx, W, 5, 9, 4, 2)) / 2 * 2; };
         for (int x = 0; x < W; ++x) {
-            int sx = x / 4 * 4;
-            int t1 = (int)(H * 0.47f + ridge((float)sx, W, 5, 9, 4, 2)) / 2 * 2;
-            for (int y = t1; y < H; ++y) sc.put(x, y, hex(y < t1 + 2 ? C_WHITE : C_GREY));
+            int t1 = mtop(x);
+            bool lit = mtop(x + 8) < mtop(x - 8);   // rising to the right: facing the sun (left)
+            for (int y = t1; y < H; ++y) sc.put(x, y, hex(lit && y < t1 + 6 ? C_PEACH : C_LAVENDER));
         }
-        for (int x = 0; x < W; ++x) {
-            int sx = x / 2 * 2;
-            int t2 = (int)(H * 0.58f + ridge((float)sx, W, 2, 6, 3, 1.5f)) / 2 * 2;
-            for (int y = t2; y < H; ++y) sc.put(x, y, hex(C_LAVENDER));
-        }
-        // distant tree bumps along the lavender hills, lit grey on top
-        for (int i = 0; i < 70; ++i) {
-            float fx = (i + rnd(i, 1, 41) * 0.6f) * W / 70.0f;
-            int sx = (int)fx / 2 * 2;
-            int top = (int)(H * 0.58f + ridge((float)sx, W, 2, 6, 3, 1.5f)) / 2 * 2;
-            int r = 2 + (int)(rnd(i, 2, 41) * 3);
+        // nearer hills: slate-purple distance, with clean round woods along the crest
+        auto htop = [&](int x) { int sx = ((x % W) + W) % W / 2 * 2; return (int)(H * 0.6f + ridge((float)sx, W, 2, 6, 3, 1.5f)) / 2 * 2; };
+        for (int x = 0; x < W; ++x)
+            for (int y = htop(x); y < H; ++y) sc.put(x, y, hex(C_SLATE));
+        for (int i = 0; i < 60; ++i) {
+            float fx = (i + rnd(i, 1, 41) * 0.6f) * W / 60.0f;
+            int sx = (int)fx, top = htop(sx);
+            int r = 3 + (int)(rnd(i, 2, 41) * 3);
             for (int y = -r; y <= 0; ++y)
                 for (int x = -r; x <= r; ++x) {
-                    if (x * x + y * y * 2 > r * r + 1) continue;
-                    Col c = hex((x + y < -r + 1) ? C_GREY : (x > r / 2 ? C_SLATE : C_LAVENDER));
-                    sc.put(sx + x, top + y + 1, c);
+                    if (x * x + y * y > r * r) continue;
+                    bool cap = (x + 1) * (x + 1) + (y + 1) * (y + 1) > (r - 1) * (r - 1) && x < 0 && y < -r / 2;
+                    sc.put(sx + x, top + y + 1, hex(cap ? C_LAVENDER : C_SLATE));
                 }
         }
         return true;
@@ -299,7 +342,6 @@ bool bgEra2(Scene& sc, int layer)
             int top = (int)(H * 0.675f + ridge((float)sx, W, 7, 3, 2, 1)) / 2 * 2;
             for (int y = top; y < g; ++y) {
                 uint32_t c = y < top + 2 ? C_LIME : C_GREEN;
-                if (y >= top + 2 && ((x / 2 + y / 2) % 9 == 0) && rnd(x / 2, y / 2, 3) < 0.5f) c = C_LIME;
                 sc.put(x, y, hex(c));
             }
         }
@@ -308,7 +350,7 @@ bool bgEra2(Scene& sc, int layer)
             {0.05f, 2, 0.9f}, {0.31f, 0, 0.9f}, {0.39f, 5, 0.85f}, {0.47f, 2, 0.8f}, {0.77f, 4, 0.8f},
             {0.86f, 1, 0.9f}, {0.97f, 2, 0.75f}};
         int si = 0;
-        for (auto& t : back) e2_tree(sc, W * t.x, (float)g - 6, t.kind, 1, t.k, 300 + si++ * 13);
+        for (auto& t : back) { e2_tree(sc, W * t.x, (float)g - 6, t.kind, t.k * 0.5f, 300 + si * 13, si % 3 == 0 ? 5 : 1, si % 2 == 1); ++si; }
         e2_granHouse(sc, (int)(W * 0.13f), g);
         e2_school(sc, (int)(W * 0.53f), g);
         // pavement and road
@@ -323,7 +365,7 @@ bool bgEra2(Scene& sc, int layer)
         const struct { float x; int kind; float k; } mid[] = {
             {0.02f, 0, 1.1f}, {0.24f, 3, 1.2f}, {0.29f, 5, 1.0f}, {0.43f, 4, 1.15f}, {0.49f, 1, 1.1f},
             {0.78f, 2, 1.25f}, {0.84f, 0, 1.0f}, {0.92f, 3, 1.1f}};
-        for (auto& t : mid) e2_tree(sc, W * t.x, (float)g, t.kind, 1, t.k, 500 + si++ * 17);
+        for (auto& t : mid) { const int hues[8] = {0, 2, 1, 3, 0, 5, 1, 2}; e2_tree(sc, W * t.x, (float)g, t.kind, t.k * 0.5f, 500 + si * 17, hues[si % 8], si % 2 == 0); ++si; }
         // a kite over the school yard, its string falling to the yard
         int kx = (int)(W * 0.73f), ky = (int)(H * 0.20f);
         for (int y = -6; y <= 6; ++y) {
@@ -356,10 +398,10 @@ bool bgEra2(Scene& sc, int layer)
         {0.04f, 1, 1.5f}, {0.25f, 0, 1.3f}, {0.355f, 2, 1.45f}, {0.46f, 3, 1.35f},
         {0.595f, 5, 1.3f}, {0.75f, 4, 1.25f}, {0.89f, 0, 1.6f}};
     int si = 0;
-    for (auto& t : nearT) e2_tree(sc, W * t.x, (float)g, t.kind, b, t.k, 900 + si++ * 23);
+    for (auto& t : nearT) { const int hues[7] = {0, 3, 5, 1, 2, 4, 0}; e2_tree(sc, W * t.x, (float)g, t.kind, t.k, 900 + si * 23, hues[si], si % 2 == 1); ++si; }
     // bushes along the fences
     const float bush[6][2] = {{0.12f, 6}, {0.27f, 5}, {0.40f, 7}, {0.65f, 5}, {0.81f, 7}, {0.97f, 5}};
-    for (int i = 0; i < 6; ++i) e2_bush(sc, W * bush[i][0], (float)g, b, bush[i][1], 700 + i * 11, i % 2 == 0);
+    for (int i = 0; i < 6; ++i) e2_bush(sc, W * bush[i][0], (float)g, bush[i][1] * b * (0.85f + 0.3f * rnd(i, 1, 70)), 700 + i * 11, i % 3 == 2 ? 2 : (i % 2 ? 1 : 0), i % 2 == 0);
     // mailbox on a post
     int mx = (int)(W * 0.12f);
     e2_rect(sc, mx, g - 14, 2, 14, C_SLATE);
@@ -398,7 +440,7 @@ bool bgEra2(Scene& sc, int layer)
     e2_rect(sc, bx + 14, g - 21, 6, 2, C_INK);
     e2_rect(sc, bx + 7, g - 7, 3, 2, C_GREY);       // pedal
     // the school sign: a blue board on two posts
-    int sx = (int)(W * 0.53f);
+    int sx = (int)(W * 0.415f);   // inside the opening view, never cut by the screen edge
     e2_rect(sc, sx + 2, g - 14, 2, 14, C_SLATE);
     e2_rect(sc, sx + 26, g - 14, 2, 14, C_SLATE);
     e2_rect(sc, sx - 1, g - 26, 32, 13, C_WHITE);

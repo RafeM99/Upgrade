@@ -3,6 +3,22 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (night, late): second engineer review worked through
+
+- Ground: 4 surface and 4 deep tile variants per stage picked by hash, roots and moss, a buried
+  keepsake every few screens; platform material per memory (snowy box, laundry crate, schoolbooks,
+  camp log, riveted girder, hay bale) with outlines and drop shadows.
+- Characters 1.5x bigger (PLAYER_K, ENEMY_K in ArtSpec.h; hitboxes unchanged), enemies and
+  pickups redrawn per stage, start gap between Gran and Sam wider.
+- New readable pixel font for small text (src/ui/PixelFont.*), HUD always at the top and slimmer,
+  title text on a solid panel, footer removed. Story cards (Camilla's src/ui/Story.*): no rotated
+  polaroid, notes instead of repeated captions, one text grid, brighter labels.
+- Pixel stages fill the screen width (no side bars).
+- Backgrounds: 16/32-bit fixes (seam, pines, one pixel density, signs); 2.5D meadow and 3D garden
+  fill the empty lower third; crisp full-resolution backdrops for 2.5D/3D.
+- Files of other Claudes touched: src/ui/Story.*, src/ui/Hud.cpp, assets/strings.txt,
+  src/render/Renderer.cpp, src/core/Game.cpp (one line).
+
 ## 2026-11-07 (late night): Blender models for stage 6 (Gran and the bat boss)
 
 - raf asked for Blender-made 3D models for the last stage only. tools/blender/make_models.py builds
