@@ -99,6 +99,7 @@ void Game::startRun()
     bossBeatenThisEra = false;
     powers.reset();
     clearHistory();
+    puPopT[0] = puPopT[1] = 0;
     transActive = false;
     lostTimer = 0;
     slowTime = wallSlowTime = 0;
@@ -360,6 +361,7 @@ void Game::updatePlaying(float dt)
     }
     if (firstTick_ && !players[1].joined && !opt.autoplay && input.read(1).any) joinPlayer2();
     particles.update(dt);
+    for (float& t : puPopT) t = std::max(0.0f, t - dt);
 
     // hit-pause: a tiny freeze on big hits for punch
     if (hitPause > 0) { hitPause -= dt; return; }
@@ -949,7 +951,11 @@ void Game::collectPowerUp(int p, PowerUp& pu)
         break;
     case PU_SPEED: pl.speedTime = config().f("powerups.speed_seconds", 8.0f); break;
     }
-    showBanner(T("powerup_" + std::to_string(pu.type)), T("powerup_desc_" + std::to_string(pu.type)), 1.6f);
+    // no banner in the middle of the screen: the HUD shows an icon in this player's bottom
+    // corner and a short pop-up saying what it does
+    puPopT[p] = 3.2f;
+    puPopType[p] = pu.type;
+    if (pu.type == PU_SLOW) hourglassBy = p;
     events().powerupCollected.emit(p, pu.type);
 }
 

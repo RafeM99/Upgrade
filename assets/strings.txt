@@ -50,7 +50,7 @@ ability_short_time_slow = SLOW
 no_abilities = run . jump . stomp
 
 faded = FADED
-faded_hint = Touch your partner to remember!
+faded_hint = Touch your partner!
 faded_hint_solo = ...
 status_shield = LOCKET
 status_speed = FAST
