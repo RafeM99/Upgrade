@@ -92,22 +92,30 @@ void main()
         if (fine) c *= mix(0.88, 1.0, smoothstep(0.0, 0.3, cell.y));
         c *= mix(0.85, 1.0, vig);
     } else {
+        // Modern era: restrained bloom on true highlights only, a gentle filmic curve,
+        // split toning (cool shadows, warm highlights) and a subtle vignette.
         vec2 texel = 1.0 / texSize;
         vec3 glow = vec3(0.0);
         float total = 0.0;
         for (int i = 0; i < 12; ++i) {
-            float a = float(i) * 0.5236;
-            for (int r = 1; r <= 2; ++r) {
-                vec2 o = vec2(cos(a), sin(a)) * texel * float(r) * 5.0;
+            float a = float(i) * 0.5236 + 0.26;
+            for (int r = 1; r <= 3; ++r) {
+                vec2 o = vec2(cos(a), sin(a)) * texel * float(r) * 6.0;
                 vec3 s = texture(texture0, uv + o).rgb;
-                float br = max(max(s.r, s.g), s.b);
-                glow += s * smoothstep(0.65, 1.0, br);
-                total += 1.0;
+                float br = dot(s, vec3(0.299, 0.587, 0.114));
+                float w = 1.0 / float(r);
+                glow += s * smoothstep(0.78, 1.0, br) * w;
+                total += w;
             }
         }
-        c += glow / total * 1.3;
-        c = mix(c, c * vec3(1.06, 1.0, 0.92), 0.6);   // warm grading
-        c *= mix(0.7, 1.0, vig);
+        c += glow / total * 0.55;
+        float l = dot(c, vec3(0.299, 0.587, 0.114));
+        c = mix(c, c * vec3(0.92, 0.97, 1.08), (1.0 - smoothstep(0.0, 0.45, l)) * 0.55);   // cool shadows
+        c = mix(c, c * vec3(1.05, 1.0, 0.9), smoothstep(0.45, 1.0, l) * 0.5);            // warm light
+        c = c / (1.0 + 0.18 * c) * 1.18;                                                   // soft shoulder
+        c = mix(vec3(l), c, 0.94);                                                         // slightly calmer colour
+        float vg = smoothstep(0.85, 0.25, length(d * vec2(1.0, 0.8)));
+        c *= mix(0.8, 1.0, vg);
     }
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);
