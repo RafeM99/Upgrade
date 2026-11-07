@@ -410,9 +410,11 @@ void drawPlayer(Canvas& c, int who, int frame)
     const bool gran = who == 0;
     Pose p = playerPose(frame);
     Col skin = eraCol(gran ? 0xf2c29b : 0xe9b58c, 0.95f);
-    Col top = gran ? eraCol(0xf08a24, 0.9f) : eraCol(0x3c8cf0, 0.45f);
-    Col topDark = gran ? eraCol(0xc4621a, 0.8f) : eraCol(0x2a64b8, 0.35f);
-    Col legs = gran ? eraCol(0x6b4a3a, 0.7f) : eraCol(0x2b3f6b, 0.3f);
+    // 1-bit: both players are solid pale silhouettes (a checker body hid P2 in the halftone).
+    // They differ by shape: Gran has pale hair and a bun, Sam a dark fringe under a pale cap.
+    Col top = gran ? eraCol(0xf08a24, 0.9f) : eraCol(0x3c8cf0, 0.9f);
+    Col topDark = gran ? eraCol(0xc4621a, 0.8f) : eraCol(0x2a64b8, 0.8f);
+    Col legs = gran ? eraCol(0x6b4a3a, 0.7f) : eraCol(0x2b3f6b, 0.7f);
     Col shoes = gran ? eraCol(0x4a2e22, 0.2f) : eraCol(0xf4f4f4, 0.95f);
     Col hair = gran ? eraCol(0xdcd8ea, 0.95f) : eraCol(0x6b3e22, 0.15f);
     Col dark = eraCol(0x1c1420, 0.0f);
@@ -479,7 +481,7 @@ void drawPlayer(Canvas& c, int who, int frame)
     } else {
         c.ellipse(hx - 0.04f, hy - 0.08f, 0.21f, 0.13f, shade(hair));
         c.ellipse(hx - 0.14f, hy + 0.0f, 0.08f, 0.13f, shade(hair));
-        Col cap = eraCol(0x22c4b0, 0.6f);
+        Col cap = eraCol(0x22c4b0, 0.95f);
         c.rect(hx - 0.2f, hy - 0.25f, 0.36f, 0.14f, shade(cap), 0.07f);
         c.rect(hx + 0.08f, hy - 0.14f, 0.24f, 0.05f, solid(mul(cap, 0.8f)), 0.02f);   // brim
     }
@@ -626,10 +628,12 @@ void drawTile(Canvas& c, int t)
         c.rect(0, 0, 1, 1, [&](const Frag& f) {
             Col d = dirt;
             if (g_era == 0) {
-                // 1-bit: a clean brick-and-mortar pattern, light lines on dark (8 x 8 tile)
+                // 1-bit: an even, sparse dot lattice (1 pixel in 16). Reads as solid earth and is
+                // calmer than the brick lines it replaced; single dots also stay whole when the
+                // camera zoom drops or doubles a pixel column, where thin lines break up.
                 int lx = f.ix & 7, ly = f.iy & 7;
-                bool mortar = ly == 7 || (lx == 3 && ly < 7 && ly > 1);
-                return mortar ? ONEBIT_LIGHT : ONEBIT_DARK;
+                bool dot = (ly == 1 && (lx & 3) == 0) || (ly == 5 && (lx & 3) == 2);
+                return dot ? ONEBIT_LIGHT : ONEBIT_DARK;
             }
             if (g_era >= 2) d = mixc(dirt, dirtDark, f.y * 0.6f);
             if (rnd(f.ix, f.iy, 5) < 0.12f) d = dirtDark;
@@ -643,7 +647,7 @@ void drawTile(Canvas& c, int t)
         if (t == T_GROUND_TOP) {
             Col grass = eraCol(0x6fdc4a, 1.0f), grassDark = eraCol(0x1e8a4c, 1.0f);
             c.rect(0, 0, 1, 0.28f, [&](const Frag& f) {
-                if (g_era == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // one bright top edge
+                if (g_era == 0) return (f.y < 0.25f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // a solid two-pixel top edge
                 Col g = f.y < 0.12f ? grass : grassDark;
                 if (g_era >= 2) g = mixc(grass, grassDark, f.y / 0.28f);
                 return g;
@@ -850,10 +854,11 @@ void bgLayer(Px& p, int era, int layer)
                 // 1-bit: outline ridges with a little dither under them
                 // Ordered halftone, not random dots: far hills get a sparse grid, near hills a
                 // checker that fades out with depth. Reads as shading, not static.
+                // Calmer since: no halftone fill (it looked like the sprites and hid the players).
+                // Far ridge is a dotted line, mid and near ridges a plain line: the background
+                // stays a quiet line drawing and the solid play layer stands out in front of it.
                 bool edge = y - (int)top < 1;
-                bool on = edge;
-                if (layer == 1) on = on || ((x % 4) == 0 && (y % 4) == 0);
-                if (layer == 2) on = on || (((x + y) % 2) == 0 && (y % 2) == 0 && d < 0.35f);
+                bool on = edge && (layer != 1 || (x % 2) == 0);
                 c = on ? ONEBIT_LIGHT : ONEBIT_DARK;
                 if (!on && layer == 1) continue;
             } else if (era == 1) {

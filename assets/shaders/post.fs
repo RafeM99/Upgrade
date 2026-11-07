@@ -43,6 +43,16 @@ void main()
     vec2 cell = fract(tp);   // where we are inside a source pixel, for the LCD grid and scanlines
     if (mosaic > 1.01) {
         tp = (floor(tp / mosaic) + 0.5) * mosaic;
+    } else if (era == 0) {
+        // Sharp sampling, centred on the texel: flat across the pixel, a one-screen-pixel blend
+        // only at its edges. (The era 1-2 code below samples on texel boundaries for most of the
+        // pixel, a 50/50 mix with the neighbour; in 1-bit the dither then broke every thin line
+        // and lone pixel into flickering fragments.)
+        vec2 scale = max(outSize / texSize, vec2(1.0));
+        vec2 i = floor(tp);
+        vec2 cd = tp - i - 0.5;
+        vec2 r = 0.5 - 0.5 / scale;
+        tp = i + 0.5 + (cd - clamp(cd, -r, r)) * scale;
     } else if (era < 3) {
         vec2 scale = max(outSize / texSize, vec2(1.0));
         vec2 i = floor(tp);
@@ -58,12 +68,14 @@ void main()
 
     if (era == 0) {
         float l = dot(c, vec3(0.299, 0.587, 0.114));
-        l *= mix(0.8, 1.0, vig);               // the edges of the memory are faded
+        l *= mix(0.9, 1.0, vig);               // the edges of the memory fade a little (mid tones only)
         float b = bayer4(px) - 0.5;
-        vec3 dark = vec3(0.063, 0.071, 0.086), light = vec3(0.92, 0.92, 0.88);
+        // A soft two-tone LCD pair (grey-green "off" and pale "on"), not white on black: still
+        // only two colours, but far less glare over a long play.
+        vec3 dark = vec3(0.118, 0.137, 0.129), light = vec3(0.776, 0.796, 0.718);
         c = (l + b * 0.5 > 0.5) ? light : dark;
-        // handheld LCD: a faint gap between pixels
-        if (fine && (cell.x < 0.12 || cell.y < 0.12)) c = mix(c, dark, 0.35);
+        // handheld LCD: a faint gap between pixels, gentle so the grid does not shimmer
+        if (fine && (cell.x < 0.08 || cell.y < 0.08)) c = mix(c, dark, 0.15);
     } else if (era == 1) {
         float best = 1e9; vec3 bc = c;
         for (int i = 0; i < 16; ++i) {

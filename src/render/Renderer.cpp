@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 using namespace art;
 
@@ -298,7 +299,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             else if (ch == '2') frame = T_P2;
             else if (ch == '|') frame = T_WALL;
             Color tint = WHITE;
-            if (ch == '1' || ch == '2') {
+            if ((ch == '1' || ch == '2') && era != 0) {   // in 1-bit a pulse would only make the dither shimmer
                 // a gentle pulse so the coloured memories read as "only for one of you"
                 unsigned char a = (unsigned char)(200 + 55 * std::sin(g.time * 3 + tx));
                 tint = Color{255, 255, 255, a};
@@ -434,7 +435,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
         for (float y = -1.0f; y < LEVEL_H + 1; y += 0.5f) {
             float edge = g.wallX + std::sin(y * 1.7f + g.time * 3) * 0.35f + std::sin(y * 4.1f - g.time * 5) * 0.15f;
             if (edge < left) continue;
-            float scroll = std::fmod(g.time * (era == 0 ? 8.0f : 2.0f), 1.0f);
+            // 1-bit static crawls slowly: fast full-screen static was the harshest flicker in era 0
+            float scroll = std::fmod(g.time * (era == 0 ? 1.0f : 2.0f), 1.0f);
             Rectangle src{0, (y / WALL_TEX_H + scroll) * wt.height, (float)wt.width, wt.height * 0.5f / WALL_TEX_H};
             float wq = WALL_TEX_W;
             // the textured leading strip
@@ -529,4 +531,56 @@ void Renderer::present(Game& g, float flash, float desat)
         return;
     }
     blitEra(g, renderEra_, dst, flash, desat, 1.0f, 0.0f);
+    if (renderEra_ == 0 && g.screen != Screen::Title) drawPlayerTags(g, dst);
+}
+
+// 1-bit has no colours to tell the players apart, so each gets a small "P1" / "P2" tag above
+// the head. Drawn on the screen, not in the world, so the 3 x 5 letters stay whole at any
+// camera zoom; snapped to the LCD pixel grid and in the shader's two colours, so it still
+// reads as part of the 1-bit screen. A player off the screen keeps the tag at the edge.
+void Renderer::drawPlayerTags(Game& g, Rectangle dst)
+{
+    const Color light{198, 203, 183, 255}, dark{30, 35, 33, 255};   // post.fs era 0 pair
+    static const char* P = "111" "101" "111" "100" "100";
+    static const char* D[2] = {"010" "110" "010" "010" "111", "111" "001" "111" "100" "111"};
+    float nearP, farP;
+    float savedSwing = g.cam.swing;
+    g.cam.swing = 0;
+    g.cam.aspect = (float)rtW_[0] / rtH_[0];
+    Camera3D c3 = g.cam.camera3D(nearP, farP);
+    g.cam.swing = savedSwing;
+    const float B = dst.height / rtH_[0];   // one 1-bit pixel on the screen
+    int tx[2] = {0, 0}, ty[2] = {0, 0};
+    for (int p = 0; p < 2; ++p) {
+        const Player& pl = g.players[p];
+        Vector2 v = GetWorldToScreenEx(Vector3{pl.cx(), Y3(pl.bottom() - PLAYER_FH), 0.05f}, c3, rtW_[0], rtH_[0]);
+        tx[p] = (int)std::lround(v.x - 4.5f);   // box 9 x 7, pointer 2 below it
+        ty[p] = (int)std::lround(v.y) - 10;
+    }
+    // players standing together: put the two tags side by side, P1 on the left
+    if (g.players[0].joined && g.players[1].joined && std::abs(tx[0] - tx[1]) < 12 && std::abs(ty[0] - ty[1]) < 10) {
+        int mid = (tx[0] + tx[1]) / 2;
+        tx[0] = mid - 6;
+        tx[1] = mid + 6;
+        ty[0] = ty[1] = std::min(ty[0], ty[1]);
+    }
+    for (int p = 0; p < 2; ++p) {
+        if (!g.players[p].joined) continue;
+        int bx = std::max(1, std::min(rtW_[0] - 10, tx[p]));
+        int by = std::max(1, std::min(rtH_[0] - 10, ty[p]));
+        auto px = [&](int x, int y, int w, int h, Color c) {
+            int x0 = (int)std::lround(dst.x + (bx + x) * B), y0 = (int)std::lround(dst.y + (by + y) * B);
+            int x1 = (int)std::lround(dst.x + (bx + x + w) * B), y1 = (int)std::lround(dst.y + (by + y + h) * B);
+            DrawRectangle(x0, y0, x1 - x0, y1 - y0, c);
+        };
+        px(-1, -1, 11, 9, dark);   // rim
+        px(0, 0, 9, 7, light);
+        px(3, 7, 3, 1, light);     // pointer
+        px(4, 8, 1, 1, light);
+        for (int r = 0; r < 5; ++r)
+            for (int c = 0; c < 3; ++c) {
+                if (P[r * 3 + c] == '1') px(1 + c, 1 + r, 1, 1, dark);
+                if (D[p][r * 3 + c] == '1') px(5 + c, 1 + r, 1, 1, dark);
+            }
+    }
 }

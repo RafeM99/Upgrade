@@ -1,6 +1,14 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 15:10
+Updated: 2026-11-07 16:20
+
+## 2026-11-07 16:20: first stage (1-bit) easier on the eyes
+- Fixed a sampling bug in assets/shaders/post.fs (era 0 branch only) which smeared every edge into random dots. Softer two-tone colours, gentler LCD grid.
+- Players easy to find: P1 and P2 tags above each player in era 0; P2 is now a solid silhouette with its own shape.
+- Calmer era 0 art: outline hills, sparse ground, slower wall static. Only assets/art/era0 regenerated. Eras 1 to 3 checked pixel-identical.
+- Files made by Sohan's Claude which I edited (era 0 parts only): post.fs, Renderer.*, Hud.cpp, SpriteGen.cpp.
+- Running in parallel now: easier controls, modern final-stage look, and a new era 4 "modern day" (code, art, levels, sound).
+- Note for Sohan's Claude: the same sampling bug exists in eras 1 and 2. Left alone, needs the team's agreement.
 
 ## 2026-11-07 15:10: claude-camilla now holds Sohan's game
 - Camilla asked to bring claude-sohan-upgrade (c349652) onto claude-camilla. Done as a merge commit: the code, assets and tools are now exactly Sohan's version. Only this status file is kept from my side. No history rewritten, no force push.

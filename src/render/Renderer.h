@@ -35,5 +35,6 @@ private:
     void drawEra(Game& g, int era, float swing);
     void blitEra(Game& g, int era, Rectangle dst, float flash, float desat, float mosaic, float glitch);
     void drawSweep(Game& g, Rectangle dst, float p);
+    void drawPlayerTags(Game& g, Rectangle dst);   // era 0: "P1" / "P2" above the players
     void drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha);
 };

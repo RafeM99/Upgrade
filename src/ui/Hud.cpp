@@ -49,11 +49,11 @@ void memoryBar(Game& g)
     float k = std::max(0.0f, std::min(1.0f, g.bar / 100.0f));
     float x = 390, y = 18, w = 500, h = era == 3 ? 26 : 24;
     if (era == 0) {
-        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xebebe1));
-        DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(0x101216));
+        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xc6cbb7));
+        DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(0x1e2321));
         int segs = 20;
         for (int i = 0; i < segs; ++i)
-            if ((i + 0.5f) / segs <= k) DrawRectangleRec(R(x + i * w / segs + 2, y + 2, w / segs - 4, h - 4), hexc(0xebebe1));
+            if ((i + 0.5f) / segs <= k) DrawRectangleRec(R(x + i * w / segs + 2, y + 2, w / segs - 4, h - 4), hexc(0xc6cbb7));
     } else if (era == 1) {
         DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0x0f0d1a));
         DrawRectangleRec(R(x, y, w, h), hexc(0x26305e));
@@ -79,10 +79,10 @@ void memoryBar(Game& g)
         DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 12, 2 * S, fade(hexc(0xfff0d0), 0.6f + 0.4f * std::sin(g.time * 2)));
     }
     // tick marks at 25 / 50 / 75
-    Color tick = era == 0 ? hexc(0xebebe1) : hexc(0xfaf3e6, 200);
+    Color tick = era == 0 ? hexc(0xc6cbb7) : hexc(0xfaf3e6, 200);
     for (int i = 1; i <= 3; ++i) DrawRectangleRec(R(x + w * i / 4.0f - 1, y + h, 2, 7), tick);
     std::string label = std::string(T("bar_label")) + "  " + std::to_string((int)std::floor(g.bar)) + "%";
-    text(label, x + w / 2, y + h + 9, 16, era == 0 ? hexc(0xebebe1) : WHITE, true);
+    text(label, x + w / 2, y + h + 9, 16, era == 0 ? hexc(0xc6cbb7) : WHITE, true);
     text(T("era_name_" + std::to_string(era)), x + w / 2, y + h + 29, 13, fade(WHITE, 0.75f), true);
 }
 
@@ -91,7 +91,7 @@ void playerPanel(Game& g, int p)
 {
     const Player& pl = g.players[p];
     float x = p == 0 ? 20 : 1280 - 290, y = 14, w = 270, h = 74;
-    Color col = g.era == 0 ? hexc(0xebebe1) : P_COL[p];
+    Color col = g.era == 0 ? hexc(0xc6cbb7) : P_COL[p];
     Color bg = fade(hexc(0x0f0d1a), g.era == 3 ? 0.55f : 0.8f);
     if (g.era >= 2) DrawRectangleRounded(R(x, y, w, h), 0.25f, 6, bg);
     else DrawRectangleRec(R(x, y, w, h), bg);
@@ -102,6 +102,7 @@ void playerPanel(Game& g, int p)
         return;
     }
     text(std::string(T(p == 0 ? "p1_name" : "p2_name")), x + 20, y + 8, 20, col);
+    if (g.era == 0) text(p == 0 ? "P1" : "P2", x + w - 44, y + 8, 20, col);   // matches the tag above the player
     if (pl.faded) {
         text(T("faded"), x + 150, y + 10, 16, fade(WHITE, 0.6f + 0.4f * std::sin(g.time * 6)));
         text(g.solo() ? T("faded_hint_solo") : T("faded_hint"), x + 20, y + 40, 13, fade(WHITE, 0.8f));
@@ -154,22 +155,25 @@ void Hud::drawPlaying(Game& g)
         float a = std::min(1.0f, std::min(g.bannerT * 3, (g.bannerLen - g.bannerT) * 4 + 0.0f));
         a = std::min(1.0f, g.bannerT * 3);
         float big = g.era == 0 ? 40 : 46;
-        Color c = g.era == 0 ? hexc(0xebebe1) : hexc(0xfff4d8);
+        Color c = g.era == 0 ? hexc(0xc6cbb7) : hexc(0xfff4d8);
         DrawRectangleRec(R(0, 250, 1280, 150), fade(BLACK, 0.45f * a));
         text(g.banner, 640, 275, big, fade(c, a), true);
         text(g.bannerSub, 640, 340, 22, fade(WHITE, a), true);
     }
 
     // help line for the first seconds
-    if (g.time < 12 && !g.transActive)
+    if (g.time < 12 && !g.transActive) {
+        // 1-bit: a dark band so the line is not read against the ground pattern
+        if (g.era == 0) DrawRectangleRec(R(0, 652, 1280, 32), fade(hexc(0x1e2321), 0.85f * std::min(1.0f, (12 - g.time) / 2)));
         text(T("controls_hint"), 640, 660, 14, fade(WHITE, std::min(1.0f, (12 - g.time) / 2)), true);
+    }
 }
 
 void Hud::drawTitle(Game& g)
 {
     setup(g);
     int e = ((int)(g.time / 3.0f)) % 4;
-    Color title = e == 0 ? hexc(0xebebe1) : (e == 1 ? hexc(0xf7d73a) : (e == 2 ? hexc(0xffb0d0) : hexc(0xfff0d0)));
+    Color title = e == 0 ? hexc(0xc6cbb7) : (e == 1 ? hexc(0xf7d73a) : (e == 2 ? hexc(0xffb0d0) : hexc(0xfff0d0)));
     float bob = std::sin(g.time * 2) * 6;
     // the title "upgrades" every few seconds, like the game does
     float size = 110 + e * 8;
