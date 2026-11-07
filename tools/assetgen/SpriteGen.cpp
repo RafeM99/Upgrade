@@ -1053,6 +1053,418 @@ void drawBoss(Canvas& c, int frame)
     }
 }
 
+// ------------------------------------------------------------------ story bosses
+// Each stage's boss is the Forgetting wearing the shape of something from Gran's memory of
+// that time: a clock, Arthur's shirt, the school bell, a storm, the last train, a scarecrow.
+// They keep the Forgetting's one eye (the same eye and hurt "X" as drawBoss) and use the same
+// frames: two gentle float frames, a pale hurt flash and a squashed slam. Saved as
+// boss_story.png beside enemy_boss.png, with the same sheet layout.
+
+// Shapes drawn through a squash-and-stretch transform anchored at the bottom of the frame,
+// so one description gives the float, hurt and slam poses.
+struct Rig {
+    Canvas& c;
+    float sx = 1, sy = 1, dx = 0, dy = 0, ax = 1.5f, ay = 2.92f;
+
+    Vector2 P(float x, float y) const { return {ax + (x - ax) * sx + dx, ay + (y - ay) * sy + dy}; }
+    float R(float r) const { return r * std::sqrt(sx * sy); }
+    void ellipse(float cx, float cy, float rx, float ry, const Fill& f)
+    {
+        Vector2 p = P(cx, cy);
+        c.ellipse(p.x, p.y, rx * sx, ry * sy, f);
+    }
+    void circle(float cx, float cy, float r, const Fill& f) { ellipse(cx, cy, r, r, f); }
+    void rect(float x, float y, float w, float h, const Fill& f, float rad = 0)
+    {
+        Vector2 p = P(x, y);
+        c.rect(p.x, p.y, w * sx, h * sy, f, rad * std::min(sx, sy));
+    }
+    void capsule(float x0, float y0, float x1, float y1, float r, const Fill& f)
+    {
+        Vector2 a = P(x0, y0), b = P(x1, y1);
+        c.capsule(a.x, a.y, b.x, b.y, R(r), f);
+    }
+    void poly(std::vector<Vector2> pts, const Fill& f)
+    {
+        for (auto& p : pts) p = P(p.x, p.y);
+        c.poly(pts, f);
+    }
+    void dot(float x, float y, Col col, int n = 1)
+    {
+        Vector2 p = P(x, y);
+        c.dot(p.x, p.y, col, n);
+    }
+    // An elliptical band (rx, ry are the outer radii, t the band's share of the radius).
+    void ring(float cx, float cy, float rx, float ry, float t, const Fill& f)
+    {
+        Vector2 p = P(cx, cy);
+        float RX = rx * sx, RY = ry * sy;
+        c.shape(p.x - RX, p.y - RY, p.x + RX, p.y + RY, [&](Frag& fr) {
+            float ex = (fr.x - p.x) / RX, ey = (fr.y - p.y) / RY;
+            float d = std::sqrt(ex * ex + ey * ey);
+            fr.nx = ex; fr.ny = ey;
+            return d > 1.0f - t && d < 1.0f;
+        }, f);
+    }
+};
+
+// The pose of every story boss frame: the float frames bob, the slam frame squashes down.
+Rig storyRig(Canvas& c, int frame)
+{
+    Rig r{c};
+    if (frame == XF_FLOAT1) r.dy = 0.06f;
+    if (frame == XF_SLAM) { r.sx = 1.07f; r.sy = 0.8f; }
+    return r;
+}
+
+// The Forgetting's eye, as drawBoss draws it, at scale s (1 = the boss's own eye), with an
+// optional ring round it so it reads on any surface.
+void storyEye(Rig& r, float cx, float cy, float s, bool hurt, Col ring, float ringW)
+{
+    const int e = g_era;
+    Col white = pc(0xfaf3e6, 3), iris = pc(0xf7d73a, 2), pupil = pc(0x0f0d1a, 0);
+    if (ringW > 0) r.ellipse(cx, cy, 0.62f * s + ringW, 0.42f * s + ringW, solid(ring));
+    r.ellipse(cx, cy, 0.62f * s, 0.42f * s, lit(white, false));
+    if (!hurt) {
+        r.circle(cx + 0.12f * s, cy, 0.28f * s, lit(iris));
+        r.circle(cx + 0.16f * s, cy, 0.13f * s, solid(pupil));
+        r.dot(cx + 0.06f * s, cy - 0.14f * s, white, e >= 4 ? 2 : 1);
+    } else {
+        float w = std::max(0.05f * s, 0.035f);
+        r.capsule(cx - 0.4f * s, cy - 0.22f * s, cx + 0.4f * s, cy + 0.23f * s, w, solid(pupil));
+        r.capsule(cx - 0.4f * s, cy + 0.23f * s, cx + 0.4f * s, cy - 0.22f * s, w, solid(pupil));
+    }
+}
+
+// Stage 0, THE 3 A.M. CLOCK: a twin-bell alarm clock, both hands at three, dripping feet.
+void drawBossClock(Canvas& c, int frame)
+{
+    // 1-bit, so pixels are placed by hand (24 x 24, like the brute's stamps). '#' light,
+    // 'o' dark, 'f' the face (dark; a white flash when hurt), 'h' the hands and hour marks
+    // (light; dark when hurt). Both hands point at three: the minute hand up, the hour hand
+    // out to the right. The Forgetting's eye is the centre of the face.
+    static const Rows clock = {
+        "........................",
+        "...###.....##.....###...",
+        "..#####....##....#####..",
+        ".#######..o##o..#######.",
+        ".######oo######oo######.",
+        "..####o##########o####..",
+        "..###o##ffffffff##o###..",
+        "....o#ffhffhhffhff#o....",
+        "...o#ffffffhhffffff#o...",
+        "...o#fhffffhhffffhf#o...",
+        "...#ffffffffffffffff#...",
+        "..o#ffffff####ffffff#o..",
+        "..o#fhfff###oo#fhhhf#o..",
+        "..o#fhfff###oo#fhhhf#o..",
+        "...#ffffff####ffffff#...",
+        "...o#ffffffffffffff#o...",
+        "...o#fhffffffffffhf#o...",
+        "....o#ffhffhhffhff#o....",
+        ".....o##ffffffff##o.....",
+        "......o##########o......",
+        ".....##oo######oo##.....",
+        "....##.....oo.....##....",
+        "...##..............##...",
+        "........................"};
+    static const Rows hurtEye = {".o....o.", "..o..o..", "...oo...", "...oo...", "..o..o..", ".o....o."};
+    const bool hurt = frame == XF_HURT;
+    Rows g = clock;
+    if (frame == XF_FLOAT1) {   // the hammer swings over to strike the left bell
+        for (int y = 1; y <= 3; ++y) g[y].replace(10, 4, "....");
+        g[1].replace(9, 2, "##");
+        g[2].replace(10, 2, "##");
+        g[3].replace(10, 4, "o##o");
+    }
+    if (hurt)
+        for (int y = 0; y < 6; ++y)
+            for (int x = 0; x < 8; ++x) g[10 + y][8 + x] = hurtEye[y][x] == 'o' ? 'o' : 'f';
+    // drips of static under the case, a little different each frame
+    const int drip[XF_COUNT][2] = {{2, 1}, {1, 2}, {1, 1}, {1, 1}};
+    for (int k = 0; k < 2; ++k)
+        for (int i = 0; i < drip[frame][k]; ++i) g[21 + i][k ? 13 : 10] = '#';
+    for (auto& row : g)
+        for (auto& ch : row) {
+            if (ch == 'f') ch = hurt ? '#' : 'o';
+            else if (ch == 'h') ch = hurt ? 'o' : '#';
+        }
+    if (frame == XF_SLAM) {   // landing: squashed three rows shorter, feet on the ground
+        Rows s(3, std::string(24, '.'));
+        for (int y = 0; y < (int)g.size(); ++y)
+            if (y != 2 && y != 9 && y != 16) s.push_back(g[y]);
+        g = s;
+    }
+    stamp(c, g, 0, 0);
+}
+
+// Stage 1, THE EMPTY SHIRT: Arthur's shirt pegged on the line, nobody in it.
+void drawBossShirt(Canvas& c, int frame)
+{
+    const bool hurt = frame == XF_HURT;
+    Rig r = storyRig(c, frame);
+    Col cloth = pc(0xa8a297, hurt ? 3 : 2), fold = pc(0x5b5662, hurt ? 2 : 1);
+    Col collar = pc(0xe8e2d2, hurt ? 2 : 3), voidc = pc(0x1f1d24, 0);
+    Col peg = pc(0x5b5662, 1), line = pc(0x1f1d24, 0);
+    float ph = frame * 1.7f, sway = frame == XF_FLOAT1 ? 0.05f : (frame == XF_SLAM ? 0.0f : -0.03f);
+    // the washing line, sagging between the pegs
+    r.capsule(0.2f, 0.32f, 1.5f, 0.4f, 0.03f, solid(line));
+    r.capsule(1.5f, 0.4f, 2.8f, 0.32f, 0.03f, solid(line));
+    // body with a fluttering tail
+    std::vector<Vector2> body = {{0.66f, 0.42f}, {2.34f, 0.42f}, {2.16f, 0.62f}, {2.18f, 1.5f}};
+    for (int i = 0; i <= 8; ++i) {
+        float t = i / 8.0f, x = 2.2f - t * 1.4f;
+        float tail = 2.3f + 0.12f * std::sin(t * 3.14159f) + 0.07f * std::sin(t * 9.4f + ph);
+        body.push_back({x + 0.05f * std::sin(t * 6.0f + ph), tail});
+    }
+    body.push_back({0.82f, 1.5f});
+    body.push_back({0.84f, 0.62f});
+    r.poly(body, lit(cloth));
+    // sleeves hanging limp beside it, a crease down each, cuffs at the bottom
+    for (int s = -1; s <= 1; s += 2) {
+        auto X = [&](float x) { return 1.5f + s * (x - 1.5f); };
+        float sw = sway * s;
+        r.poly({{X(0.62f), 0.44f}, {X(0.88f), 0.5f}, {X(0.84f), 0.98f}, {X(0.68f) + sw, 1.66f}, {X(0.38f) + sw, 1.62f}},
+               lit(cloth));
+        r.capsule(X(0.86f), 0.52f, X(0.84f), 0.98f, 0.03f, solid(fold));                 // shoulder seam
+        r.capsule(X(0.6f), 0.66f, X(0.54f) + sw, 1.44f, 0.025f, solid(fold));            // crease
+        r.poly({{X(0.38f) + sw, 1.6f}, {X(0.68f) + sw, 1.64f}, {X(0.67f) + sw, 1.78f}, {X(0.37f) + sw, 1.74f}},
+               solid(collar));
+    }
+    // the open neck: dark, empty; the collar stands round it
+    r.ellipse(1.5f, 0.46f, 0.2f, 0.11f, solid(voidc));
+    r.poly({{1.24f, 0.38f}, {1.5f, 0.54f}, {1.42f, 0.84f}, {1.16f, 0.62f}}, solid(collar));
+    r.poly({{1.76f, 0.38f}, {1.5f, 0.54f}, {1.58f, 0.84f}, {1.84f, 0.62f}}, solid(collar));
+    // button line and buttons
+    r.capsule(1.5f, 0.6f, 1.5f, 2.32f, 0.03f, solid(fold));
+    for (float by : {1.86f, 2.12f}) r.dot(1.5f, by, collar);
+    // pegs on the shoulders
+    for (float px_ : {0.76f, 2.24f}) {
+        r.rect(px_ - 0.07f, 0.2f, 0.14f, 0.4f, solid(peg), 0.04f);
+        r.rect(px_ - 0.07f, 0.34f, 0.14f, 0.06f, solid(collar));
+    }
+    // the eye on the chest
+    storyEye(r, 1.5f, 1.28f, 0.62f, hurt, pc(0x1f1d24, 0), 0.07f);
+}
+
+// Stage 2, THE SCHOOL BELL: a brass hand bell, wooden handle, clapper swinging under it.
+void drawBossBell(Canvas& c, int frame)
+{
+    const bool hurt = frame == XF_HURT;
+    Rig r = storyRig(c, frame);
+    Col brass = pc(0xf28a1e, 2), rim = pc(0xf7d73a, 3), mouth = pc(0x0f0d1a, 0);
+    Col wood = pc(0x8c4a2f, 1), iron = pc(0x5a5468, 1), ringc = pc(0x6a2c6e, 0), wave = pc(0xfaf3e6, 3);
+    if (hurt) { brass = pc(0xb8b6c8, 2); rim = pc(0xfaf3e6, 3); wood = pc(0xb8b6c8, 2); iron = pc(0xb8b6c8, 2); ringc = pc(0xfaf3e6, 3); }
+    float swing = frame == XF_FLOAT0 ? -0.2f : (frame == XF_FLOAT1 ? 0.2f : 0.0f);
+    // clapper (behind the lip)
+    r.capsule(1.5f, 2.1f, 1.5f + swing, 2.5f, 0.05f, solid(iron));
+    r.circle(1.5f + swing, 2.58f, 0.2f, lit(iron));
+    // handle and collar
+    r.capsule(1.5f, 0.28f, 1.5f, 0.66f, 0.14f, lit(wood));
+    r.ellipse(1.5f, 0.24f, 0.2f, 0.16f, lit(wood));
+    r.rect(1.24f, 0.62f, 0.52f, 0.16f, lit(rim), 0.05f);
+    // the bell: a dome flaring out to the lip
+    const float prof[][2] = {{0.78f, 0.34f}, {0.84f, 0.46f}, {0.95f, 0.53f}, {1.15f, 0.58f}, {1.4f, 0.63f},
+                             {1.6f, 0.7f}, {1.8f, 0.82f}, {1.98f, 0.98f}, {2.12f, 1.14f}, {2.2f, 1.24f}};
+    std::vector<Vector2> bell;
+    for (auto& p : prof) bell.push_back({1.5f + p[1], p[0]});
+    for (int i = 9; i >= 0; --i) bell.push_back({1.5f - prof[i][1], prof[i][0]});
+    r.poly(bell, lit(brass));
+    if (g_era >= 2 && !hurt) r.capsule(1.0f, 1.0f, 0.62f, 1.9f, 0.05f, solid(rim));   // highlight
+    // lip and the dark mouth under it
+    r.ellipse(1.5f, 2.2f, 1.24f, 0.17f, lit(rim));
+    r.ellipse(1.5f, 2.24f, 1.06f, 0.09f, solid(mouth));
+    r.rect(1.24f, 0.98f, 0.52f, 0.05f, solid(farSide(brass)));                        // a cast band
+    // the eye on the body
+    storyEye(r, 1.5f, 1.52f, 0.66f, hurt, ringc, 0.07f);
+    // ringing: sound marks on the side the clapper strikes
+    if (swing != 0) {
+        float s = swing < 0 ? -1.0f : 1.0f, bx = 1.5f + s * 1.32f;
+        r.capsule(bx, 1.7f, bx + s * 0.12f, 1.56f, 0.04f, solid(wave));
+        r.capsule(bx + s * 0.06f, 1.98f, bx + s * 0.24f, 1.9f, 0.04f, solid(wave));
+    }
+}
+
+// Stage 3, THE STORM: a heavy thundercloud, a bolt hanging under it, rain.
+void drawBossStorm(Canvas& c, int frame)
+{
+    const bool hurt = frame == XF_HURT, slam = frame == XF_SLAM;
+    Rig r = storyRig(c, frame);
+    Col cloud = pc(0x463a66, 1), belly = pc(0x2a2140, 0), puffL = pc(0x6e6a9e, 2);
+    Col bolt = pc(0xf8d070, 3), core = pc(0xf4f0e6, 3), rain = pc(0x5aa0e0, 2), ringc = pc(0x7a3a5a, 0);
+    if (hurt) { cloud = pc(0xa8a4d0, 2); belly = pc(0x6e6a9e, 1); puffL = pc(0xf4f0e6, 3); bolt = core; ringc = pc(0xf4f0e6, 3); }
+    // rain streaks, falling a step each frame
+    for (int i = 0; i < 6; ++i) {
+        float x = 0.52f + i * 0.42f + (i % 2) * 0.08f;
+        if (x > 1.1f && x < 1.95f) continue;   // keep the bolt clear
+        float y = 1.85f + std::fmod(i * 0.37f + frame * 0.23f, 0.55f);
+        r.capsule(x, y, x - 0.08f, y + 0.26f, 0.035f, solid(rain));
+    }
+    // the bolt, flickering between two shapes
+    float k = frame == XF_FLOAT1 ? -1.0f : 1.0f;
+    float tipY = slam ? 2.92f : 2.84f;
+    r.poly({{1.5f + 0.16f * k, 1.62f}, {1.5f - 0.24f * k, 2.12f}, {1.5f + 0.02f * k, 2.12f},
+            {1.5f - 0.3f * k, tipY}, {1.5f + 0.34f * k, 2.0f}, {1.5f + 0.08f * k, 2.0f}, {1.5f + 0.38f * k, 1.62f}},
+           lit(bolt, false));
+    r.capsule(1.5f + 0.16f * k, 1.72f, 1.5f - 0.12f * k, 2.08f, 0.03f, solid(core));
+    if (slam) {   // the strike splashes where it lands
+        r.capsule(1.2f - 0.3f * k + 0.3f, 2.86f, 0.95f, 2.72f, 0.035f, solid(core));
+        r.capsule(1.2f - 0.3f * k + 0.3f, 2.86f, 1.6f, 2.68f, 0.035f, solid(core));
+    }
+    // the cloud: puffs over a flat dark belly
+    r.rect(0.3f, 1.05f, 2.4f, 0.66f, lit(belly, false), 0.33f);
+    const float puffs[][3] = {{0.72f, 1.18f, 0.44f}, {1.18f, 0.84f, 0.52f}, {1.84f, 0.78f, 0.58f},
+                              {2.32f, 1.16f, 0.42f}, {1.5f, 1.22f, 0.56f}};
+    for (auto& p : puffs) r.circle(p[0], p[1], p[2], lit(cloud));
+    if (g_era >= 3)
+        for (auto& p : puffs)
+            r.ellipse(p[0] - p[2] * 0.3f, p[1] - p[2] * 0.42f, p[2] * 0.42f, p[2] * 0.26f, solid(puffL));
+    r.rect(0.46f, 1.5f, 2.08f, 0.2f, solid(belly), 0.1f);
+    // the eye in the middle of the cloud
+    storyEye(r, 1.5f, 1.12f, 0.74f, hurt, ringc, 0.06f);
+}
+
+// Stage 4, THE LAST TRAIN: an old steam engine coming head-on, the headlamp its eye.
+void drawBossTrain(Canvas& c, int frame)
+{
+    const bool hurt = frame == XF_HURT;
+    Rig r = storyRig(c, frame);
+    Col green = pc(0x2f6b4f, 1), black = pc(0x2a2a36, 0), red = pc(0xc8382e, 1), brass = pc(0xe8b84a, 2);
+    Col steel = pc(0xb8bcc8, 2), smoke = pc(0xd8d6e2, 3), glass = pc(0xf5c96a, 3);
+    if (hurt) {
+        green = pc(0xb8b6c8, 2); black = pc(0x8a88a0, 1); red = pc(0xd8d4e8, 2); brass = pc(0xfaf3e6, 3);
+        steel = pc(0xd8d4e8, 2); glass = pc(0xfaf3e6, 3);
+    }
+    // smoke puffs from the funnel
+    float drift = frame == XF_FLOAT1 ? 0.1f : 0.0f;
+    if (frame != XF_SLAM) {
+        r.circle(1.38f - drift, 0.34f, 0.2f, lit(smoke));
+        r.circle(1.04f - drift, 0.24f, 0.17f, lit(smoke));
+        r.circle(0.76f - drift * 1.5f, 0.2f, 0.12f, lit(smoke));
+    } else {
+        r.circle(1.12f, 0.36f, 0.2f, lit(smoke));
+        r.circle(1.88f, 0.36f, 0.2f, lit(smoke));
+    }
+    // wheels just showing under the beam
+    r.rect(0.62f, 2.4f, 0.16f, 0.46f, lit(black), 0.05f);
+    r.rect(2.22f, 2.4f, 0.16f, 0.46f, lit(black), 0.05f);
+    // cab behind the boiler: roof, spectacle windows
+    r.rect(0.3f, 0.78f, 2.4f, 1.5f, lit(green), 0.2f);
+    r.rect(0.24f, 0.72f, 2.52f, 0.14f, solid(black), 0.07f);
+    r.rect(0.46f, 0.98f, 0.36f, 0.34f, solid(glass), 0.1f);
+    r.rect(2.18f, 0.98f, 0.36f, 0.34f, solid(glass), 0.1f);
+    // funnel
+    r.rect(1.32f, 0.46f, 0.36f, 0.5f, lit(black), 0.03f);
+    r.rect(1.24f, 0.42f, 0.52f, 0.1f, lit(brass), 0.03f);
+    // the smokebox: a round dark face ringed with rivets
+    r.circle(1.5f, 1.52f, 0.74f, lit(green));
+    r.circle(1.5f, 1.52f, 0.64f, lit(black));
+    for (int i = 0; i < 12; ++i) {
+        float a = i * 0.5236f;
+        r.dot(1.5f + std::cos(a) * 0.69f, 1.52f + std::sin(a) * 0.69f, steel, 2);
+    }
+    r.capsule(1.0f, 1.86f, 2.0f, 1.86f, 0.03f, solid(steel));   // door strap
+    // buffer beam, buffers, coupling
+    r.rect(0.26f, 2.14f, 2.48f, 0.3f, lit(red), 0.04f);
+    for (float bx : {0.5f, 2.5f}) {
+        r.rect(bx - 0.08f, 2.18f, 0.16f, 0.22f, solid(farSide(steel)));
+        r.circle(bx, 2.29f, 0.17f, lit(steel));
+    }
+    r.rect(1.42f, 2.32f, 0.16f, 0.2f, solid(black));
+    r.capsule(1.5f, 2.5f, 1.5f, 2.64f, 0.05f, solid(steel));
+    // the headlamp is the eye, in a brass bezel
+    storyEye(r, 1.5f, 1.44f, 0.72f, hurt, brass, 0.08f);
+}
+
+// Stage 5, THE SCARECROW: straw hat, sack face, an old coat on a crossed stick, one pole leg.
+void drawBossScarecrow(Canvas& c, int frame)
+{
+    const bool hurt = frame == XF_HURT;
+    Rig r = storyRig(c, frame);
+    Col wood = pc(0x7a5a3a, 1), coat = pc(0x55664a, 1), coatD = pc(0x3e4a38, 0), patch = pc(0x9a5a3a, 1);
+    Col straw = pc(0xe6c460, 3), strawD = pc(0xb89038, 2), sack = pc(0xc8a070, 2), band = pc(0x8a3a3a, 1);
+    Col stitch = pc(0x3a2418, 0), rope = pc(0x8a6a40, 1), ringc = pc(0x5a2a4a, 0);
+    if (hurt) {
+        wood = pc(0xb8b6c8, 2); coat = pc(0xc8c6d8, 2); coatD = pc(0xa8a6bc, 2); patch = pc(0xd8d4e8, 2);
+        straw = pc(0xfaf3e6, 3); strawD = pc(0xd8d4e8, 2); sack = pc(0xe0dcea, 3); band = pc(0xb8b6c8, 2);
+        rope = pc(0xb8b6c8, 2); ringc = pc(0xfaf3e6, 3);
+    }
+    float flap = frame == XF_FLOAT1 ? 1.0f : (frame == XF_FLOAT0 ? -1.0f : 0.0f);
+    float droop = frame == XF_SLAM ? 0.08f : 0.0f;
+    // the pole leg
+    r.rect(1.42f, 1.8f, 0.16f, 1.08f, lit(wood), 0.06f);
+    // the cross stick, its ends showing past the cuffs
+    r.capsule(0.12f, 1.2f + droop, 2.88f, 1.2f + droop, 0.05f, lit(wood));
+    // straw poking from the cuffs
+    for (int s = -1; s <= 1; s += 2) {
+        float ex = 1.5f + s * 1.06f, ey = 1.24f + droop;
+        for (int i = 0; i < 5; ++i) {
+            float a = -0.7f + i * 0.35f + flap * 0.08f * s;
+            float len = 0.26f + 0.06f * (i % 2);
+            r.capsule(ex, ey, ex + s * std::cos(a) * len, ey + std::sin(a) * len, 0.03f, solid(i % 2 ? strawD : straw));
+        }
+    }
+    // sleeves along the stick
+    for (int s = -1; s <= 1; s += 2) {
+        float sh = 1.5f + s * 0.5f, cuff = 1.5f + s * 1.06f;
+        r.poly({{sh, 1.0f}, {cuff, 1.06f + droop}, {cuff, 1.42f + droop + flap * 0.03f * s}, {sh, 1.5f}}, lit(coat));
+        r.ellipse(cuff, 1.24f + droop, 0.05f, 0.18f, solid(coatD));
+    }
+    // coat body with a ragged hem
+    std::vector<Vector2> body = {{1.02f, 0.98f}, {1.98f, 0.98f}, {2.12f, 2.0f}};
+    const float rag[] = {0.0f, 0.14f, 0.02f, 0.18f, 0.04f, 0.12f, 0.0f};
+    for (int i = 0; i < 7; ++i) {
+        float t = i / 6.0f;
+        body.push_back({2.16f - t * 1.32f + flap * 0.03f, 2.04f + rag[i] + (i % 2) * flap * 0.03f});
+    }
+    body.push_back({0.88f, 2.0f});
+    r.poly(body, lit(coat));
+    // lapels, buttons and a patch
+    r.poly({{1.28f, 0.98f}, {1.5f, 1.04f}, {1.5f, 1.54f}, {1.32f, 1.24f}}, solid(coatD));
+    r.poly({{1.72f, 0.98f}, {1.5f, 1.04f}, {1.5f, 1.54f}, {1.68f, 1.24f}}, solid(coatD));
+    r.capsule(1.5f, 1.54f, 1.5f, 2.08f, 0.015f, solid(coatD));
+    for (float by : {1.66f, 1.88f}) r.circle(1.56f, by, 0.04f, solid(coatD));
+    r.rect(1.68f, 1.62f, 0.26f, 0.24f, lit(patch, false), 0.03f);
+    for (int i = 0; i < 4; ++i) r.dot(1.71f + i * 0.065f, 1.64f, stitch);
+    // straw at the neck
+    for (int i = 0; i < 6; ++i) {
+        float x = 1.3f + i * 0.08f;
+        r.capsule(x, 0.96f, x + (i - 2.5f) * 0.05f, 1.1f, 0.025f, solid(i % 2 ? strawD : straw));
+    }
+    // the sack head, tied with rope
+    r.ellipse(1.5f, 0.72f, 0.38f, 0.34f, lit(sack));
+    r.poly({{1.36f, 0.98f}, {1.64f, 0.98f}, {1.7f, 1.06f}, {1.3f, 1.06f}}, lit(sack));
+    r.capsule(1.33f, 1.0f, 1.67f, 1.0f, 0.03f, solid(rope));
+    // stitched mouth
+    r.capsule(1.34f, 0.92f, 1.66f, 0.9f, 0.012f, solid(stitch));
+    for (int i = 0; i < 5; ++i) {
+        float x = 1.37f + i * 0.065f;
+        r.capsule(x, 0.87f, x, 0.95f, 0.012f, solid(stitch));
+    }
+    // the eye on the face
+    storyEye(r, 1.5f, 0.7f, 0.46f, hurt, ringc, 0.035f);
+    // straw hat
+    r.ellipse(1.5f, 0.42f, 0.74f, 0.12f, lit(straw));
+    r.rect(1.16f, 0.08f, 0.68f, 0.36f, lit(straw), 0.12f);
+    r.rect(1.16f, 0.3f, 0.68f, 0.08f, solid(band));
+    for (int i = 0; i < 3; ++i) {   // frayed brim
+        float x = 0.86f + i * 0.6f + (i == 1 ? 0.3f : 0.0f);
+        r.capsule(x, 0.5f, x - 0.04f, 0.58f, 0.015f, solid(strawD));
+    }
+}
+
+void drawStoryBoss(Canvas& c, int frame)
+{
+    switch (g_era) {
+    case 0: drawBossClock(c, frame); break;
+    case 1: drawBossShirt(c, frame); break;
+    case 2: drawBossBell(c, frame); break;
+    case 3: drawBossStorm(c, frame); break;
+    case 4: drawBossTrain(c, frame); break;
+    default: drawBossScarecrow(c, frame); break;
+    }
+}
+
 // ------------------------------------------------------------------ tiles
 void drawTile(Canvas& c, int t)
 {
@@ -1893,6 +2305,8 @@ int generateSprites(const std::string& dir)
         save(makeSheet(FF_COUNT, FLYER_FS, FLYER_FS, true, drawFlyer), d + "enemy_flyer.png");
         save(makeSheet(RF_COUNT, BRUTE_FS, BRUTE_FS, true, drawBrute), d + "enemy_brute.png");
         save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawBoss), d + "enemy_boss.png");
+        // the story boss of each stage (stage 6 keeps the Forgetting itself, modelled in 3D)
+        if (era < LAST_ERA) save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawStoryBoss), d + "boss_story.png");
         // tiles: the solid ones get no outline so they join seamlessly; pickups get one
         {
             int tp = TILE_PX[era];
