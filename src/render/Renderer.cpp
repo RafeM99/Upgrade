@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/Paths.h"
 #include "core/Config.h"
+#include "core/Settings.h"
 #include "render/ArtSpec.h"
 #include "rlgl.h"
 
@@ -160,6 +161,9 @@ void Renderer::init()
     locDesat_ = GetShaderLocation(post_, "desat");
     locBeat_ = GetShaderLocation(post_, "beat");
     locPal_ = GetShaderLocation(post_, "palette");
+    locRetro_ = GetShaderLocation(post_, "retro");
+    locBloom_ = GetShaderLocation(post_, "bloom");
+    locBright_ = GetShaderLocation(post_, "brightness");
     float pal[48];
     for (int i = 0; i < 16; ++i) {
         pal[i * 3 + 0] = ((PALETTE16[i] >> 16) & 255) / 255.0f;
@@ -201,6 +205,19 @@ Rectangle Renderer::screenRect() const
     return Rectangle{(sw - w) / 2, (sh - h) / 2, w, h};
 }
 
+// Pixel scaling "Integer only": the low-res eras are shown at the largest whole-number
+// scale that fits, letterboxed. The title backdrop and the full-resolution era keep the fit.
+Rectangle Renderer::imageRect() const
+{
+    Rectangle fit = screenRect();
+    int e = renderEra_;
+    if (!settings().integerScale() || !inWorld_ || e < 0 || e > 2 || rtH_[e] <= 0) return fit;
+    int k = (int)std::min((float)GetScreenWidth() / rtW_[e], (float)GetScreenHeight() / rtH_[e]);
+    if (k < 1) return fit;
+    float w = (float)(rtW_[e] * k), h = (float)(rtH_[e] * k);
+    return Rectangle{std::floor((GetScreenWidth() - w) / 2), std::floor((GetScreenHeight() - h) / 2), w, h};
+}
+
 // ------------------------------------------------------------------ background
 void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
 {
@@ -222,6 +239,7 @@ void Renderer::drawTitleBackground(Game& g, float t)
     ensureTargets();
     int e = ((int)(t / 3.0f)) % 4;
     renderEra_ = e;
+    inWorld_ = false;
     oldEra_ = -1;
     BeginTextureMode(rt_[e]);
     ClearBackground(BLACK);
@@ -233,6 +251,7 @@ void Renderer::drawTitleBackground(Game& g, float t)
 void Renderer::drawWorld(Game& g)
 {
     ensureTargets();
+    inWorld_ = true;
     oldEra_ = -1;
     float p = sweepProgress(g);
     if (p >= 0.0f && p < 1.0f && g.transFromEra != g.era) {
@@ -490,8 +509,12 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locGlitch_, &glitch, SHADER_UNIFORM_FLOAT);
-    float beat = g.screen == Screen::Playing ? g.audio.beatPulse() * config().f("audio.beat_pulse", 1.0f) : 0.0f;
+    float beat = g.screen == Screen::Playing ? g.audio.beatPulse() * config().f("audio.beat_pulse", 1.0f) * settings().beatMul() : 0.0f;
     SetShaderValue(post_, locBeat_, &beat, SHADER_UNIFORM_FLOAT);
+    float retro = settings().retro(), bloom = settings().bloom() ? 1.0f : 0.0f, bright = settings().brightness();
+    SetShaderValue(post_, locRetro_, &retro, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locBloom_, &bloom, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locBright_, &bright, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(post_);
     DrawTexturePro(rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, {0, 0}, 0, WHITE);
     EndShaderMode();
@@ -527,7 +550,7 @@ void Renderer::drawSweep(Game& g, Rectangle dst, float p)
 
 void Renderer::present(Game& g, float flash, float desat)
 {
-    Rectangle dst = screenRect();
+    Rectangle dst = imageRect();
 
     // Before the switch: the old era powers down, going blocky and torn.
     if (g.transActive && !g.transSwitched) {

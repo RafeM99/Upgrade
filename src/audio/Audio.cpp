@@ -9,7 +9,18 @@
 namespace {
 const char* NAMES[] = {"jump", "double_jump", "wall_jump", "stomp", "hit", "fade", "revive", "fragment",
                        "powerup", "unlock", "dash", "pound", "crack", "attack", "slow", "boss_hit",
-                       "boss_appear", "memory_lost", "select", "join", "era_up"};
+                       "boss_appear", "memory_lost", "select", "join", "era_up",
+                       "blip", "advance", "encounter", "slam", "swipe", "tick", "dong"};
+
+// Music ships as QOA (44.1 kHz stereo, small); fall back to WAV if a build only has that.
+std::string musicFile(const std::string& dirRel, const char* base)
+{
+    for (const char* ext : {".qoa", ".wav"}) {
+        std::string p = assetPath(dirRel + base + ext);
+        if (FileExists(p.c_str())) return p;
+    }
+    return "";
+}
 }
 
 void Audio::init()
@@ -25,17 +36,17 @@ void Audio::init()
             std::string p = assetPath(d + "sfx_" + n + ".wav");
             if (FileExists(p.c_str())) sfx_[e][n] = LoadSound(p.c_str());
         }
-        std::string mp = assetPath(d + "music.wav");
-        if (FileExists(mp.c_str())) {
+        std::string mp = musicFile(d, "music");
+        if (!mp.empty()) {
             music_[e] = LoadMusicStream(mp.c_str());
             music_[e].looping = true;
-            hasMusic_[e] = true;
+            hasMusic_[e] = IsMusicValid(music_[e]);
         }
-        std::string bp = assetPath(d + "music_boss.wav");
-        if (FileExists(bp.c_str())) {
+        std::string bp = musicFile(d, "music_boss");
+        if (!bp.empty()) {
             boss_music_[e] = LoadMusicStream(bp.c_str());
             boss_music_[e].looping = true;
-            hasBoss_[e] = true;
+            hasBoss_[e] = IsMusicValid(boss_music_[e]);
         }
     }
     era_ = 0;
@@ -79,7 +90,8 @@ void Audio::update(float dt)
     }
     for (int e = 0; e < 4; ++e) {
         if (!hasMusic_[e]) continue;
-        float target = (e == era_ && !boss_) ? 1.0f : 0.0f;
+        // eras without a boss track keep their own loop playing through a boss fight
+        float target = (e == era_ && !(boss_ && hasBoss_[e])) ? 1.0f : 0.0f;
         if (e == era_ && !IsMusicStreamPlaying(music_[e])) PlayMusicStream(music_[e]);
         vol_[e] += std::max(-dt / 1.5f, std::min(dt / 1.5f, target - vol_[e]));
         if (vol_[e] <= 0 && e != era_) {

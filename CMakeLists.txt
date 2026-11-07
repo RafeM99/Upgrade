@@ -41,7 +41,7 @@ add_custom_command(TARGET upgrade POST_BUILD
 # ---- Asset generator: draws every sprite sheet and synthesises every sound.
 # The generated files are committed, so you only need this to change the art.
 # Run:  cmake --build build --target assetgen && ./build/assetgen assets
-add_executable(assetgen tools/assetgen/main.cpp tools/assetgen/SpriteGen.cpp tools/assetgen/SoundGen.cpp)
+add_executable(assetgen tools/assetgen/main.cpp tools/assetgen/SpriteGen.cpp tools/assetgen/SoundGen.cpp tools/assetgen/MusicGen.cpp)
 target_include_directories(assetgen PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(assetgen PRIVATE raylib)
 if(APPLE)

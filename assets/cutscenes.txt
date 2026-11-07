@@ -1,0 +1,67 @@
+# cutscenes.txt (akshat): the story scenes. Pokemon-style dialogue boxes.
+#
+# FORMAT
+#   [scene_name]            starts a scene. Add  vs=alarm  or  vs=hourglass  for the
+#                           boss "VS" encounter intro:  [boss_alarm_intro vs=alarm]
+#   speaker: text           one line of dialogue. Long text wraps and pages by itself.
+#   Speakers: gran, sam, alarm, hourglass, narrator.
+#   A line with no "speaker:" is spoken by the narrator. Lines starting with # are comments.
+#
+# The game plays these scene names (each once per run):
+#   intro                      a run starts
+#   era_1, era_2, era_3        right after the world upgrades into that era
+#   boss_alarm_intro / _defeat      The Alarm Clock (end of 8-bit)
+#   boss_hourglass_intro / _defeat  The Hourglass (end of 2.5D, the final boss)
+#   ending                     just before the ending slideshow
+# Remove a scene (or all its lines) and the game just skips it.
+
+[intro]
+gran: Sam? Is that you, love? Everything's gone all grey. Like an old photo left in the sun.
+sam: It's me, Gran. You're having one of your foggy days. That's okay. I've got you.
+gran: Something's behind us. It's eating the street. It's eating Tuesday!
+sam: That's the Forgetting. We keep running right, and we stay ahead of it.
+gran: Running? At my age? ...Oh, go on then. Hold my cardigan.
+sam: Jump on the little Forgetting things. They drop bits of you. We'll put you back together.
+
+[era_1]
+gran: Colour! I remember colour! And this is... my old school. I hated maths.
+sam: You told me you were top of the class.
+gran: Top of the class at hating maths, love.
+
+[era_2]
+gran: Listen to that music! I had this on a cassette. Wore it out dancing.
+sam: Mum says you met Grandad at a dance.
+gran: He stepped on my foot. Twice. I married him anyway.
+
+[era_3]
+gran: Oh. It all looks so real now. Like I could reach out and touch it.
+sam: This is when you had Mum. And then, a bit later, me.
+gran: Then this is the best bit. Don't let go of my hand, Sam.
+
+[boss_alarm_intro vs=alarm]
+alarm: BRRRIIIIING! UP! UP! UP! You're LATE! You are ALWAYS late!
+gran: Oh no. The school-morning clock. I could never find both shoes.
+alarm: Five more minutes? There are NEVER five more minutes!
+sam: Gran, when it gets dizzy, we jump on its head. Watch the shockwaves!
+
+[boss_alarm_defeat]
+alarm: Brr... ring... five... more... minutes...
+gran: Take ten, dear. I've got all the time in the world today.
+sam: The memory's coming back! Keep going!
+
+[boss_hourglass_intro vs=hourglass]
+hourglass: Every grain that falls, you forget. A name. A face. A Tuesday.
+sam: Leave her alone! She's still in there!
+hourglass: The sand always runs out, child. Always.
+gran: Then I'll turn you over and start again. Come on, Sam.
+
+[boss_hourglass_defeat]
+hourglass: But... the sand... it was supposed to run out...
+gran: It does, dear. That's why you hold on to the people while it falls.
+
+[ending]
+gran: Sam. I know you. I know all of it. Your mum's first word was "no".
+sam: You remember!
+gran: For now. Maybe not tomorrow. That's alright.
+sam: Then I'll remind you tomorrow. And the day after that.
+gran: That's my boy. Now put the kettle on.

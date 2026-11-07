@@ -1,6 +1,7 @@
 #include "render/GameCamera.h"
 #include "level/Chunk.h"
 #include "render/ArtSpec.h"
+#include "core/Settings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +19,8 @@ void GameCamera::update(float targetX, float spread, float minLeft, float dt)
     shake = std::max(0.0f, shake - dt * 2.5f);
     shakeX = shake * ((std::rand() % 1000) / 500.0f - 1.0f) * 0.3f;
     shakeY = shake * ((std::rand() % 1000) / 500.0f - 1.0f) * 0.3f;
+    shakeX *= settings().shakeMul();   // player setting: Off / 50% / 100%
+    shakeY *= settings().shakeMul();
 }
 
 Camera3D GameCamera::camera3D(float& nearPlane, float& farPlane) const

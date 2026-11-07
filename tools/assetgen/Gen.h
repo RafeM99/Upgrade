@@ -6,5 +6,8 @@
 // under <assetsDir>/art. Returns the number of files written.
 int generateSprites(const std::string& assetsDir);
 
-// Writes every sound effect and music loop under <assetsDir>/audio.
+// Writes every sound effect (WAV) under <assetsDir>/audio/eraN.
 int generateSounds(const std::string& assetsDir);
+
+// Writes every music loop (music.qoa per era, music_boss.qoa for eras 1 and 3) under <assetsDir>/audio.
+int generateMusic(const std::string& assetsDir);

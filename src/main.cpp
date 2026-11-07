@@ -11,6 +11,9 @@
 //   --shot-every N PREFIX  save a frame every N frames as PREFIX_00000.png
 //   --seed N          fixed level seed         --ending      jump to the ending
 //   --size W H        window size
+//   --cutscenes       play story scenes even with --autoplay (they auto-advance)
+//   --settings        open the Settings screen at start
+//   --set KEY=VALUE   override a setting (keys as in settings.ini, e.g. retro=0)
 #include "core/Game.h"
 
 #include <cstdlib>
@@ -32,7 +35,10 @@ int main(int argc, char** argv)
         else if (is("--seed")) o.seed = (unsigned)std::atoi(next());
         else if (is("--ending")) o.ending = true;
         else if (is("--play")) o.startOnTitle = false;
+        else if (is("--cutscenes")) o.cutscenes = true;
         else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
+        else if (is("--settings")) o.openSettings = true;
+        else if (is("--set")) o.setOverrides.push_back(next());
     }
     Game game;
     game.init(o);

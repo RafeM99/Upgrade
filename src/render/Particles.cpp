@@ -1,4 +1,5 @@
 #include "render/Particles.h"
+#include "core/Settings.h"
 #include <algorithm>
 #include <cmath>
 
@@ -10,11 +11,16 @@ float Particles::rnd()
 
 void Particles::burst(float x, float y, int n, Color c, float speed, float life, float size, float grav)
 {
+    // player setting Low / Normal / High; fractions round at random so 1-particle trails thin out
+    float want = n * settings().particleMul();
+    n = (int)want;
+    if (want > n && rnd() < want - n) ++n;   // never touches the random stream at Normal
     for (int i = 0; i < n; ++i) {
         float a = rnd() * 6.2831853f, s = speed * (0.3f + 0.7f * rnd());
         ps_.push_back({x, y, std::cos(a) * s, std::sin(a) * s, life * (0.6f + 0.4f * rnd()), life, size * (0.6f + 0.6f * rnd()), grav, c});
     }
-    if (ps_.size() > 3000) ps_.erase(ps_.begin(), ps_.begin() + (ps_.size() - 3000));
+    const size_t cap = settings().particleMul() > 1.0f ? 5000 : 3000;
+    if (ps_.size() > cap) ps_.erase(ps_.begin(), ps_.begin() + (ps_.size() - cap));
 }
 
 void Particles::update(float dt)

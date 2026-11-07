@@ -115,3 +115,23 @@ bool InputMap::menuSelect() const
     for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) return true;
     return false;
 }
+bool InputMap::menuLeft() const
+{
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) return true;
+    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_LEFT)) return true;
+    return false;
+}
+bool InputMap::menuRight() const
+{
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) return true;
+    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) return true;
+    return false;
+}
+bool InputMap::menuBack() const
+{
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) return true;
+    for (int p = 0; p < 2; ++p)
+        if (IsGamepadAvailable(p) && (IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || IsGamepadButtonPressed(p, GAMEPAD_BUTTON_MIDDLE_RIGHT)))
+            return true;
+    return false;
+}

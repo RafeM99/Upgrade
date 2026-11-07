@@ -9,5 +9,6 @@ public:
     void drawPlaying(Game& g);
     void drawTitle(Game& g);
     void drawPause(Game& g);
+    void drawSettings(Game& g);   // akshat: display / graphics / audio options
     void drawEnding(Game& g);
 };

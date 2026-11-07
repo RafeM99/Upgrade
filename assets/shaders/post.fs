@@ -19,6 +19,9 @@ uniform float desat;    // 0..1 greyscale for "memory lost"
 uniform float mosaic;   // >= 1: source pixels per block, for the transition
 uniform float glitch;   // 0..1: torn scanlines as the old era shuts down
 uniform float beat;     // 0..1: peaks on each beat of the music (akshat), a Geometry-Dash-style pulse
+uniform float retro;      // 0..1 player setting: LCD grid, scanlines and vignette strength (palettes stay)
+uniform float bloom;      // 0 or 1 player setting: era 3 glow
+uniform float brightness; // player setting, 1 = as authored
 uniform vec3 palette[16];
 out vec4 finalColor;
 
@@ -54,7 +57,7 @@ void main()
     vec3 c = texture(texture0, uv).rgb;
     vec2 px = floor(tp);
     vec2 d = fragTexCoord - 0.5;
-    float vig = 1.0 - dot(d, d) * 1.4;
+    float vig = 1.0 - dot(d, d) * 1.4 * retro;
     bool fine = mosaic <= 1.01 && outSize.y / texSize.y > 2.5;   // big enough pixels to show their grid
 
     if (era == 0) {
@@ -64,7 +67,7 @@ void main()
         vec3 dark = vec3(0.063, 0.071, 0.086), light = vec3(0.92, 0.92, 0.88);
         c = (l + b * 0.5 > 0.5) ? light : dark;
         // handheld LCD: a faint gap between pixels
-        if (fine && (cell.x < 0.12 || cell.y < 0.12)) c = mix(c, dark, 0.35);
+        if (fine && (cell.x < 0.12 || cell.y < 0.12)) c = mix(c, dark, 0.35 * retro);
     } else if (era == 1) {
         float best = 1e9; vec3 bc = c;
         for (int i = 0; i < 16; ++i) {
@@ -74,11 +77,11 @@ void main()
         }
         c = bc;
         // CRT: dark gaps between pixel rows, a touch of phosphor glow in the middle
-        if (fine) c *= mix(0.84, 1.04, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
+        if (fine) c *= mix(1.0 - 0.16 * retro, 1.0 + 0.04 * retro, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
         c *= mix(0.82, 1.0, vig);
     } else if (era == 2) {
         c = floor(c * 31.0 + 0.5) / 31.0;
-        if (fine) c *= mix(0.88, 1.0, smoothstep(0.0, 0.3, cell.y));
+        if (fine) c *= mix(1.0 - 0.12 * retro, 1.0, smoothstep(0.0, 0.3, cell.y));
         c *= mix(0.85, 1.0, vig);
     } else {
         vec2 texel = 1.0 / texSize;
@@ -94,11 +97,12 @@ void main()
                 total += 1.0;
             }
         }
-        c += glow / total * 1.3;
+        c += glow / total * 1.3 * bloom;
         c = mix(c, c * vec3(1.06, 1.0, 0.92), 0.6);   // warm grading
         c *= mix(0.7, 1.0, vig);
     }
     c *= 1.0 + beat * (era == 0 ? 0.04 : 0.07);
+    c *= brightness;
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);
     c = mix(c, vec3(1.0), clamp(flash, 0.0, 1.0));

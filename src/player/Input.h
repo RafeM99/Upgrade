@@ -18,6 +18,9 @@ public:
     bool menuUp() const;
     bool menuDown() const;
     bool menuSelect() const;
+    bool menuLeft() const;
+    bool menuRight() const;
+    bool menuBack() const;     // Esc / Backspace / gamepad B
 
 private:
     std::vector<int> keys_[2][7];   // left right up down jump attack ability

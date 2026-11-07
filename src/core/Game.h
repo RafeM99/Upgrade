@@ -10,13 +10,14 @@
 #include "render/GameCamera.h"
 #include "render/Particles.h"
 #include "render/Renderer.h"
+#include "ui/Cutscene.h"
 #include "ui/Hud.h"
 
 #include <random>
 #include <string>
 #include <vector>
 
-enum class Screen { Title, Playing, Paused, Ending };
+enum class Screen { Title, Playing, Paused, Ending, Settings };
 
 enum PowerType { PU_SHIELD, PU_SLOW, PU_MAGNET, PU_PHOTO, PU_SPEED, PU_COUNT };
 
@@ -35,10 +36,13 @@ struct PowerUp {
 
 struct Options {
     bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false;
+    bool cutscenes = false;   // --cutscenes: play them even with --autoplay (auto-advance, for screenshots)
     int startEra = 0, maxFrames = 0, shotEvery = 0;
     unsigned seed = 0;
     std::string shot, shotPrefix;
     int width = 1280, height = 720;
+    bool openSettings = false;                  // --settings: start on the Settings screen
+    std::vector<std::string> setOverrides;      // --set key=value (settings), applied after load
 };
 
 class Game {
@@ -83,6 +87,12 @@ public:
     // pause menu
     int pauseItem = 0;
 
+    // settings menu (akshat): reachable from the title and the pause menu
+    int settingsItem = 0;                // row, 0..SET_COUNT (the last row is Back)
+    Screen settingsFrom = Screen::Title; // where Back returns to
+    void openSettings();
+    void applySettings(bool window);     // push settings into raylib (window = fullscreen/vsync/fps too)
+
     // messages: a short banner in the middle of the screen
     std::string banner, bannerSub;
     float bannerT = 0, bannerLen = 0;
@@ -96,6 +106,7 @@ public:
     Particles particles;
     Renderer renderer;
     Hud hud;
+    Cutscene cutscene;   // akshat: story scenes (assets/cutscenes.txt)
     float hitPause = 0;
 
     void startRun();
@@ -112,6 +123,7 @@ private:
     void updateTitle();
     void updatePlaying(float dt);
     void updatePause();
+    void updateSettings();
     void updateEnding(float dt);
     PlayerInput botInput(int p);
 
