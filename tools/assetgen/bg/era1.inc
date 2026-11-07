@@ -32,11 +32,15 @@ static void e1_tri(Scene& sc, float ax, float ay, float bx, float by, float cx, 
 
 struct E1Blob { float x, y, r; };
 
-// A canopy built from blocky clusters. Later blobs sit in front; a front cluster casts a one-block
-// shadow on the cluster behind it, which is what makes the clumps read. tone[0..3] = lit, mid,
-// shadow, deepest (deepest may be -1 for none). rim: lit blocks on the outer edge drop one tone so
-// the crown keeps its silhouette against a light sky.
-static void e1_canopy(Scene& sc, const std::vector<E1Blob>& bl, int b, const int tone[4], int seed, bool rim)
+// Shared by era1.inc and era2.inc: shade a canopy made of clumps, clean and hand-drawn looking.
+// Each block belongs to the front-most clump that covers it (no jitter, so the edges step
+// cleanly). Every clump gets one flat body level from where it sits in the crown (upper left =
+// lighter, lower right = darker), a lit cap on its own upper left, a darker underside on its
+// lower right, and a one-block shadow line where a clump in front overlaps it. A last pass
+// removes single blocks that differ from all their neighbours, so nothing reads as noise.
+// out(x, y, level, edge) gets block coordinates (in pixels, top left) and a level 0 lit .. 3 deepest.
+template <class Out>
+static void clumpCanopy(const std::vector<E1Blob>& bl, int b, int maxLevel, Out out)
 {
     if (bl.empty()) return;
     float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
@@ -47,37 +51,74 @@ static void e1_canopy(Scene& sc, const std::vector<E1Blob>& bl, int b, const int
     int gx0 = (int)std::floor(minx / b) - 1, gx1 = (int)std::ceil(maxx / b) + 1;
     int gy0 = (int)std::floor(miny / b) - 1, gy1 = (int)std::ceil(maxy / b) + 1;
     int gw = gx1 - gx0 + 1, gh = gy1 - gy0 + 1;
-    float ccx = (minx + maxx) * 0.5f, ccy = (miny + maxy) * 0.5f, rh = std::max(1.0f, (maxy - miny) * 0.5f);
-    float rw = std::max(1.0f, (maxx - minx) * 0.5f);
-    std::vector<int> who((size_t)gw * gh, -1);
+    float ccx = (minx + maxx) * 0.5f, ccy = (miny + maxy) * 0.5f;
+    float rw = std::max(1.0f, (maxx - minx) * 0.5f), rh = std::max(1.0f, (maxy - miny) * 0.5f);
+    std::vector<int> who((size_t)gw * gh, -1), lvl((size_t)gw * gh, -1);
     for (int gy = 0; gy < gh; ++gy)
         for (int gx = 0; gx < gw; ++gx) {
             float mx = (gx + gx0 + 0.5f) * b, my = (gy + gy0 + 0.5f) * b;
             for (int k = (int)bl.size() - 1; k >= 0; --k) {
-                float j = 1.0f + 0.08f * (rnd(gx + gx0, gy + gy0, seed + k * 7) - 0.5f);
-                float dx = mx - bl[k].x, dy = (my - bl[k].y) * 1.08f, r = bl[k].r * j;
-                if (dx * dx + dy * dy < r * r) { who[(size_t)gy * gw + gx] = k; break; }
+                float dx = mx - bl[k].x, dy = (my - bl[k].y) * 1.1f;
+                if (dx * dx + dy * dy < bl[k].r * bl[k].r) { who[(size_t)gy * gw + gx] = k; break; }
             }
         }
-    auto at = [&](int gx, int gy) { return (gx < 0 || gy < 0 || gx >= gw || gy >= gh) ? -1 : who[(size_t)gy * gw + gx]; };
+    auto at = [&](const std::vector<int>& v, int gx, int gy) {
+        return (gx < 0 || gy < 0 || gx >= gw || gy >= gh) ? -1 : v[(size_t)gy * gw + gx];
+    };
     for (int gy = 0; gy < gh; ++gy)
         for (int gx = 0; gx < gw; ++gx) {
-            int k = at(gx, gy);
+            int k = at(who, gx, gy);
             if (k < 0) continue;
             float mx = (gx + gx0 + 0.5f) * b, my = (gy + gy0 + 0.5f) * b;
+            float gxn = (mx - ccx) / rw, gyn = (my - ccy) / rh;
+            float gpos = 0.5f * gxn + 0.85f * gyn;                 // -1 upper left .. +1 lower right
             float nx = (mx - bl[k].x) / bl[k].r, ny = (my - bl[k].y) / bl[k].r;
-            // tone = the crown's light direction, bent by the clump each block belongs to, so the
-            // lit / mid / shadow boundaries are scalloped along the clumps
-            float gx_ = (mx - ccx) / rw, gy_ = (my - ccy) / rh;
-            float t = 0.5f * gx_ + 0.85f * gy_ + 0.5f * (0.6f * nx + 0.8f * ny);
-            int lv = t < 0.2f ? 1 : (t < 0.8f ? 2 : 3);
-            float lt = 0.6f * nx + 0.8f * ny;
-            if (lt < -0.45f && t < -0.1f) lv = 0;   // each clump's lit cap on the sunny side
-            bool edge = at(gx - 1, gy) < 0 || at(gx + 1, gy) < 0 || at(gx, gy - 1) < 0 || at(gx, gy + 1) < 0;
-            if (rim && edge && lv == 0) lv = 1;
-            if (tone[lv] < 0) lv = 2;
-            e1_rect(sc, (float)(gx + gx0) * b, (float)(gy + gy0) * b, (float)b, (float)b, tone[lv]);
+            float lt = 0.6f * nx + 0.8f * ny;                     // the clump's own light
+            int l = 1;
+            if (lt < -0.3f && gpos < 0.35f) l = 0;                // lit cap of each clump
+            else if (lt > 0.3f || gpos > 0.55f) l = 2;            // its underside, and the shaded side
+            if (l == 2 && gpos > 0.45f && lt > 0.0f) l = 3;       // deepest, lower right only
+            // the top row of a clump that sits in front of another: always its lit cap
+            int up = at(who, gx, gy - 1);
+            if (up >= 0 && up < k && lt < 0 && gpos < 0.6f) l = std::min(l, gpos < 0.1f ? 0 : 1);
+            lvl[(size_t)gy * gw + gx] = std::max(0, std::min(maxLevel, l));
         }
+    // clean-up: a block unlike all four neighbours takes their most common level
+    std::vector<int> fin = lvl;
+    for (int gy = 0; gy < gh; ++gy)
+        for (int gx = 0; gx < gw; ++gx) {
+            int l = at(lvl, gx, gy);
+            if (l < 0) continue;
+            int n[4] = {at(lvl, gx - 1, gy), at(lvl, gx + 1, gy), at(lvl, gx, gy - 1), at(lvl, gx, gy + 1)};
+            int cnt[4] = {0, 0, 0, 0}, same = 0, inside = 0;
+            for (int v : n)
+                if (v >= 0) { ++cnt[v]; ++inside; if (v == l) ++same; }
+            if (inside >= 3 && same == 0) {
+                int best = l;
+                for (int v = 0; v < 4; ++v) if (cnt[v] > (best == l ? 0 : cnt[best])) best = v;
+                fin[(size_t)gy * gw + gx] = best;
+            }
+        }
+    for (int gy = 0; gy < gh; ++gy)
+        for (int gx = 0; gx < gw; ++gx) {
+            int l = at(fin, gx, gy);
+            if (l < 0) continue;
+            bool edge = at(who, gx - 1, gy) < 0 || at(who, gx + 1, gy) < 0 || at(who, gx, gy - 1) < 0 || at(who, gx, gy + 1) < 0;
+            out((gx + gx0) * b, (gy + gy0) * b, l, edge);
+        }
+}
+
+// A canopy in the four greys. tone[0..3] = lit, mid, shadow, deepest (deepest may be -1: then
+// the canopy uses three levels). rim is kept for the callers; the clean shading keeps the
+// silhouette on its own.
+static void e1_canopy(Scene& sc, const std::vector<E1Blob>& bl, int b, const int tone[4], int seed, bool rim)
+{
+    (void)seed;
+    int maxL = tone[3] < 0 ? 2 : 3;
+    clumpCanopy(bl, b, maxL, [&](int x, int y, int l, bool edge) {
+        if (rim && edge && l == 0) l = 1;   // keep the silhouette against the pale sky
+        e1_rect(sc, (float)x, (float)y, (float)b, (float)b, tone[l]);
+    });
 }
 
 // Tree kinds: 0 round, 1 tall oval, 2 pine (stepped tiers), 3 forked (two crowns), 4 wide round,
@@ -91,14 +132,19 @@ static void e1_tree(Scene& sc, float x, float base, int kind, float R, int b, co
         e1_rect(sc, tx, top, tw * 0.5f, base - top, trunkD);
     };
     std::vector<E1Blob> bl;
-    auto crown = [&](float cx, float cy, float rx, float ry) {   // a ring of clumps round a core
+    auto crown = [&](float cx, float cy, float rx, float ry) {   // many small clumps filling the crown
         std::vector<E1Blob> c;
-        c.push_back({cx, cy, std::min(rx, ry) * 0.7f});
-        int n = 7 + (ry > rx * 1.2f ? 3 : 0);
-        for (int i = 0; i < n; ++i) {
-            float a = i * 6.2831853f / n + rnd(i, seed, 61) * 0.5f;
-            float rr = std::min(rx, ry) * (0.38f + 0.14f * rnd(i, seed, 62));
-            c.push_back({cx + std::cos(a) * (rx - rr * 0.95f), cy + std::sin(a) * (ry - rr * 0.95f), rr});
+        float m = std::min(rx, ry);
+        c.push_back({cx, cy, m * 0.6f});
+        // two rings of clumps, the outer one making the scalloped silhouette
+        for (int ring = 0; ring < 2; ++ring) {
+            int n = ring == 0 ? 6 : 9 + (ry > rx * 1.2f ? 3 : 0);
+            float d = ring == 0 ? 0.42f : 0.74f;
+            for (int i = 0; i < n; ++i) {
+                float a = (i + 0.5f * ring) * 6.2831853f / n + (rnd(i, seed + ring, 61) - 0.5f) * 0.5f;
+                float rr = m * (0.26f + 0.1f * rnd(i, seed + ring, 62));
+                c.push_back({cx + std::cos(a) * rx * d, cy + std::sin(a) * ry * d, rr});
+            }
         }
         // upper clumps first, lower ones in front: each clump shows its lit top like a bump
         std::sort(c.begin() + 1, c.end(), [&](const E1Blob& p, const E1Blob& q) { return p.y < q.y; });
@@ -157,23 +203,34 @@ static void e1_tree(Scene& sc, float x, float base, int kind, float R, int b, co
     }
 }
 
-// A cloud of blocks with a flat, shaded underside.
-static void e1_cloud(Scene& sc, float cx, float cy, float size, int b)
+// A cloud of blocks with a flat, shaded underside. Every cloud is its own shape: the number,
+// size and spacing of its puffs come from `seed`, and `stretch` widens it into a long bank.
+static void e1_cloud(Scene& sc, float cx, float cy, float size, int b, int seed, float stretch)
 {
-    int gx0 = (int)std::floor((cx - size * 2.6f) / b), gx1 = (int)std::ceil((cx + size * 2.6f) / b);
-    int gy0 = (int)std::floor((cy - size * 1.5f) / b), gy1 = (int)std::ceil((cy + size) / b);
+    struct P { float x, y, r; };
+    std::vector<P> puffs;
+    int n = 2 + (int)(rnd(seed, 1, 90) * 4);
+    float span = size * (1.2f + stretch);
+    int big = (int)(rnd(seed, 2, 90) * n);
+    for (int i = 0; i < n; ++i) {
+        float f = n == 1 ? 0 : (float)i / (n - 1) * 2 - 1;
+        float r = size * (0.45f + 0.35f * rnd(seed, 10 + i, 90)) * (i == big ? 1.45f : 1.0f);
+        puffs.push_back({cx + f * span + (rnd(seed, 20 + i, 90) - 0.5f) * size * 0.5f, cy + size * 0.35f - r * 0.75f, r});
+    }
+    float bottom = cy + size * 0.4f;
+    int gx0 = (int)std::floor((cx - span - size * 2) / b), gx1 = (int)std::ceil((cx + span + size * 2) / b);
+    int gy0 = (int)std::floor((cy - size * 2.5f) / b), gy1 = (int)std::ceil(bottom / b) + 1;
     auto in = [&](int gx, int gy) {
         float mx = (gx + 0.5f) * b, my = (gy + 0.5f) * b;
-        if (my > cy + size * 0.5f) return false;
-        auto e = [&](float ox, float oy, float r) { return (mx - ox) * (mx - ox) + (my - oy) * (my - oy) * 2.2f < r * r; };
-        return e(cx, cy - size * 0.25f, size) || e(cx - size * 1.15f, cy + size * 0.1f, size * 0.7f) ||
-               e(cx + size * 1.25f, cy + size * 0.15f, size * 0.62f) || e(cx + size * 0.5f, cy - size * 0.55f, size * 0.55f);
+        if (my > bottom) return false;
+        for (auto& p : puffs)
+            if ((mx - p.x) * (mx - p.x) + (my - p.y) * (my - p.y) * 1.6f < p.r * p.r) return true;
+        return false;
     };
     for (int gy = gy0; gy <= gy1; ++gy)
         for (int gx = gx0; gx <= gx1; ++gx) {
             if (!in(gx, gy)) continue;
-            float my = (gy + 0.5f) * b;
-            bool under = my > cy + size * 0.18f || !in(gx, gy + 2);
+            bool under = !in(gx, gy + 1) || (!in(gx, gy + 2) && ((gx + seed) % 3 != 0));
             bool edgeTop = !in(gx, gy - 1) || !in(gx - 1, gy) || !in(gx + 1, gy);
             e1_rect(sc, (float)gx * b, (float)gy * b, (float)b, (float)b, under || edgeTop ? 2 : 3);
         }
@@ -188,19 +245,23 @@ bool bgEra1(Scene& sc, int layer)
 
     if (layer == 0) {   // sky: palest grey, stepped clouds, a pale sun
         e1_rect(sc, 0, 0, (float)W, (float)H, 3);
-        float sx = W * 0.8f, sy = H * 0.15f, sr = 10 * s * 0.5f + 4;
+        float sx = W * 0.8f, sy = H * 0.21f, sr = 10 * s * 0.5f + 4;
         for (int y = (int)(sy - sr - 2); y <= (int)(sy + sr + 2); ++y)
             for (int x = (int)(sx - sr - 2); x <= (int)(sx + sr + 2); ++x) {
                 float d = std::hypot((std::floor(x / (float)b) + 0.5f) * b - sx, (std::floor(y / (float)b) + 0.5f) * b - sy);
                 if (d < sr && d > sr - b) e1_put(sc, x, y, 2);
             }
-        const float cl[6][3] = {{0.06f, 0.13f, 7}, {0.27f, 0.22f, 5}, {0.45f, 0.1f, 8}, {0.63f, 0.25f, 4.5f}, {0.93f, 0.3f, 4}, {0.74f, 0.08f, 3.5f}};
-        for (auto& c : cl) e1_cloud(sc, W * c[0], H * c[1], c[2] * s, b * 2);
-        // thin streaks low in the sky
+        // clouds kept below the top tenth (where the HUD can sit), each a different shape
+        const float cl[6][4] = {{0.06f, 0.2f, 6, 0.6f}, {0.25f, 0.27f, 4, 1.8f}, {0.44f, 0.17f, 7, 0.2f},
+                                {0.6f, 0.3f, 3.5f, 0.9f}, {0.9f, 0.24f, 5, 2.6f}, {0.72f, 0.16f, 3, 0.4f}};
+        int ci = 0;
+        for (auto& c : cl) e1_cloud(sc, W * c[0], H * c[1], c[2] * s, b, 31 + 7 * ci++, c[3]);
+        // thin streaks low in the sky, each its own length
         for (int i = 0; i < 5; ++i) {
-            float y = std::floor(H * (0.36f + 0.03f * (i % 3)) / b) * b, x = W * (0.1f + i * 0.21f);
-            e1_rect(sc, x, y, (14 + 6 * (i % 2)) * s, (float)b, 2);
-            e1_rect(sc, x + 6 * s, y + b, 8 * s, (float)b, 2);
+            float y = std::floor(H * (0.37f + 0.03f * (i % 3)) / b) * b, x = W * (0.1f + i * 0.21f + 0.04f * rnd(i, 1, 33));
+            float l1 = (8 + 14 * rnd(i, 2, 33)) * s, l2 = (4 + 8 * rnd(i, 3, 33)) * s;
+            e1_rect(sc, std::floor(x / b) * b, y, std::floor(l1 / b) * b, (float)b, 2);
+            e1_rect(sc, std::floor((x + l1 * 0.3f) / b) * b, y + b, std::floor(l2 / b) * b, (float)b, 2);
         }
         return true;
     }
@@ -266,7 +327,8 @@ bool bgEra1(Scene& sc, int layer)
             for (float x = W * hedge[h][0]; x < W * hedge[h][1]; x += 7 * s)
                 hb.push_back({x, g - (3.5f + 2.0f * rnd((int)x, h, 77)) * s, (4.5f + 1.5f * rnd((int)x, h, 78)) * s});
             for (float x = W * hedge[h][0] + 3 * s; x < W * hedge[h][1]; x += 9 * s) hb.push_back({x, g - 1.5f * s, 4.0f * s});
-            e1_canopy(sc, hb, 2 * b, tone, 70 + h, true);
+            const int hedgeTone[4] = {2, 2, 1, -1};   // the hedge: calm, one step darker than the bushes
+            e1_canopy(sc, hb, b, hedgeTone, 70 + h, true);
         }
         // Gran's cottage
         float cx = std::floor(W * 0.5f / b) * b, cw = 66 * b, ch = 34 * b;
@@ -282,8 +344,8 @@ bool bgEra1(Scene& sc, int layer)
         for (int r = 1; r < 6; ++r) {   // tile rows
             float y = peak + (roofY - peak) * r / 6.0f;
             float half = (cw * 0.5f + 5 * b) * r / 6.0f;
-            e1_rect(sc, cx + cw * 0.5f - half + b, std::floor(y / b) * b, half - b, 1, 1);
-            e1_rect(sc, cx + cw * 0.5f, std::floor(y / b) * b, half - b, 1, 0);
+            e1_rect(sc, cx + cw * 0.5f - half + b, std::floor(y / b) * b, half - b, (float)b, 1);
+            e1_rect(sc, cx + cw * 0.5f, std::floor(y / b) * b, half - b, (float)b, 0);
         }
         e1_rect(sc, cx - 5 * b, roofY, cw + 10 * b, (float)b, 1);   // eaves
         // chimney and a curl of smoke
@@ -312,11 +374,11 @@ bool bgEra1(Scene& sc, int layer)
         e1_rect(sc, cx + 35 * b, roofY + 24 * b, (float)b, (float)b, 3);   // handle
         e1_rect(sc, cx + 24 * b, g - b, 16.0f * b, (float)b, 2);
         // trees behind the hedge
-        e1_tree(sc, W * 0.13f, g - 2 * b, 0, 15 * s, 2 * b, tone, 2, 1, 11, false);
-        e1_tree(sc, W * 0.34f, g - 2 * b, 3, 12 * s, 2 * b, tone, 2, 1, 12, false);
-        e1_tree(sc, W * 0.42f, g - 2 * b, 2, 12 * s, 2 * b, tone, 2, 1, 13, false);
-        e1_tree(sc, W * 0.78f, g - 2 * b, 1, 11 * s, 2 * b, tone, 2, 1, 14, false);
-        e1_tree(sc, W * 0.96f, g - 2 * b, 5, 10 * s, 2 * b, tone, 2, 1, 15, false);
+        e1_tree(sc, W * 0.13f, g - 2 * b, 0, 15 * s, b, tone, 2, 1, 11, false);
+        e1_tree(sc, W * 0.34f, g - 2 * b, 3, 12 * s, b, tone, 2, 1, 12, false);
+        e1_tree(sc, W * 0.42f, g - 2 * b, 2, 12 * s, b, tone, 2, 1, 13, false);
+        e1_tree(sc, W * 0.78f, g - 2 * b, 1, 11 * s, b, tone, 2, 1, 14, false);
+        e1_tree(sc, W * 0.96f, g - 2 * b, 5, 10 * s, b, tone, 2, 1, 15, false);
         return true;
     }
 
@@ -337,56 +399,75 @@ bool bgEra1(Scene& sc, int layer)
             e1_rect(sc, fx + k + b * 0.5f, g - h, (float)b, (float)b, 3);
         }
     }
-    // the washing line: two posts and a sagging line
-    float wx0 = std::floor(W * 0.2f / b) * b, wx1 = std::floor(W * 0.47f / b) * b, top = g - 42 * s;
+    // the washing line: two tall posts and a sagging line, high above the players' heads, so
+    // the small light washing hangs well above where Gran and Sam run and the platforms sit apart
+    float wx0 = std::floor(W * 0.2f / b) * b, wx1 = std::floor(W * 0.47f / b) * b, top = std::floor((g - 46 * s) / b) * b;
     for (float px : {wx0, wx1}) {
         e1_rect(sc, px, top - 2 * b, (float)b, g - top + 2 * b, 2);
         e1_rect(sc, px + b, top - 2 * b, (float)b, g - top + 2 * b, 1);
         e1_rect(sc, px - 2 * b, top, 6.0f * b, (float)b, 1);
     }
-    auto lineY = [&](float x) { float f = (x - wx0) / (wx1 - wx0); return std::floor((top + 1 + 7 * s * 4 * f * (1 - f)) / b) * b; };
-    for (float x = wx0 + 2 * b; x < wx1; x += b) e1_rect(sc, x, lineY(x), (float)b, 1, 1);
-    // shirts: collar, sleeves, body, a fold in shadow on the right; pegs on the line
-    const float shirtAt[3] = {0.19f, 0.5f, 0.81f};
-    for (int i = 0; i < 3; ++i) {
-        float sx = std::floor((wx0 + (wx1 - wx0) * shirtAt[i]) / b) * b, sy = lineY(sx);
-        int body = (i % 2) ? 2 : 3, shade = body - 1;
-        int hh = i == 1 ? 7 : 6, ln = i == 1 ? 18 : 16, sway = (i % 2) ? 1 : -1;
-        auto inside = [&](int u, int v) {
-            int au = std::abs(u);
-            if (v < 1 && !(v == 0 && au < 3)) return false;
-            if (au < hh) return v < ln - 1 || (v == ln - 1 && std::abs(u - sway) < hh);
-            return au < hh + 4 && v < 8 - (au - hh);   // sleeves, drooping at the cuff
-        };
-        auto toneAt = [&](int u, int v) {
-            int au = std::abs(u);
-            if (v == 0) return shade;                                   // collar
-            if (au >= hh) return (u > 0 || !inside(u, v + 1)) ? shade : body;   // sleeve shadow, cuffs
-            if (u == 0) return (v % 4 == 1) ? 1 : shade;                // placket and buttons
-            if (u >= hh - 3 && u < hh - 1 && v >= 3) return shade;     // fold
-            if (u <= -hh + 3 && u >= -hh + 1 && v >= 4 && v < 7) return shade;   // pocket
-            return body;
-        };
-        for (int v = -1; v <= ln; ++v)
-            for (int u = -hh - 5; u <= hh + 5; ++u) {
-                int t = -1;
-                if (inside(u, v)) t = toneAt(u, v);
-                else if (inside(u - 1, v) || inside(u + 1, v) || inside(u, v + 1) || inside(u, v - 1)) t = 1;
-                if (t >= 0) e1_rect(sc, sx + u * b, sy + v * b, (float)b, (float)b, t);
+    auto lineY = [&](float x) { float f = (x - wx0) / (wx1 - wx0); return std::floor((top + b + 5 * s * 4 * f * (1 - f)) / b) * b; };
+    for (float x = wx0 + 2 * b; x < wx1; x += b) e1_rect(sc, x, lineY(x), (float)b, (float)b, 2);
+    // the washing, each piece different: shirts of two sizes (one mirrored), socks, a towel.
+    // Light greys only, outlined in the light-mid grey, so it stays behind the characters.
+    auto px_ = [&](float sx, float sy, int u, int v, int t) { e1_rect(sc, sx + u * b, sy + v * b, (float)b, (float)b, t); };
+    auto peg = [&](float sx, float sy, int u) { e1_rect(sc, sx + u * b, sy - b, (float)b, 2.0f * b, 1); };
+    struct Item { float at; int kind, hh, ln; bool flip; };
+    const Item items[5] = {{0.12f, 0, 3, 7, false}, {0.3f, 1, 0, 3, false}, {0.47f, 0, 4, 8, true}, {0.68f, 2, 3, 6, false}, {0.88f, 0, 3, 6, true}};
+    for (int i = 0; i < 5; ++i) {
+        const Item& it = items[i];
+        float sx = std::floor((wx0 + (wx1 - wx0) * it.at) / b) * b, sy = lineY(sx) + b;
+        int f = it.flip ? -1 : 1;
+        if (it.kind == 0) {   // a shirt: collar, short sleeves, placket, a fold on one side
+            int hh = it.hh, ln = it.ln;
+            auto inside = [&](int u, int v) {
+                int au = std::abs(u);
+                if (v < 0) return false;
+                if (au < hh) return v < ln;
+                return au < hh + 2 && v < 3 - (au - hh);
+            };
+            for (int v = -1; v <= ln; ++v)
+                for (int u = -hh - 3; u <= hh + 3; ++u) {
+                    int t = -1;
+                    if (inside(u, v)) {
+                        t = 3;
+                        if (v == 0 && std::abs(u) < 2) t = 2;                     // collar
+                        else if (u == 0 && v > 0) t = (v % 2) ? 3 : 2;             // placket and buttons
+                        else if (u * f == hh - 1 && v >= 2) t = 2;                 // fold in shadow
+                    } else if (inside(u - 1, v) || inside(u + 1, v) || inside(u, v + 1) || inside(u, v - 1)) t = 2;
+                    if (t >= 0) px_(sx, sy, u, v, t);
+                }
+            peg(sx, sy, -hh + 1); peg(sx, sy, hh - 1);
+        } else if (it.kind == 1) {   // a pair of socks, one a step lower
+            for (int k = 0; k < 2; ++k) {
+                int ox = k * 3, ln = it.ln + k;
+                for (int v = 0; v <= ln; ++v) { px_(sx, sy, ox - 1, v, 2); px_(sx, sy, ox, v, v == ln ? 2 : 3); }
+                px_(sx, sy, ox + 1, ln, 2); px_(sx, sy, ox + 1, ln - 1, 2);
+                peg(sx, sy, ox);
             }
-        e1_rect(sc, sx - (hh - 1) * b, sy - b, (float)b, 2.0f * b, 0);   // pegs
-        e1_rect(sc, sx + (hh - 2) * b, sy - b, (float)b, 2.0f * b, 0);
+        } else {   // a striped tea towel
+            for (int v = 0; v <= it.ln; ++v)
+                for (int u = -it.hh; u <= it.hh; ++u) {
+                    bool edge = std::abs(u) == it.hh || v == it.ln;
+                    px_(sx, sy, u, v, edge ? 2 : (v == 2 || v == it.ln - 2) ? 2 : 3);
+                }
+            peg(sx, sy, -it.hh + 1); peg(sx, sy, it.hh - 1);
+        }
     }
     // bushes along the fence foot
     const float bushAt[5] = {0.06f, 0.19f, 0.48f, 0.68f, 0.84f};
     for (int i = 0; i < 5; ++i) {
         float x = W * bushAt[i];
-        std::vector<E1Blob> bb = {{x + 6 * s, g - 3 * s, 5 * s}, {x - 5 * s, g - 3 * s, 5 * s}, {x, g - 6 * s, 6 * s}, {x - 3 * s, g - 8 * s, 4 * s}};
-        const int soft[4] = {3, 2, 1, -1};   // no darkest grey down by the players' feet
-        e1_canopy(sc, bb, 2 * b, soft, 50 + i, true);
+        float k = (0.7f + 0.55f * rnd(i, 1, 51)) * s, f = (i % 2) ? -1.0f : 1.0f;   // per-bush size and mirror
+        std::vector<E1Blob> bb = {{x + 6 * k * f, g - 3 * k, 5 * k}, {x - 5 * k * f, g - 3 * k, 5 * k}, {x, g - 6 * k, 6 * k},
+                                  {x - 3 * k * f, g - 8 * k, 4 * k}};
+        if (i % 3 == 1) bb.push_back({x + 10 * k * f, g - 2.5f * k, 3.5f * k});
+        const int soft[4] = {3, 2, 2, -1};   // calm and light down by the players' feet
+        e1_canopy(sc, bb, b, soft, 50 + i, true);
     }
     // two big trees, near enough to show every cluster
-    e1_tree(sc, W * 0.1f, g, 4, 20 * s, 2 * b, tone, 1, 0, 21, true);
-    e1_tree(sc, W * 0.9f, g, 1, 17 * s, 2 * b, tone, 1, 0, 22, true);
+    e1_tree(sc, W * 0.1f, g, 4, 20 * s, b, tone, 1, 0, 21, true);
+    e1_tree(sc, W * 0.9f, g, 1, 17 * s, b, tone, 1, 0, 22, true);
     return true;
 }

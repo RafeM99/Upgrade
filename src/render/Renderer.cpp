@@ -180,6 +180,15 @@ void Renderer::ensureTargets()
     for (int e = 0; e < ERA_COUNT; ++e) {
         int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
         int w = (int)std::lround(h * 16.0 / 9.0);
+        if (lowRes(e)) {
+            // Framing (ui helper): the pixel stages are scaled by the largest whole number that
+            // fits the window height, and the buffer is made just wide enough that the scaled
+            // image covers the whole window width. So no stage ever gets side bars; at most a
+            // thin, centred band top and bottom where the height does not divide evenly.
+            const int sw = std::max(1, GetScreenWidth()), sh = std::max(1, GetScreenHeight());
+            const int k = std::max(1, sh / h);
+            w = std::max(w / 2, (sw + k - 1) / k);
+        }
         if (rt_[e].id != 0 && rtW_[e] == w && rtH_[e] == h) continue;
         if (rt_[e].id != 0) UnloadRenderTexture(rt_[e]);
         rt_[e] = LoadRenderTexture(w, h);
@@ -206,7 +215,8 @@ Rectangle Renderer::screenRect() const
     int e = std::max(0, std::min(LAST_ERA, renderEra_));
     if (lowRes(e) && rtW_[e] > 0) {
         // pixel stages: scale the native buffer by a whole number, so every pixel is the same size
-        int k = std::max(1, (int)std::min(sw / rtW_[e], sh / rtH_[e]));
+        // (ensureTargets sizes the buffer width so this fills the window width; see there)
+        int k = std::max(1, (int)(sh / rtH_[e]));
         float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
         return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
     }
@@ -399,7 +409,15 @@ void Renderer::drawEra(Game& g, int era, float swing)
     if (smooth(era)) {
         drawBackdrop3D(g, era, c3);
         BeginShaderMode(world_);
-        if (!full3D) drawLawns25D(g);
+        if (!full3D) {
+            drawLawns25D(g);
+            // the meadow's modelled props: hay, stooks, hedge, track, flowers, grass (Models3D)
+            rlDrawRenderBatchActive();
+            models_.begin(g, c3);
+            models_.drawMeadow(g);
+            rlDrawRenderBatchActive();
+            BeginShaderMode(world_);
+        }
     }
 
     // ---- tiles
@@ -435,6 +453,30 @@ void Renderer::drawEra(Game& g, int era, float swing)
             else if (ch == '1') frame = T_P1;
             else if (ch == '2') frame = T_P2;
             else if (ch == '|') frame = T_WALL;
+            // earth: a variant per tile from a hash of its position (so no stamp repeats on a
+            // beat), and a buried keepsake two tiles wide in the bottom row every few screens
+            if (frame == T_GROUND || frame == T_GROUND_TOP) {
+                auto hashXY = [](int x, int y) {
+                    unsigned h = (unsigned)x * 73856093u ^ (unsigned)y * 19349663u;
+                    h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+                    return h;
+                };
+                auto deep = [&](int x, int y) {
+                    return tileAt(x, y) == '#' && g.level.isSolidChar(tileAt(x, y - 1));
+                };
+                auto featAt = [&](int x) {   // does a keepsake start at column x (bottom row)?
+                    const int every = 44;   // about two and a half screens
+                    int bucket = (int)std::floor((float)x / every);
+                    int start = bucket * every + 4 + (int)(hashXY(bucket, 977) % (every - 10));
+                    return x == start && deep(x, LEVEL_H - 1) && deep(x + 1, LEVEL_H - 1);
+                };
+                int v = (int)((hashXY(tx, ty) >> 7) % GROUND_VARIANTS);
+                if (v) frame = (frame == T_GROUND_TOP ? T_GROUND_TOP1 : T_GROUND1) + v - 1;
+                if (frame != T_GROUND_TOP && ty == LEVEL_H - 1) {
+                    if (featAt(tx)) frame = T_FEAT_L;
+                    else if (featAt(tx - 1)) frame = T_FEAT_R;
+                }
+            }
             Color tint = WHITE;
             if (ch == '1' || ch == '2') {
                 // a gentle pulse so the coloured memories read as "only for one of you"
@@ -455,6 +497,20 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 Color dark = era == 1 ? hexc(SHADES4[0]) : (era == 0 ? Color{16, 18, 22, 255} : hexc(0x1a1424));
                 solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
                 solidQuad((float)tx, ty + 1 - px, 1.0f, px, 0.02f, dark);
+                // and a hard drop shadow down and to the right on the scenery behind (the light
+                // comes from the top-left), cool-tinted; the 4-shade and 8-bit post pass snaps it
+                Color sh = era == 1 ? hexc(SHADES4[0], 110) : hexc(0x2a1a50, 105);
+                solidQuad((float)tx + 2 * px, ty + 1.0f, 1.0f, 2 * px, 0.03f, sh);
+                if (open(1, 0)) solidQuad((float)tx + 1, ty + 2 * px, 2 * px, 1.0f - 2 * px, 0.03f, sh);
+            }
+            // pixel stages: platforms get a 1 px dark outline on every open side, so they stand off
+            // the scenery behind them whatever its colour
+            if (lowRes(era) && era != 0 && (frame == T_BLOCK || frame == T_CRACKED)) {
+                float px = 1.0f / TILE_PX[era];
+                Color ol = era == 1 ? hexc(SHADES4[0]) : (era == 2 ? hexc(0x0f0d1a) : (era == 3 ? hexc(0x140f1e) : hexc(0x2a1424)));
+                if (open(0, -1)) solidQuad((float)tx, (float)ty, 1.0f, px, 0.02f, ol);
+                if (open(-1, 0)) solidQuad((float)tx, (float)ty, px, 1.0f, 0.02f, ol);
+                if (open(1, 0)) solidQuad((float)tx + 1 - px, (float)ty, px, 1.0f, 0.02f, ol);
             }
         }
     }
@@ -502,13 +558,13 @@ void Renderer::drawEra(Game& g, int era, float swing)
     for (const auto& f : g.frags) {
         if (full3D) break;
         int fr = ((int)(f.t * 6 + f.x) % 2) ? T_FRAG1 : T_FRAG0;
-        float s = era == 0 ? 1.0f : 0.7f;   // 1-bit: drawn 1:1, never resampled
+        const float s = 1.0f;   // drawn 1:1, never resampled (the art itself sits at 0.7 of the frame)
         unsigned char a = (!f.placed && f.t > 10) ? (unsigned char)(255 * std::max(0.0f, (12 - f.t) / 2)) : 255;
         sprite(A.tiles, frameRect(A.tiles, fr, 1, 1, era), f.x - s / 2, f.y - s / 2, s, s, 0.1f, Color{255, 255, 255, a}, false);
     }
     for (const auto& pu : g.powerups) {
         float bob = std::sin(pu.t * 3) * 0.12f;
-        float ps = era == 0 ? 1.0f : 0.9f;
+        const float ps = 1.0f;   // 1:1 (the art itself sits at 0.9 of the frame)
         sprite(A.tiles, frameRect(A.tiles, T_PU_SHIELD + pu.type, 1, 1, era), pu.x - ps / 2, pu.y - ps / 2 + bob, ps, ps, 0.1f, WHITE, false);
         if ((int)(pu.t * 4) % 2 == 0) ring(pu.x, pu.y + bob, 0.6f, Color{255, 240, 180, 160});
     }
@@ -597,8 +653,10 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (full3D) models_.drawPlayer(g, p);
         else sprite(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox,
                     pl.bottom() - PLAYER_FH + (era == 0 ? 0.0f : 0.03f), PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
-        if (pl.shield) ring(pl.cx(), pl.cy(), 0.95f, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
-        if (held) ring(pl.cx(), pl.cy(), 1.05f, era == 0 ? Color{235, 235, 225, 255} : Color{170, 200, 255, 230});
+        // rings sit round the drawn figure (PLAYER_K bigger than the hitbox), not the hitbox
+        const float vcy = full3D ? pl.cy() : pl.bottom() - PLAYER_FH * 0.47f, rk = full3D ? 1.0f : 1.25f;
+        if (pl.shield) ring(pl.cx(), vcy, 0.95f * rk, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
+        if (held) ring(pl.cx(), vcy, 1.05f * rk, era == 0 ? Color{235, 235, 225, 255} : Color{170, 200, 255, 230});
         if (pl.faded && pl.reviveProgress > 0) ring(pl.cx(), pl.cy(), 1.1f * (1 - pl.reviveProgress / 0.6f) + 0.3f, Color{255, 255, 255, 230});
         if (pl.attackTime > 0) {
             float ax = pl.cx() + pl.facing * 1.0f;
