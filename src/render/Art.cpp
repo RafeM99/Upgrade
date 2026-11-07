@@ -32,6 +32,7 @@ void Art::load()
         a.flyer = loadTex(d + "enemy_flyer.png", e);
         a.brute = loadTex(d + "enemy_brute.png", e);
         a.boss = loadTex(d + "enemy_boss.png", e);
+        if (FileExists(assetPath(d + "boss_story.png").c_str())) a.storyBoss = loadTex(d + "boss_story.png", e);
         a.tiles = loadTex(d + "tiles.png", e);
         a.wall = loadTex(d + "wall.png", e);
         for (int l = 0; l < art::BG_LAYERS; ++l) a.bg[l] = loadTex(d + "bg_" + std::to_string(l) + ".png", e);
@@ -47,6 +48,7 @@ void Art::unload()
     for (auto& a : era) {
         UnloadTexture(a.player[0]); UnloadTexture(a.player[1]);
         UnloadTexture(a.blob); UnloadTexture(a.flyer); UnloadTexture(a.brute); UnloadTexture(a.boss);
+        if (a.storyBoss.id) UnloadTexture(a.storyBoss);
         UnloadTexture(a.tiles); UnloadTexture(a.wall);
         for (auto& b : a.bg) UnloadTexture(b);
     }

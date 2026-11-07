@@ -72,9 +72,12 @@ void Game::init(const Options& o)
     if (opt.ending) startEnding();
 }
 
+bool Game::storyOn() const { return opt.story && config().b("story.enabled", true); }
+
 void Game::shutdown()
 {
     audio.shutdown();
+    story.unload();
     renderer.shutdown();
     art.unload();
     CloseWindow();
@@ -119,7 +122,16 @@ void Game::startRun()
     if (era > 0) spawner.forceChunk(introChunk(era));   // starting late: show the gate
     spawner.fill(level, cam.right() + 60, era, 0, !solo(), markers);
     spawnMarkers();
-    showBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 3.0f);
+    heldBannerLen = 0;
+    pendingCards.clear();
+    if (storyOn()) {
+        // the first run starts with the prologue; a restart or a late start goes straight to the memory
+        static bool prologueSeen = false;
+        if (era == 0 && !prologueSeen) pendingCards.push_back(Story::PROLOGUE);
+        pendingCards.push_back(era);
+        prologueSeen = true;
+    }
+    levelBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 3.0f);
 }
 
 void Game::showBanner(const std::string& title, const std::string& sub, float seconds)
@@ -154,8 +166,9 @@ void Game::run()
 
         // ---- draw
         float flash = 0, desat = 0;
+        const bool storyScreen = screen == Screen::Ending || screen == Screen::Story;
         if (screen == Screen::Title) renderer.drawTitleBackground(*this, time);
-        else if (screen != Screen::Ending) {
+        else if (!storyScreen) {
             renderer.drawWorld(*this);
             // a short white pop right at the switch; the sweep does the rest
             if (transActive) flash = 0.7f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.15f);
@@ -164,11 +177,25 @@ void Game::run()
         }
         BeginDrawing();
         ClearBackground(BLACK);
-        if (screen != Screen::Ending) renderer.present(*this, flash, desat);
+        if (!storyScreen) renderer.present(*this, flash, desat);
+        if (screen == Screen::Playing && !pendingCards.empty()) {
+            // a memory card is due: photograph the world as it looks now (no HUD), then open it
+            rlDrawRenderBatchActive();
+            Image photo = LoadImageFromScreen();
+            Rectangle r = renderer.screenRect();
+            float sx = photo.width / (float)std::max(1, GetScreenWidth()), sy = photo.height / (float)std::max(1, GetScreenHeight());
+            ImageCrop(&photo, Rectangle{r.x * sx, r.y * sy, r.width * sx, r.height * sy});
+            story.setPhoto(era, photo);
+            story.open(pendingCards);
+            pendingCards.clear();
+            screen = Screen::Story;
+            audio.setMusicDuck(0.45f);
+        }
         if (screen == Screen::Title) hud.drawTitle(*this);
-        else if (screen == Screen::Playing) hud.drawPlaying(*this);
-        else if (screen == Screen::Paused) { hud.drawPlaying(*this); hud.drawPause(*this); }
-        else hud.drawEnding(*this);
+        else if (screen == Screen::Playing) { hud.drawPlaying(*this); story.drawBars(*this); }
+        else if (screen == Screen::Paused) { hud.drawPlaying(*this); story.drawBars(*this); hud.drawPause(*this); }
+        else if (screen == Screen::Story) story.drawCard(*this);
+        else story.drawEnding(*this);
         ++frameNo_;
         bool last = opt.maxFrames > 0 && frameNo_ >= opt.maxFrames;
         bool periodic = opt.shotEvery > 0 && frameNo_ % opt.shotEvery == 0 && !opt.shotPrefix.empty();
@@ -194,8 +221,9 @@ void Game::update(float dt)
     bannerT = std::max(0.0f, bannerT - dt);
     switch (screen) {
     case Screen::Title: updateTitle(); break;
-    case Screen::Playing: updatePlaying(dt); break;
+    case Screen::Playing: story.updateBars(dt); updatePlaying(dt); break;
     case Screen::Paused: updatePause(); break;
+    case Screen::Story: updateStory(dt); break;
     case Screen::Ending: updateEnding(dt); break;
     }
 }
@@ -234,15 +262,37 @@ void Game::updatePause()
 void Game::updateEnding(float dt)
 {
     endingT += dt;
-    float total = art::ENDING_COUNT * config().f("ending.slide_seconds", 5.0f) + 12 + 3;
-    if (!firstTick_ || opt.autoplay) return;
-    PlayerInput p1 = input.read(0), p2 = input.read(1);
-    if ((p1.any || p2.any || IsKeyPressed(KEY_ENTER)) && endingT > total) {
+    bool pressed = firstTick_ && !opt.autoplay && storyPressed();
+    if (story.updateEnding(dt, pressed, opt.autoplay)) {
         screen = Screen::Title;
         era = 0;
         time = 0;
         audio.setEra(0);
     }
+}
+
+bool Game::storyPressed()
+{
+    PlayerInput p1 = input.read(0), p2 = input.read(1);
+    return p1.any || p2.any || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || input.pausePressed() || input.menuSelect();
+}
+
+void Game::updateStory(float dt)
+{
+    bool pressed = firstTick_ && !opt.autoplay && storyPressed();
+    story.update(dt, pressed, opt.autoplay);
+    if (story.active()) return;
+    screen = Screen::Playing;
+    audio.setMusicDuck(1);
+    if (heldBannerLen > 0) { showBanner(heldBanner, heldBannerSub, heldBannerLen); heldBannerLen = 0; }
+}
+
+void Game::levelBanner(const std::string& title, const std::string& sub, float seconds)
+{
+    if (!storyOn()) { showBanner(title, sub, seconds); return; }
+    heldBanner = title;
+    heldBannerSub = sub;
+    heldBannerLen = seconds;
 }
 
 void Game::joinPlayer2()
@@ -295,7 +345,11 @@ void Game::updatePlaying(float dt)
         }
         cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
         cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
-        if (transT >= transLen) { transActive = false; cam.swing = art::SWING[era]; }
+        if (transT >= transLen) {
+            transActive = false;
+            cam.swing = art::SWING[era];
+            if (storyOn()) pendingCards = {era};   // the next memory's card, photographed in its new look
+        }
         return;
     }
 
@@ -423,9 +477,24 @@ void Game::updatePlaying(float dt)
     // ---- boss
     if (boss.active) {
         boss.update(dt, cam.left(), cam.right(), level, players, tier(), slowK);
+        if (boss.landed && boss.kind == 2) {
+            // the school bell rings as it lands: anyone standing close is thrown back (no harm done)
+            for (auto& pl : players) {
+                if (!pl.alive() || !pl.onGround) continue;
+                float dx = pl.cx() - boss.x;
+                if (std::fabs(dx) > 4.5f) continue;
+                pl.vx = (dx < 0 ? -1.0f : 1.0f) * 11.0f;
+                pl.vy = -9.0f;
+                pl.onGround = false;
+            }
+            cam.addShake(0.8f);
+            audio.play("pound");
+            particles.burst(boss.x, boss.y + boss.h / 2, 40, Color{255, 220, 120, 255}, 9, 0.6f, 0.2f);
+        }
         if (boss.wantsSpawn) {
-            Enemy e = makeEnemy(tier() >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB),
-                                boss.x, boss.y, tier(), etune);
+            int type = tier() >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB);
+            if (boss.spawnsFlyers()) type = EN_FLYER;   // the storm's rain, the scarecrow's crows
+            Enemy e = makeEnemy(type, boss.x, boss.y, tier(), etune);
             e.y = boss.y;
             e.baseY = e.y;
             if (!solo() && era >= 1 && std::rand() % 3 == 0) e.owner = std::rand() % 2;
@@ -441,11 +510,13 @@ void Game::updatePlaying(float dt)
             particles.burst(boss.x, boss.y, 80, Color{220, 180, 255, 255}, 12, 1.4f, 0.25f);
             score += 500;
             events().bossDefeated.emit();
+            if (era < art::LAST_ERA)
+                story.showBars(T("story_she_remembers"), T("memory_title_" + std::to_string(era)),
+                               T("remembered_" + std::to_string(era)), 5.0f);
         }
         if (boss.defeated) {
             boss.active = false;
             bossBeatenThisEra = true;
-            showBanner(T("boss_defeated"), "", 1.5f);
             if (era < art::LAST_ERA) beginEraTransition();
             else startEnding();
             return;
@@ -621,10 +692,10 @@ void Game::updatePlaying(float dt)
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
-            boss.start(cam.x, tier(), config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
+            boss.start(cam.x, tier(), config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1), era);
             audio.play("boss_appear");
             cam.addShake(0.6f);
-            showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
+            story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
             events().bossAppeared.emit();
         } else if (era < art::LAST_ERA) beginEraTransition();
         else startEnding();
@@ -883,8 +954,9 @@ void Game::switchEra(int newEra)
     }
     if (era == config().i("player.attack_from_era", 2)) sub += std::string(sub.empty() ? "" : "   ") + T("ability_attack");
     if (!sub.empty()) sub = std::string(T("new_ability")) + "  " + sub;
-    sub = std::string(T("era_name_" + std::to_string(era))) + (sub.empty() ? "" : "\n") + sub;
-    showBanner(std::string(T("memory_restored")) + " " + T("memory_" + std::to_string(era)), sub, transLen - 0.6f + 1.5f);
+    // the level banner: the new stage and what it brings. With the story on, it waits for the card.
+    if (storyOn()) levelBanner(T("era_name_" + std::to_string(era)), sub, 3.0f);
+    else showBanner(T("era_name_" + std::to_string(era)), sub, transLen - 0.6f + 1.5f);
     particles.burst(cam.x, 7, 120, WHITE, 14, 1.2f, 0.2f);
     for (auto& pl : players) if (pl.joined && pl.faded) { pl.faded = false; pl.invuln = 2; }
 }
@@ -893,6 +965,7 @@ void Game::startEnding()
 {
     screen = Screen::Ending;
     endingT = 0;
+    story.startEnding();
     era = art::LAST_ERA;
     audio.setEra(era);
     audio.play("unlock");

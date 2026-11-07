@@ -32,6 +32,7 @@ int main(int argc, char** argv)
         else if (is("--seed")) o.seed = (unsigned)std::atoi(next());
         else if (is("--ending")) o.ending = true;
         else if (is("--play")) o.startOnTitle = false;
+        else if (is("--no-story")) o.story = false;
         else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
     }
     Game game;

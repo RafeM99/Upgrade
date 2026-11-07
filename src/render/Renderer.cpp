@@ -538,13 +538,18 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 1.3f, wc);
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 0.7f, wc);
             solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
+            if (b.kind == 4) {   // the last train: mark the whole stretch of line it will charge along
+                float x0 = std::min(b.fromX, b.toX), x1 = std::max(b.fromX, b.toX);
+                solidQuad(x0, b.toY + b.h / 2 - 0.15f, x1 - x0, 0.12f, 0.3f, wc);
+            }
         }
         if (full3D) models_.drawBoss(g);
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
-        if (!full3D) sprite(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        const Texture2D& bossTex = A.storyBoss.id ? A.storyBoss : A.boss;   // each memory's own boss
+        if (!full3D) sprite(bossTex, frameRect(bossTex, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
     }
 
     // ---- players

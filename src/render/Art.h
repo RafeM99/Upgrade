@@ -5,6 +5,7 @@
 
 struct EraArt {
     Texture2D player[2]{}, blob{}, flyer{}, brute{}, boss{}, tiles{}, wall{};
+    Texture2D storyBoss{};   // this memory's own boss (boss_story.png); id 0 if the stage has none
     Texture2D bg[art::BG_LAYERS]{};
 };
 
