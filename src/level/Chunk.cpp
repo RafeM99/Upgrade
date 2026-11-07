@@ -25,7 +25,17 @@ bool parseHeader(const std::string& line, Chunk& c, std::string& log)
                 if (id < 0) log += c.name + ": unknown ability '" + a + "'\n";
                 else c.requires |= 1u << id;
             }
-        } else if (k == "min_era") c.minEra = std::atoi(v.c_str());
+        } else if (k == "min_era") {
+            static const int legacy[4] = {0, 2, 3, 5};   // old era -> graphics stage
+            int e = std::atoi(v.c_str());
+            c.minEra = e < 0 ? 0 : (e > 3 ? 99 : legacy[e]);
+        } else if (k == "min_stage") c.minEra = std::atoi(v.c_str());
+        else if (k == "stages") {
+            std::stringstream vs(v);
+            std::string a;
+            while (std::getline(vs, a, ','))
+                if (!a.empty()) c.stages |= 1u << std::atoi(a.c_str());
+        }
         else if (k == "difficulty") c.difficulty = std::atoi(v.c_str());
         else if (k == "coop" || k == "coop_required") c.coop = (v == "true" || v == "1" || v == "yes");
         else if (k == "weight") c.weight = std::max(0, std::atoi(v.c_str()));

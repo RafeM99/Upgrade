@@ -1,9 +1,10 @@
 #version 330
-// post.fs: the era look, applied when the low-res world image is scaled to the screen.
-//   era 0: 1-bit. Two colours, ordered dither, and a handheld LCD pixel grid.
-//   era 1: 8-bit. Snap every pixel to the 16-colour palette, CRT scanlines between pixel rows.
-//   era 2: 16-bit. 32 levels per channel and soft scanlines.
-//   era 3: modern. Full colour with bloom, warm grading and a vignette.
+// post.fs: the look of each graphics stage, applied when the world image is scaled to the screen.
+//   0 1-bit:   two colours with ordered dither.
+//   1 4-shade: four warm greys.
+//   2 8-bit:   snapped to the 16-colour palette.
+//   3 16-bit, 4 32-bit: 15-bit colour (32 levels per channel).
+//   5 2.5D, 6 3D: full colour, untouched.
 // Pixels are scaled "sharp": every source pixel becomes an even block on screen, with only a
 // one-pixel soft edge, so the art stays crisp at any window size.
 // mosaic and glitch drive the era-upgrade transition.
@@ -19,6 +20,7 @@ uniform float desat;    // 0..1 greyscale for "memory lost"
 uniform float mosaic;   // >= 1: source pixels per block, for the transition
 uniform float glitch;   // 0..1: torn scanlines as the old era shuts down
 uniform vec3 palette[16];
+uniform vec3 shades[4];   // the 4-shade greys, dark to light
 out vec4 finalColor;
 
 float bayer4(vec2 p)
@@ -43,40 +45,37 @@ void main()
     vec2 cell = fract(tp);   // where we are inside a source pixel, for the LCD grid and scanlines
     if (mosaic > 1.01) {
         tp = (floor(tp / mosaic) + 0.5) * mosaic;
-    } else if (era == 0) {
-        // Sharp sampling, centred on the texel: flat across the pixel, a one-screen-pixel blend
-        // only at its edges. (The era 1-2 code below samples on texel boundaries for most of the
-        // pixel, a 50/50 mix with the neighbour; in 1-bit the dither then broke every thin line
-        // and lone pixel into flickering fragments.)
-        vec2 scale = max(outSize / texSize, vec2(1.0));
-        vec2 i = floor(tp);
-        vec2 cd = tp - i - 0.5;
-        vec2 r = 0.5 - 0.5 / scale;
-        tp = i + 0.5 + (cd - clamp(cd, -r, r)) * scale;
-    } else if (era < 3) {
-        vec2 scale = max(outSize / texSize, vec2(1.0));
-        vec2 i = floor(tp);
-        vec2 f = clamp((tp - i - 0.5) * scale + 0.5, 0.0, 1.0);
-        tp = i + f;
+    } else if (era <= 4) {
+        // pixel stages are always scaled by a whole number: read each native pixel at its
+        // centre, so it is never a blend of two neighbours
+        tp = floor(tp) + 0.5;
     }
     vec2 uv = tp / texSize;
     vec3 c = texture(texture0, uv).rgb;
+    // 1-bit: the screen is always a whole-number multiple of the native buffer, so read each
+    // native pixel exactly once (nearest), never a blend of two neighbours that the threshold
+    // below would turn into stray dots and doubled rows.
+    if (era == 0 && mosaic <= 1.01) {
+        ivec2 ip = clamp(ivec2(floor(fragTexCoord * texSize)), ivec2(0), ivec2(texSize) - 1);
+        c = texelFetch(texture0, ip, 0).rgb;
+    }
     vec2 px = floor(tp);
     vec2 d = fragTexCoord - 0.5;
     float vig = 1.0 - dot(d, d) * 1.4;
     bool fine = mosaic <= 1.01 && outSize.y / texSize.y > 2.5;   // big enough pixels to show their grid
 
+    // Every stage is drawn clean: hard-edged pixels, the stage's own colour limits, and
+    // no bloom, glow, vignette, scanlines or colour grading on top.
     if (era == 0) {
         float l = dot(c, vec3(0.299, 0.587, 0.114));
-        l *= mix(0.9, 1.0, vig);               // the edges of the memory fade a little (mid tones only)
         float b = bayer4(px) - 0.5;
-        // A soft two-tone LCD pair (grey-green "off" and pale "on"), not white on black: still
-        // only two colours, but far less glare over a long play.
-        vec3 dark = vec3(0.118, 0.137, 0.129), light = vec3(0.776, 0.796, 0.718);
+        vec3 dark = vec3(0.063, 0.071, 0.086), light = vec3(0.92, 0.92, 0.88);
         c = (l + b * 0.5 > 0.5) ? light : dark;
-        // handheld LCD: a faint gap between pixels, gentle so the grid does not shimmer
-        if (fine && (cell.x < 0.08 || cell.y < 0.08)) c = mix(c, dark, 0.15);
     } else if (era == 1) {
+        float l = dot(c, vec3(0.299, 0.587, 0.114));
+        int idx = int(clamp(floor(l * 4.0), 0.0, 3.0));
+        c = shades[idx];
+    } else if (era == 2) {
         float best = 1e9; vec3 bc = c;
         for (int i = 0; i < 16; ++i) {
             vec3 e = palette[i] - c;
@@ -84,38 +83,8 @@ void main()
             if (dd < best) { best = dd; bc = palette[i]; }
         }
         c = bc;
-        // CRT: dark gaps between pixel rows, a touch of phosphor glow in the middle
-        if (fine) c *= mix(0.68, 1.06, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
-        c *= mix(0.82, 1.0, vig);
-    } else if (era == 2) {
-        c = floor(c * 31.0 + 0.5) / 31.0;
-        if (fine) c *= mix(0.88, 1.0, smoothstep(0.0, 0.3, cell.y));
-        c *= mix(0.85, 1.0, vig);
-    } else {
-        // Modern era: restrained bloom on true highlights only, a gentle filmic curve,
-        // split toning (cool shadows, warm highlights) and a subtle vignette.
-        vec2 texel = 1.0 / texSize;
-        vec3 glow = vec3(0.0);
-        float total = 0.0;
-        for (int i = 0; i < 12; ++i) {
-            float a = float(i) * 0.5236 + 0.26;
-            for (int r = 1; r <= 3; ++r) {
-                vec2 o = vec2(cos(a), sin(a)) * texel * float(r) * 6.0;
-                vec3 s = texture(texture0, uv + o).rgb;
-                float br = dot(s, vec3(0.299, 0.587, 0.114));
-                float w = 1.0 / float(r);
-                glow += s * smoothstep(0.78, 1.0, br) * w;
-                total += w;
-            }
-        }
-        c += glow / total * 0.55;
-        float l = dot(c, vec3(0.299, 0.587, 0.114));
-        c = mix(c, c * vec3(0.92, 0.97, 1.08), (1.0 - smoothstep(0.0, 0.45, l)) * 0.55);   // cool shadows
-        c = mix(c, c * vec3(1.05, 1.0, 0.9), smoothstep(0.45, 1.0, l) * 0.5);            // warm light
-        c = c / (1.0 + 0.18 * c) * 1.18;                                                   // soft shoulder
-        c = mix(vec3(l), c, 0.94);                                                         // slightly calmer colour
-        float vg = smoothstep(0.85, 0.25, length(d * vec2(1.0, 0.8)));
-        c *= mix(0.8, 1.0, vg);
+    } else if (era == 3 || era == 4) {
+        c = floor(c * 31.0 + 0.5) / 31.0;   // 15-bit colour
     }
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);

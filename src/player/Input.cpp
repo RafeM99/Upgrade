@@ -50,8 +50,8 @@ bool pressed(const std::vector<int>& ks) { for (int k : ks) if (IsKeyPressed(k))
 void InputMap::load()
 {
     const char* names[7] = {"left", "right", "up", "down", "jump", "attack", "ability"};
-    const char* defaults[2][7] = {{"A", "D", "W", "S", "SPACE,W", "F", "G"},
-                                  {"LEFT", "RIGHT", "UP", "DOWN", "UP,RIGHT_CONTROL,ENTER", "PERIOD,RIGHT_SHIFT", "SLASH"}};
+    const char* defaults[2][7] = {{"A", "D", "W", "S", "SPACE", "F", "G"},
+                                  {"LEFT", "RIGHT", "UP", "DOWN", "RIGHT_CONTROL,ENTER", "RIGHT_SHIFT", "SLASH"}};
     for (int p = 0; p < 2; ++p)
         for (int a = 0; a < 7; ++a)
             keys_[p][a] = parseKeys(config().s("input.p" + std::to_string(p + 1) + "_" + names[a], defaults[p][a]));
@@ -76,7 +76,7 @@ PlayerInput InputMap::read(int p) const
         in.left |= ax < -0.35f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
         in.right |= ax > 0.35f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
         in.up |= ay < -0.5f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_UP);
-        in.down |= ay > 0.6f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
+        in.down |= ay > 0.5f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
         in.jumpHeld |= IsGamepadButtonDown(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         bool jp = IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         bool ap = IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);

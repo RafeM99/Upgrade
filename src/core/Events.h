@@ -16,7 +16,7 @@ private:
 };
 
 struct Events {
-    Event<int> eraChanged;                    // new era 0..4
+    Event<int> eraChanged;                    // new era 0..3
     Event<int, float> fragmentCollected;      // player index, bar amount
     Event<int> playerFaded;                   // player index
     Event<int> playerRevived;                 // player index

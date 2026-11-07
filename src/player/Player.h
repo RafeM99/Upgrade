@@ -10,7 +10,6 @@ struct PlayerTuning {
     float runSpeed, accelGround, accelAir, gravity, jumpSpeed, jumpCut, maxFall, coyote, jumpBuffer;
     float doubleJumpSpeed, dashSpeed, dashTime, dashCooldown, poundSpeed, glideFall, wallSlide, wallJumpVx, wallJumpVy;
     float fadedSpeed, stompBounce, attackTime, attackCooldown, speedBoost;
-    float wallJumpLock, wallJumpGrace;   // air control comes back after the lock; jump still counts this long after leaving a wall
     void load();
 };
 
@@ -27,9 +26,6 @@ struct Player {
     // movement state
     float coyote = 0, jumpBuffer = 0, wallLock = 0;
     int airJumps = 0, wallDir = 0;
-    int lastWallDir = 0;      // wall touched within the last wallJumpGrace seconds
-    float wallGrace = 0;
-    bool downWas = false;     // down held last tick: a fresh press of down in the air is a ground pound
     float dashTime = 0, dashCooldown = 0;
     bool pounding = false, gliding = false, wallSliding = false;
     float attackTime = 0, attackCooldown = 0;

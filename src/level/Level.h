@@ -44,6 +44,7 @@ public:
     void forceAbility(int ability) { forced_.push_back(ability); }
     void forceChunk(const std::string& name) { forcedName_ = name; }   // next chunk, by file name
     float generatedChance = 0.3f;
+    float stageShare = 0.6f;   // chance the next chunk is one made for this graphics stage
     const std::string& lastName() const { return last_; }
 
 private:

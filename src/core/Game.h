@@ -130,5 +130,8 @@ private:
     void unlockAbilitiesFor(int newEra);
     void startEnding();
     void joinPlayer2();
+    float fillSpeed_ = 1.0f;   // memory.fill_speed: multiplies every way the bar fills
+    int tier() const { return art::TIER[era]; }   // difficulty on the old four-era scale
+    static std::string introChunk(int era) { return "intro_stage" + std::to_string(era); }
     float randf(float a, float b) { return std::uniform_real_distribution<float>(a, b)(rng_); }
 };

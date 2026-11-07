@@ -1,6 +1,5 @@
 // Input.h: two-player input. Keyboard bindings come from assets/config.ini [input],
 // so they are easy to change. Player 1 also uses gamepad 0, Player 2 gamepad 1.
-// Gamepad: A jump, X attack, B (or RB) ability, stick or d-pad move, down in the air = ground pound.
 #pragma once
 #include <vector>
 

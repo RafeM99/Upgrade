@@ -255,7 +255,7 @@ int generateSounds(const std::string& dir)
 {
     int n = 0;
     const float bpm[4] = {92, 104, 112, 96};
-    for (int era = 0; era < 4; ++era) {   // eras 0..3 only: era 4 sound comes from Era4Sound.cpp
+    for (int era = 0; era < 4; ++era) {
         std::string d = dir + "/audio/era" + std::to_string(era) + "/";
         for (const char* name : SFX_NAMES) {
             Buf b(std::string(name) == "era_up" ? 2.4f : (std::string(name) == "boss_appear" ? 1.4f : 1.0f));

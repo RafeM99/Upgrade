@@ -2,12 +2,10 @@
 #include "core/Game.h"
 #include "core/Paths.h"
 #include "render/ArtSpec.h"
-#include "render/ModernLook.h"
 #include "rlgl.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 
 using namespace art;
 
@@ -26,19 +24,9 @@ float g_lightAmount = 0;   // 0 in flat eras, 1 in 2.5D
 Color lit(Color base, float face, float x, float y)
 {
     if (g_lightAmount <= 0) return base;
+    // flat face shading only: the top is a touch brighter, the sides darker. No glows.
+    (void)x; (void)y;
     float r = 0.5f + 0.5f * face, gg = r, b = r;
-    {
-        // era 3: a warm key light from the upper left, cool fill in the shade
-        float t = std::min(1.0f, std::max(0.0f, (face - 0.5f) / 0.6f));
-        r *= 0.86f + 0.18f * t; gg *= 0.9f + 0.1f * t; b *= 1.08f - 0.14f * t;
-    }
-    for (const auto& l : g_lights) {
-        float d = std::hypot(l.x - x, l.y - y);
-        if (d >= l.radius) continue;
-        float k = (1 - d / l.radius);
-        k *= k;
-        r += l.r * k; gg += l.g * k; b += l.b * k;
-    }
     auto mixk = [&](float k) { return 1.0f + (k - 1.0f) * g_lightAmount; };
     return Color{(unsigned char)std::min(255.0f, base.r * mixk(r)), (unsigned char)std::min(255.0f, base.g * mixk(gg)),
                  (unsigned char)std::min(255.0f, base.b * mixk(b)), base.a};
@@ -88,7 +76,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
     rlSetTexture(tex.id);
     rlBegin(RL_QUADS);
     if (openTop) {
-        Color c = lit(tint, 1.12f, x + 0.5f, y);
+        Color c = lit(tint, 1.15f, x + 0.5f, y);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x, Y3(y), zb);
         rlTexCoord2f(u0, vTop); rlVertex3f(x, Y3(y), zf);
@@ -96,7 +84,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
         rlTexCoord2f(u1, v0); rlVertex3f(x + 1, Y3(y), zb);
     }
     if (openLeft) {
-        Color c = lit(tint, 0.78f, x, y + 0.5f);
+        Color c = lit(tint, 0.55f, x, y + 0.5f);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x, Y3(y), zb);
         rlTexCoord2f(u0, v1); rlVertex3f(x, Y3(y + 1), zb);
@@ -104,7 +92,7 @@ void tileBlock(const Texture2D& tex, Rectangle src, int tx, int ty, float depth,
         rlTexCoord2f(u1, v0); rlVertex3f(x, Y3(y), zf);
     }
     if (openRight) {
-        Color c = lit(tint, 0.42f, x + 1, y + 0.5f);
+        Color c = lit(tint, 0.45f, x + 1, y + 0.5f);
         rlColor4ub(c.r, c.g, c.b, c.a);
         rlTexCoord2f(u0, v0); rlVertex3f(x + 1, Y3(y), zf);
         rlTexCoord2f(u0, v1); rlVertex3f(x + 1, Y3(y + 1), zf);
@@ -121,46 +109,18 @@ void shadow(float cx, float floorY, float r, float alpha)
     if (alpha <= 0.01f) return;
     rlSetTexture(rlGetTextureIdDefault());
     rlBegin(RL_TRIANGLES);
-    const int N = 20;
-    // cool-tinted shadow: a soft outer pool and a tight, darker contact core
-    const unsigned char sr = 26, sg = 22, sb = 48;
-    for (int pass = 0; pass < 2; ++pass) {
-        float rr = pass == 0 ? r * 1.25f : r * 0.55f;
-        unsigned char a = (unsigned char)(alpha * (pass == 0 ? 110 : 170));
-        for (int i = 0; i < N; ++i) {
-            float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
-            rlColor4ub(sr, sg, sb, a);
-            rlVertex3f(cx, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f);
-            rlColor4ub(sr, sg, sb, 0);
-            rlVertex3f(cx + std::cos(a1) * rr, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f + std::sin(a1) * rr * 0.55f);
-            rlVertex3f(cx + std::cos(a0) * rr, Y3(floorY) + 0.02f + pass * 0.005f, -0.3f + std::sin(a0) * rr * 0.55f);
-        }
-    }
-    rlEnd();
-    rlSetTexture(0);
-}
-
-// A soft round dot (era 3 particles and light motes), facing the camera.
-void softDot(float cx, float cy, float r, float z, Color c)
-{
-    rlSetTexture(rlGetTextureIdDefault());
-    rlBegin(RL_TRIANGLES);
-    const int N = 10;
+    const int N = 16;
     for (int i = 0; i < N; ++i) {
         float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
-        rlColor4ub(c.r, c.g, c.b, c.a);
-        rlVertex3f(cx, Y3(cy), z);
-        rlColor4ub(c.r, c.g, c.b, 0);
-        rlVertex3f(cx + std::cos(a0) * r, Y3(cy + std::sin(a0) * r), z);
-        rlVertex3f(cx + std::cos(a1) * r, Y3(cy + std::sin(a1) * r), z);
+        // a hard-edged flat shadow, like a sprite's drop shadow
+        rlColor4ub(0, 0, 0, (unsigned char)(alpha * 90));
+        rlVertex3f(cx, Y3(floorY) + 0.02f, -0.3f);
+        rlVertex3f(cx + std::cos(a1) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a1) * r * 0.6f);
+        rlVertex3f(cx + std::cos(a0) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a0) * r * 0.6f);
     }
     rlEnd();
     rlSetTexture(0);
 }
-
-// Era 3 landing dust: remembers whether each player was on the ground last frame.
-bool g_wasGround[2] = {true, true};
-float g_lastVy[2] = {0, 0};
 
 void ring(float cx, float cy, float r, Color c, float z = 0.05f)
 {
@@ -184,6 +144,9 @@ void Renderer::init()
 {
     post_ = LoadShader(nullptr, assetPath("shaders/post.fs").c_str());
     world_ = LoadShader(nullptr, assetPath("shaders/world.fs").c_str());
+    haze_ = LoadShader(nullptr, assetPath("shaders/haze.fs").c_str());
+    locHazeCol_ = GetShaderLocation(haze_, "hazeCol");
+    locHazeAmt_ = GetShaderLocation(haze_, "hazeAmt");
     locEra_ = GetShaderLocation(post_, "era");
     locTime_ = GetShaderLocation(post_, "time");
     locSize_ = GetShaderLocation(post_, "texSize");
@@ -200,14 +163,22 @@ void Renderer::init()
         pal[i * 3 + 2] = (PALETTE16[i] & 255) / 255.0f;
     }
     SetShaderValueV(post_, locPal_, pal, SHADER_UNIFORM_VEC3, 16);
-    modern::init();
+    locShades_ = GetShaderLocation(post_, "shades");
+    float sh[12];
+    for (int i = 0; i < 4; ++i) {
+        sh[i * 3 + 0] = ((SHADES4[i] >> 16) & 255) / 255.0f;
+        sh[i * 3 + 1] = ((SHADES4[i] >> 8) & 255) / 255.0f;
+        sh[i * 3 + 2] = (SHADES4[i] & 255) / 255.0f;
+    }
+    SetShaderValueV(post_, locShades_, sh, SHADER_UNIFORM_VEC3, 4);
+    models_.init();
     ensureTargets();
 }
 
 void Renderer::ensureTargets()
 {
     for (int e = 0; e < ERA_COUNT; ++e) {
-        int h = !isHiRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
+        int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
         int w = (int)std::lround(h * 16.0 / 9.0);
         if (rt_[e].id != 0 && rtW_[e] == w && rtH_[e] == h) continue;
         if (rt_[e].id != 0) UnloadRenderTexture(rt_[e]);
@@ -223,34 +194,116 @@ void Renderer::ensureTargets()
 void Renderer::shutdown()
 {
     for (auto& r : rt_) if (r.id) UnloadRenderTexture(r);
+    models_.shutdown();
     UnloadShader(post_);
     UnloadShader(world_);
-    modern::shutdown();
+    UnloadShader(haze_);
 }
 
 Rectangle Renderer::screenRect() const
 {
     float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+    int e = std::max(0, std::min(LAST_ERA, renderEra_));
+    if (lowRes(e) && rtW_[e] > 0) {
+        // pixel stages: scale the native buffer by a whole number, so every pixel is the same size
+        int k = std::max(1, (int)std::min(sw / rtW_[e], sh / rtH_[e]));
+        float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
+        return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
+    }
     float w = sw, h = sw * 9.0f / 16.0f;
     if (h > sh) { h = sh; w = sh * 16.0f / 9.0f; }
     return Rectangle{(sw - w) / 2, (sh - h) / 2, w, h};
 }
 
 // ------------------------------------------------------------------ background
-void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
+void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha, int layers)
 {
-    const float parallax[ERA_COUNT][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f},
-                                          {0, 0.03f, 0.1f, 0.24f}, {0, 0.04f, 0.15f, 0.42f}};
-    for (int l = 0; l < BG_LAYERS; ++l) {
+    const float parallaxByStyle[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
+    const float* parallax = parallaxByStyle[STYLE[era]];
+    for (int l = 0; l < std::min(layers, BG_LAYERS); ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
         float scale = (float)h / t.height;
         float tw = t.width * scale;
-        float off = std::fmod(camX * pxPerTile * parallax[era][l], tw);
+        float off = std::fmod(camX * pxPerTile * parallax[l], tw);
         if (off < 0) off += tw;
+        off = std::floor(off);   // whole pixels only
+        // 1-bit: exactly one texel per native pixel (the +1 overlap would stretch 312 texels
+        // over 313 pixels and double a column)
+        float dw = era == 0 ? tw : tw + 1;
         for (float x = -off; x < w; x += tw)
-            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, tw + 1, (float)h}, {0, 0}, 0,
+            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, dw, (float)h}, {0, 0}, 0,
                            Color{255, 255, 255, (unsigned char)(alpha * 255)});
     }
+}
+
+// The 2.5D and 3D stages: only the sky is a flat picture. The other backdrop layers stand in
+// the scene as big cut-outs at real depths, on the lawn, so everything shares one perspective
+// and parallax comes from the camera itself. Further layers are hazed towards the horizon.
+void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
+{
+    struct Layer { int l; float z, height, baseFrac, haze; };
+    // baseFrac: how far up the picture its ground line sits (that part goes below the lawn)
+    const Layer dusk[3] = {{1, -64.0f, 24.0f, 0.0f, 0.6f}, {2, -38.0f, 11.0f, 0.16f, 0.45f}, {3, -20.0f, 6.5f, 0.14f, 0.3f}};
+    const Layer day[1] = {{1, -100.0f, 40.0f, 0.0f, 0.35f}};
+    const Layer* L = era == LAST_ERA ? day : dusk;
+    int n = era == LAST_ERA ? 1 : 3;
+    Vector3 horizon = era == LAST_ERA ? Vector3{0.86f, 0.92f, 0.97f} : Vector3{0.97f, 0.76f, 0.58f};
+    rlDrawRenderBatchActive();
+    BeginShaderMode(haze_);
+    SetShaderValue(haze_, locHazeCol_, &horizon, SHADER_UNIFORM_VEC3);
+    const float ground = 2.0f;   // 3D y of the path top
+    for (int i = 0; i < n; ++i) {
+        const Texture2D& t = g.art.era[era].bg[L[i].l];
+        if (t.id == 0) continue;
+        rlDrawRenderBatchActive();
+        SetShaderValue(haze_, locHazeAmt_, &L[i].haze, SHADER_UNIFORM_FLOAT);
+        float h = L[i].height, tw = h * t.width / t.height;
+        float half = (cam.position.z - L[i].z) * 1.1f + 12.0f;
+        float y0 = ground - 0.2f - L[i].baseFrac * h;   // world-down y of the picture top below
+        // quad() takes the top-left in level tiles (y down)
+        float top = (float)LEVEL_H - (y0 + h);
+        float start = std::floor((cam.target.x - half) / tw) * tw;
+        for (float x = start; x < cam.target.x + half; x += tw)
+            quad(t, Rectangle{0, 0, (float)t.width, (float)t.height}, x, top, tw + 0.02f, h, L[i].z, WHITE);
+    }
+    rlDrawRenderBatchActive();
+    EndShaderMode();
+}
+
+// 2.5D: flat lawn in front of and behind the path, out to the backdrop, in flat bands that step
+// towards the dusk sky colour with distance. A ditch floor under the pits and a bank behind them.
+void Renderer::drawLawns25D(Game& g)
+{
+    auto mix = [](unsigned a, unsigned b, float t) {
+        auto ch = [&](int s) { return (unsigned char)(((a >> s) & 255) + ((((int)(b >> s) & 255) - (int)((a >> s) & 255)) * t)); };
+        return Color{ch(16), ch(8), ch(0), 255};
+    };
+    const unsigned grass = 0x4f8a42, dusk = 0xf0b48a;
+    float l = g.cam.left() - 80, r = g.cam.right() + 80;
+    auto flat = [&](float z0, float z1, float y3, Color c) {   // a horizontal quad at 3D height y3
+        rlSetTexture(rlGetTextureIdDefault());
+        rlBegin(RL_QUADS);
+        rlColor4ub(c.r, c.g, c.b, c.a);
+        rlTexCoord2f(0, 0); rlVertex3f(l, y3, z0);
+        rlTexCoord2f(0, 1); rlVertex3f(l, y3, z1);
+        rlTexCoord2f(1, 1); rlVertex3f(r, y3, z1);
+        rlTexCoord2f(1, 0); rlVertex3f(r, y3, z0);
+        rlEnd();
+    };
+    flat(40.0f, -1.5f, 0.0f, mix(grass, 0x203018, 0.25f));                 // the low lawn in front, and the ditch floor
+    // the bank behind the ditches: a vertical face at the back of the path
+    rlSetTexture(rlGetTextureIdDefault());
+    rlBegin(RL_QUADS);
+    Color bank = hexc(0x5e3a2a);
+    rlColor4ub(bank.r, bank.g, bank.b, 255);
+    rlTexCoord2f(0, 0); rlVertex3f(l, 2.0f, -1.5f);
+    rlTexCoord2f(0, 1); rlVertex3f(l, 0.0f, -1.5f);
+    rlTexCoord2f(1, 1); rlVertex3f(r, 0.0f, -1.5f);
+    rlTexCoord2f(1, 0); rlVertex3f(r, 2.0f, -1.5f);
+    rlEnd();
+    const float bandZ[5] = {-1.5f, -8.0f, -20.0f, -36.0f, -70.0f};
+    for (int i = 0; i < 4; ++i) flat(bandZ[i], bandZ[i + 1], 1.98f, mix(grass, dusk, 0.12f + 0.16f * i));
+    rlSetTexture(0);
 }
 
 void Renderer::drawTitleBackground(Game& g, float t)
@@ -261,7 +314,7 @@ void Renderer::drawTitleBackground(Game& g, float t)
     oldEra_ = -1;
     BeginTextureMode(rt_[e]);
     ClearBackground(BLACK);
-    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (isHiRes(e) ? rtH_[e] / (VIEW_TILES_H * TILE_PX[e]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
+    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (smooth(e) ? rtH_[e] / (VIEW_TILES_H * TILE_PX[e]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
     EndTextureMode();
 }
 
@@ -273,11 +326,7 @@ void Renderer::drawWorld(Game& g)
     float p = sweepProgress(g);
     if (p >= 0.0f && p < 1.0f && g.transFromEra != g.era) {
         oldEra_ = g.transFromEra;
-        // the old world behind the sweep: still flat, or (2.5D -> modern) still in its 2.5D framing
-        float savedModern = g.cam.modern;
-        g.cam.modern = 0;
-        drawEra(g, oldEra_, oldEra_ >= ERA_25D ? 1.0f : 0.0f);
-        g.cam.modern = savedModern;
+        drawEra(g, oldEra_, 0.0f);   // the old world, still flat, behind the sweep
     }
     drawEra(g, g.era, g.cam.swing);
     renderEra_ = g.era;
@@ -296,96 +345,119 @@ void Renderer::drawEra(Game& g, int era, float swing)
     g.cam.aspect = (float)rtW_[era] / rtH_[era];
     float pxPerTile = rtH_[era] / g.cam.viewH;
     const float depth = swing;   // blocks extrude as the camera swings
-    g_lightAmount = era == ERA_25D ? swing : 0.0f;   // era 4 lights per pixel in modern_world.fs
-    const bool modernEra = era == ERA_MODERN;
+    g_lightAmount = smooth(era) ? std::min(1.0f, swing) : 0.0f;
+    const bool full3D = era == LAST_ERA;
+
+    // A sprite quad. In 1-bit it lands on whole native pixels and gets a 1 px black halo
+    // (dark silhouettes offset left, right and up, drawn first), so it always reads over the line-drawn scenery.
+    auto sprite = [&](const Texture2D& tex, Rectangle src, float x, float y, float w, float h, float z, Color tint, bool flip) {
+        if (era != 0) { quad(tex, src, x, y, w, h, z, tint, flip); return; }
+        const float px = 1.0f / TILE_PX[0];
+        x = std::round(x / px) * px;
+        y = std::round(y / px) * px;
+        Color halo{16, 18, 22, tint.a};
+        // left, right and above only: a halo below would cut the ground line under their feet
+        const float ox[3] = {px, -px, 0}, oy[3] = {0, 0, -px};
+        for (int k = 0; k < 3; ++k) quad(tex, src, x + ox[k], y + oy[k], w, h, z, halo, flip);
+        quad(tex, src, x, y, w, h, z, tint, flip);
+    };
 
     // lights: the players glow warm and cool, the boss eye glows
     g_lights.clear();
-    if (era == 3) {
-        // era 3: gentle warm/cool character glows only; the key light lives in lit()
-        for (int p = 0; p < 2; ++p)
-            if (g.players[p].joined)
-                g_lights.push_back({g.players[p].cx(), g.players[p].cy(), p == 0 ? 0.16f : 0.06f, p == 0 ? 0.11f : 0.1f,
-                                    p == 0 ? 0.04f : 0.18f, 4});
-        if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.18f, 0.14f, 0.05f, 6});
-    } else {
     g_lights.push_back({g.cam.x, 4, 0.12f, 0.1f, 0.05f, 40});   // soft fill
     for (int p = 0; p < 2; ++p)
         if (g.players[p].joined)
             g_lights.push_back({g.players[p].cx(), g.players[p].cy(), p == 0 ? 0.55f : 0.15f, p == 0 ? 0.32f : 0.3f,
                                 p == 0 ? 0.1f : 0.6f, 6});
     if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.4f, 0.35f, 0.1f, 7});
-    }
 
-    // era 3 polish: puffs of dust when a player lands
-    if (era == 3 && swing > 0.5f) {
-        for (int p = 0; p < 2; ++p) {
-            const Player& pl = g.players[p];
-            if (!pl.joined) continue;
-            if (pl.onGround && !g_wasGround[p] && g_lastVy[p] > 6.0f) {
-                for (int i = 0; i < 7; ++i) {
-                    float s = (i - 3) / 3.0f;
-                    g.particles.add({pl.cx() + s * 0.25f, pl.bottom() - 0.05f, s * 2.6f, -0.6f - 0.4f * (1 - std::fabs(s)), 0.45f,
-                                     0.45f, 0.22f, 2.0f, Color{236, 214, 190, 150}});
-                }
-            }
-            g_wasGround[p] = pl.onGround;
-            if (!pl.onGround) g_lastVy[p] = pl.vy;
-        }
-    }
-
-    if (modernEra) modern::prepareBackground(g, A, g.cam.x, pxPerTile, rtW_[era], rtH_[era]);
     BeginTextureMode(rt);
-    ClearBackground(era == 0 ? Color{16, 18, 22, 255} : BLACK);
+    ClearBackground(era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(SHADES4[3]) : BLACK));
     // the 1-bit background is drawn at full strength: its ordered patterns are the shading
-    if (modernEra) modern::drawBackground(g, A, g.cam.x, pxPerTile, rtW_[era], rtH_[era]);
-    else drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
+    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f, smooth(era) ? 1 : BG_LAYERS);
 
     float nearP, farP;
     float savedSwing = g.cam.swing;
     g.cam.swing = swing;
     Camera3D c3 = g.cam.camera3D(nearP, farP);
     g.cam.swing = savedSwing;
+    if (lowRes(era) && c3.projection == CAMERA_ORTHOGRAPHIC) {
+        // snap the camera to the native pixel grid, so sprites never land between pixels
+        float tp = (float)TILE_PX[era];
+        c3.target.x = std::round(c3.target.x * tp) / tp;
+        c3.target.y = std::round(c3.target.y * tp) / tp;
+        c3.position.x = c3.target.x;
+        c3.position.y = c3.target.y;
+    }
     rlDrawRenderBatchActive();
     rlSetClipPlanes(nearP, farP);
     BeginMode3D(c3);
-    if (modernEra) modern::beginWorld(g, c3, 1.0f);
-    else BeginShaderMode(world_);
+    BeginShaderMode(world_);
     if (depth > 0.02f) rlEnableDepthTest(); else rlDisableDepthTest();
     rlDisableBackfaceCulling();
 
+    if (smooth(era)) {
+        drawBackdrop3D(g, era, c3);
+        BeginShaderMode(world_);
+        if (!full3D) drawLawns25D(g);
+    }
+
     // ---- tiles
+    auto tileAt = [&](int x, int y) {
+        if (x < g.level.firstCol() && smooth(era)) return y >= LEVEL_H - 2 && y < LEVEL_H ? '#' : '.';
+        return g.level.tile(x, y);
+    };
     int x0 = (int)std::floor(g.cam.left()) - 3, x1 = (int)std::ceil(g.cam.right()) + 3 + (int)(swing * 6);
     for (int tx = x0; tx <= x1; ++tx) {
-        if (tx < g.level.firstCol()) continue;
+        // left of the first column: nothing in the flat stages, plain ground once the camera turns
+        if (tx < g.level.firstCol() && !smooth(era)) continue;
         for (int ty = 0; ty < LEVEL_H; ++ty) {
-            char ch = g.level.tile(tx, ty);
+            char ch = tileAt(tx, ty);
             if (ch == '.') continue;
+            if (full3D) continue;   // the 3D stage models its blocks (Models3D::drawGround)
             int frame = T_GROUND;
-            bool above = g.level.isSolidChar(g.level.tile(tx, ty - 1));
-            bool below = g.level.isSolidChar(g.level.tile(tx, ty + 1));
+            bool above = g.level.isSolidChar(tileAt(tx, ty - 1));
+            bool below = g.level.isSolidChar(tileAt(tx, ty + 1));
             if (ch == '#') frame = !above ? (below || ty >= LEVEL_H - 2 ? T_GROUND_TOP : T_BLOCK) : T_GROUND;
             else if (ch == '=') frame = T_CRACKED;
             else if (ch == '1') frame = T_P1;
             else if (ch == '2') frame = T_P2;
             else if (ch == '|') frame = T_WALL;
             Color tint = WHITE;
-            if ((ch == '1' || ch == '2') && era != 0) {   // in 1-bit a pulse would only make the dither shimmer
+            if (ch == '1' || ch == '2') {
                 // a gentle pulse so the coloured memories read as "only for one of you"
                 unsigned char a = (unsigned char)(200 + 55 * std::sin(g.time * 3 + tx));
                 tint = Color{255, 255, 255, a};
             }
             auto open = [&](int dx, int dy) {
-                char n = g.level.tile(tx + dx, ty + dy);
+                char n = tileAt(tx + dx, ty + dy);
                 return !(g.level.isSolidChar(n) || n == '1' || n == '2');
             };
             float d = (ch == '1' || ch == '2') ? depth * 0.6f : depth;
             tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            // pixel stages: a solid tile over empty space gets a dark underside, two native
+            // pixels deep (the lower one darkest), so floating platforms read as solid objects
+            // (not in 1-bit: there the half-dark row would dither, and the tiles carry their own edges)
+            if (lowRes(era) && era != 0 && ch != '1' && ch != '2' && ty + 1 < LEVEL_H && open(0, 1)) {
+                float px = 1.0f / TILE_PX[era];
+                Color dark = era == 1 ? hexc(SHADES4[0]) : (era == 0 ? Color{16, 18, 22, 255} : hexc(0x1a1424));
+                solidQuad((float)tx, ty + 1 - 2 * px, 1.0f, px, 0.02f, Color{dark.r, dark.g, dark.b, 120});
+                solidQuad((float)tx, ty + 1 - px, 1.0f, px, 0.02f, dark);
+            }
         }
     }
 
-    // ---- shadows (2.5D)
-    if (era >= ERA_25D) {
+    // ---- the modelled street of the 3D stage
+    if (full3D) {
+        rlDrawRenderBatchActive();
+        models_.begin(g, c3);
+        models_.drawScenery(g);
+        models_.drawGround(g);
+        rlDrawRenderBatchActive();
+    }
+
+    // ---- shadows (2.5D and 3D)
+    if (smooth(era)) {
         auto floorBelow = [&](float x, float y) {
             for (int ty = (int)std::floor(y); ty < LEVEL_H; ++ty)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
@@ -395,7 +467,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             const Player& pl = g.players[p];
             if (!pl.joined) continue;
             float fy = floorBelow(pl.cx(), pl.bottom());
-            if (fy >= 0) shadow(pl.cx(), fy, 0.5f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
+            if (fy >= 0) shadow(pl.cx(), fy, 0.45f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
         }
         for (const auto& e : g.enemies) {
             float fy = floorBelow(e.cx(), e.y + e.h);
@@ -408,20 +480,33 @@ void Renderer::drawEra(Game& g, int era, float swing)
     }
 
     // ---- pickups
+    if (full3D) {
+        for (const auto& f : g.frags) {
+            float a = (!f.placed && f.t > 10) ? std::max(0.0f, (12 - f.t) / 2) : 1.0f;
+            models_.drawFragment(f.x, f.y, f.t + f.x, a);
+        }
+    }
     for (const auto& f : g.frags) {
+        if (full3D) break;
         int fr = ((int)(f.t * 6 + f.x) % 2) ? T_FRAG1 : T_FRAG0;
-        float s = 0.7f;
+        float s = era == 0 ? 1.0f : 0.7f;   // 1-bit: drawn 1:1, never resampled
         unsigned char a = (!f.placed && f.t > 10) ? (unsigned char)(255 * std::max(0.0f, (12 - f.t) / 2)) : 255;
-        quad(A.tiles, frameRect(A.tiles, fr, 1, 1, era), f.x - s / 2, f.y - s / 2, s, s, 0.1f, Color{255, 255, 255, a});
+        sprite(A.tiles, frameRect(A.tiles, fr, 1, 1, era), f.x - s / 2, f.y - s / 2, s, s, 0.1f, Color{255, 255, 255, a}, false);
     }
     for (const auto& pu : g.powerups) {
         float bob = std::sin(pu.t * 3) * 0.12f;
-        quad(A.tiles, frameRect(A.tiles, T_PU_SHIELD + pu.type, 1, 1, era), pu.x - 0.45f, pu.y - 0.45f + bob, 0.9f, 0.9f, 0.1f, WHITE);
+        float ps = era == 0 ? 1.0f : 0.9f;
+        sprite(A.tiles, frameRect(A.tiles, T_PU_SHIELD + pu.type, 1, 1, era), pu.x - ps / 2, pu.y - ps / 2 + bob, ps, ps, 0.1f, WHITE, false);
         if ((int)(pu.t * 4) % 2 == 0) ring(pu.x, pu.y + bob, 0.6f, Color{255, 240, 180, 160});
     }
 
     // ---- enemies
     for (const auto& e : g.enemies) {
+        if (full3D) {
+            models_.drawEnemy(g, e);
+            if (e.owner >= 0 && !e.dead) ring(e.cx(), e.cy(), (e.type == EN_BRUTE ? 2.0f : 1.0f) * 0.6f, e.owner == 0 ? Color{255, 150, 60, 200} : Color{80, 160, 255, 200}, 0.9f);
+            continue;
+        }
         const Texture2D* t = &A.blob;
         float fs = BLOB_FS;
         int fr = 0;
@@ -440,7 +525,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (e.dead) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - e.deadTime / 0.45f));
         float dx = e.cx() - fs / 2, dy = e.y + e.h - fs;
         if (e.type == EN_FLYER) dy = e.cy() - fs / 2;
-        quad(*t, frameRect(*t, fr, fs, fs, era), dx, dy, fs, fs, 0.0f, tint, e.dir > 0 ? false : true);
+        sprite(*t, frameRect(*t, fr, fs, fs, era), dx, dy, fs, fs, 0.0f, tint, e.dir > 0 ? false : true);
         if (e.owner >= 0 && !e.dead) ring(e.cx(), e.cy(), fs * 0.6f, e.owner == 0 ? Color{255, 150, 60, 200} : Color{80, 160, 255, 200});
     }
 
@@ -454,11 +539,12 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 0.7f, wc);
             solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
         }
+        if (full3D) models_.drawBoss(g);
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
-        quad(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        if (!full3D) sprite(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
     }
 
     // ---- players
@@ -475,8 +561,9 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ox = std::sin(g.time * 6 + p) * 0.05f;
         }
         const Texture2D& t = A.player[p];
-        quad(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox, pl.bottom() - PLAYER_FH + 0.03f,
-             PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
+        if (full3D) models_.drawPlayer(g, p);
+        else sprite(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox,
+                    pl.bottom() - PLAYER_FH + (era == 0 ? 0.0f : 0.03f), PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
         if (pl.shield) ring(pl.cx(), pl.cy(), 0.95f, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
         if (pl.faded && pl.reviveProgress > 0) ring(pl.cx(), pl.cy(), 1.1f * (1 - pl.reviveProgress / 0.6f) + 0.3f, Color{255, 255, 255, 230});
         if (pl.attackTime > 0) {
@@ -496,21 +583,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     for (const auto& pa : g.particles.all()) {
         Color c = pa.color;
         c.a = (unsigned char)(c.a * std::min(1.0f, pa.life / (pa.maxLife * 0.5f)));
-        if (era == 3) softDot(pa.x, pa.y, pa.size * 0.8f, 0.2f, c);
-        else solidQuad(pa.x - pa.size / 2, pa.y - pa.size / 2, pa.size, pa.size, 0.2f, c);
-    }
-    if (era == 3) {
-        // drifting light motes: a few warm specks floating slowly in the air, front and back
-        float L = g.cam.left() - 2, span = g.cam.right() - g.cam.left() + 4;
-        for (int i = 0; i < 26; ++i) {
-            float h1 = std::fabs(std::fmod(std::sin(i * 12.9898f) * 43758.5453f, 1.0f));
-            float h2 = std::fabs(std::fmod(std::sin(i * 78.233f) * 12345.678f, 1.0f));
-            float sx = std::fmod(h1 * 97.0f + g.time * (0.15f + 0.2f * h2), span);
-            float sy = 2.0f + h2 * (LEVEL_H - 4) + std::sin(g.time * (0.4f + h1) + i) * 0.6f;
-            float tw = 0.5f + 0.5f * std::sin(g.time * (1.2f + h2) + i * 2.1f);
-            float z = -2.5f + h1 * 3.5f;
-            softDot(L + sx, sy, 0.07f + 0.06f * h2, z, Color{255, 226, 170, (unsigned char)(swing * (40 + 80 * tw))});
-        }
+        solidQuad(pa.x - pa.size / 2, pa.y - pa.size / 2, pa.size, pa.size, 0.2f, c);
     }
 
     // ---- the Forgetting Wall: rows of static/fog with a wavy leading edge
@@ -520,42 +593,34 @@ void Renderer::drawEra(Game& g, int era, float swing)
         for (float y = -1.0f; y < LEVEL_H + 1; y += 0.5f) {
             float edge = g.wallX + std::sin(y * 1.7f + g.time * 3) * 0.35f + std::sin(y * 4.1f - g.time * 5) * 0.15f;
             if (edge < left) continue;
-            // 1-bit static crawls slowly: fast full-screen static was the harshest flicker in era 0
-            float scroll = std::fmod(g.time * (era == 0 ? 1.0f : 2.0f), 1.0f);
+            float scroll = std::fmod(g.time * (era == 0 ? 8.0f : 2.0f), 1.0f);
             Rectangle src{0, (y / WALL_TEX_H + scroll) * wt.height, (float)wt.width, wt.height * 0.5f / WALL_TEX_H};
             float wq = WALL_TEX_W;
             // the textured leading strip
             quad(wt, src, edge - wq, y, wq, 0.5f, 0.6f, WHITE);
             // the solid body behind it
-            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : (era == 3 ? hexc(0x2a2640, 240) : hexc(0x1a1030, era >= ERA_25D ? 235 : 255)));
+            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(SHADES4[0]) : (era == 2 ? hexc(0x0f0d1a) : hexc(0x1a1030, smooth(era) ? 235 : 255)));
             if (edge - wq > left) solidQuad(left, y, edge - wq - left, 0.5f, 0.6f, body);
         }
         // glitch sparks at the edge
         if (era >= 1) {
             for (int i = 0; i < 6; ++i) {
                 float yy = std::fmod(g.time * (3 + i) * 1.7f + i * 2.3f, (float)LEVEL_H);
-                solidQuad(g.wallX + 0.2f + std::sin(g.time * 9 + i) * 0.4f, yy, 0.18f, 0.18f, 0.7f,
-                          era == 3 ? hexc(i % 2 ? 0xf0b080 : 0xb0a8d0, 170) : hexc(i % 2 ? 0xe8364f : 0x8a7fb4, 200));
+                solidQuad(g.wallX + 0.2f + std::sin(g.time * 9 + i) * 0.4f, yy, 0.18f, 0.18f, 0.7f, hexc(i % 2 ? 0xe8364f : 0x8a7fb4, 200));
             }
         }
     }
     rlEnableDepthMask();
-    if (modernEra) modern::endWorld();
-    else EndShaderMode();
+    EndShaderMode();
     EndMode3D();
     rlDisableDepthTest();
     rlSetClipPlanes(0.01, 1000.0);
-    if (modernEra) modern::drawForeground(g, rtW_[era], rtH_[era], 1.0f);
     EndTextureMode();
 }
 
 // ------------------------------------------------------------------ to the screen
 void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, float mosaic, float glitch)
 {
-    if (e == ERA_MODERN) {
-        modern::blit(g, rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, flash, desat, mosaic, glitch);
-        return;
-    }
     float t = g.time;
     float size[2] = {(float)rtW_[e], (float)rtH_[e]};
     float out[2] = {dst.width, dst.height};
@@ -576,8 +641,8 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
 // the size of the old era's pixels breaking off and flying ahead of it.
 void Renderer::drawSweep(Game& g, Rectangle dst, float p)
 {
-    const Color eraGlow[ERA_COUNT] = {{235, 235, 225, 255}, {247, 215, 58, 255}, {242, 140, 180, 255}, {255, 220, 150, 255},
-                                      {255, 236, 205, 255}};
+    const Color eraGlow[ERA_COUNT] = {{235, 235, 225, 255}, {232, 226, 210, 255}, {247, 215, 58, 255}, {242, 140, 180, 255},
+                                      {126, 240, 192, 255}, {255, 220, 150, 255}, {255, 250, 235, 255}};
     Color glow = eraGlow[std::min(LAST_ERA, std::max(0, g.era))];
     float x = dst.x + dst.width * p;
     int y0 = (int)dst.y, h = (int)dst.height;
@@ -624,56 +689,4 @@ void Renderer::present(Game& g, float flash, float desat)
         return;
     }
     blitEra(g, renderEra_, dst, flash, desat, 1.0f, 0.0f);
-    if (renderEra_ == 0 && g.screen != Screen::Title) drawPlayerTags(g, dst);
-}
-
-// 1-bit has no colours to tell the players apart, so each gets a small "P1" / "P2" tag above
-// the head. Drawn on the screen, not in the world, so the 3 x 5 letters stay whole at any
-// camera zoom; snapped to the LCD pixel grid and in the shader's two colours, so it still
-// reads as part of the 1-bit screen. A player off the screen keeps the tag at the edge.
-void Renderer::drawPlayerTags(Game& g, Rectangle dst)
-{
-    const Color light{198, 203, 183, 255}, dark{30, 35, 33, 255};   // post.fs era 0 pair
-    static const char* P = "111" "101" "111" "100" "100";
-    static const char* D[2] = {"010" "110" "010" "010" "111", "111" "001" "111" "100" "111"};
-    float nearP, farP;
-    float savedSwing = g.cam.swing;
-    g.cam.swing = 0;
-    g.cam.aspect = (float)rtW_[0] / rtH_[0];
-    Camera3D c3 = g.cam.camera3D(nearP, farP);
-    g.cam.swing = savedSwing;
-    const float B = dst.height / rtH_[0];   // one 1-bit pixel on the screen
-    int tx[2] = {0, 0}, ty[2] = {0, 0};
-    for (int p = 0; p < 2; ++p) {
-        const Player& pl = g.players[p];
-        Vector2 v = GetWorldToScreenEx(Vector3{pl.cx(), Y3(pl.bottom() - PLAYER_FH), 0.05f}, c3, rtW_[0], rtH_[0]);
-        tx[p] = (int)std::lround(v.x - 4.5f);   // box 9 x 7, pointer 2 below it
-        ty[p] = (int)std::lround(v.y) - 10;
-    }
-    // players standing together: put the two tags side by side, P1 on the left
-    if (g.players[0].joined && g.players[1].joined && std::abs(tx[0] - tx[1]) < 12 && std::abs(ty[0] - ty[1]) < 10) {
-        int mid = (tx[0] + tx[1]) / 2;
-        tx[0] = mid - 6;
-        tx[1] = mid + 6;
-        ty[0] = ty[1] = std::min(ty[0], ty[1]);
-    }
-    for (int p = 0; p < 2; ++p) {
-        if (!g.players[p].joined) continue;
-        int bx = std::max(1, std::min(rtW_[0] - 10, tx[p]));
-        int by = std::max(1, std::min(rtH_[0] - 10, ty[p]));
-        auto px = [&](int x, int y, int w, int h, Color c) {
-            int x0 = (int)std::lround(dst.x + (bx + x) * B), y0 = (int)std::lround(dst.y + (by + y) * B);
-            int x1 = (int)std::lround(dst.x + (bx + x + w) * B), y1 = (int)std::lround(dst.y + (by + y + h) * B);
-            DrawRectangle(x0, y0, x1 - x0, y1 - y0, c);
-        };
-        px(-1, -1, 11, 9, dark);   // rim
-        px(0, 0, 9, 7, light);
-        px(3, 7, 3, 1, light);     // pointer
-        px(4, 8, 1, 1, light);
-        for (int r = 0; r < 5; ++r)
-            for (int c = 0; c < 3; ++c) {
-                if (P[r * 3 + c] == '1') px(1 + c, 1 + r, 1, 1, dark);
-                if (D[p][r * 3 + c] == '1') px(5 + c, 1 + r, 1, 1, dark);
-            }
-    }
 }

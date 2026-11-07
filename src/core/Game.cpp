@@ -12,7 +12,7 @@
 namespace {
 constexpr float DT = 1.0f / 60.0f;
 const Color P_SPARK[2] = {{255, 180, 90, 255}, {120, 200, 255, 255}};
-Color fragColor(int era) { return era == 0 ? Color{235, 235, 225, 255} : Color{255, 220, 90, 255}; }
+Color fragColor(int era) { return era <= 1 ? Color{235, 235, 225, 255} : Color{255, 220, 90, 255}; }
 
 bool overlap(float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh)
 {
@@ -46,6 +46,8 @@ void Game::init(const Options& o)
     rng_.seed(seed);
     spawner.init(chunks, seed);
     spawner.generatedChance = config().f("level.generated_chunk_chance", 0.3f);
+    spawner.stageShare = config().f("level.stage_chunk_share", 0.6f);
+    fillSpeed_ = std::max(0.1f, config().f("memory.fill_speed", 1.0f));
 
     players[0].index = 0;
     players[1].index = 1;
@@ -107,13 +109,14 @@ void Game::startRun()
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();
     cam.x = 12;
-    cam.swing = era >= art::ERA_25D ? 1.0f : 0.0f;
-    cam.modern = era >= art::ERA_MODERN ? 1.0f : 0.0f;
+    cam.top = LEVEL_H - art::VIEW_TILES_H;
+    cam.pixelLock = art::lowRes(era);
+    cam.swing = art::SWING[era];
     wallX = -10;
     bestX = players[0].x;
     audio.setEra(era);
     events().eraChanged.emit(era);
-    if (era > 0) spawner.forceChunk("intro_era" + std::to_string(era));   // starting late: show the gate
+    if (era > 0) spawner.forceChunk(introChunk(era));   // starting late: show the gate
     spawner.fill(level, cam.right() + 60, era, 0, !solo(), markers);
     spawnMarkers();
     showBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 3.0f);
@@ -286,14 +289,13 @@ void Game::updatePlaying(float dt)
         transT += dt;
         if (!transSwitched && transT >= Renderer::kSwitchAt) switchEra(transFromEra + 1);
         if (!transSwitched) cam.addShake(0.4f * transT / Renderer::kSwitchAt);   // the old world shudders
-        if (transSwitched && era == art::ERA_25D) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
-        if (transSwitched && era == art::ERA_MODERN) cam.modern = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
-        cam.update(cam.x, 0, wallX - 3, dt);
-        if (transT >= transLen) {
-            transActive = false;
-            cam.swing = era >= art::ERA_25D ? 1.0f : 0.0f;
-            cam.modern = era >= art::ERA_MODERN ? 1.0f : 0.0f;
+        if (transSwitched && art::SWING[era] != art::SWING[transFromEra]) {
+            float k = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
+            cam.swing = art::SWING[transFromEra] + (art::SWING[era] - art::SWING[transFromEra]) * k;
         }
+        cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
+        cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
+        if (transT >= transLen) { transActive = false; cam.swing = art::SWING[era]; }
         return;
     }
 
@@ -343,7 +345,7 @@ void Game::updatePlaying(float dt)
             }
         }
         // trail of dust when running in the later eras
-        if (era >= 2 && pl.onGround && std::fabs(pl.vx) > 4 && ((int)(time * 30) + p) % 6 == 0)
+        if (era >= 3 && pl.onGround && std::fabs(pl.vx) > 4 && ((int)(time * 30) + p) % 6 == 0)
             particles.burst(pl.cx() - pl.facing * 0.3f, pl.bottom() - 0.05f, 1, Color{220, 210, 190, 150}, 1, 0.35f, 0.12f, -1);
     }
 
@@ -365,7 +367,7 @@ void Game::updatePlaying(float dt)
     }
 
     // ---- enemies
-    for (auto& e : enemies) updateEnemy(e, level, players, dt, era, slowK, etune);
+    for (auto& e : enemies) updateEnemy(e, level, players, dt, tier(), slowK, etune);
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const Enemy& e) {
         return e.remove || e.x < wallX - 6;
     }), enemies.end());
@@ -420,10 +422,10 @@ void Game::updatePlaying(float dt)
 
     // ---- boss
     if (boss.active) {
-        boss.update(dt, cam.left(), cam.right(), level, players, era, slowK);
+        boss.update(dt, cam.left(), cam.right(), level, players, tier(), slowK);
         if (boss.wantsSpawn) {
-            Enemy e = makeEnemy(era >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB),
-                                boss.x, boss.y, era, etune);
+            Enemy e = makeEnemy(tier() >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB),
+                                boss.x, boss.y, tier(), etune);
             e.y = boss.y;
             e.baseY = e.y;
             if (!solo() && era >= 1 && std::rand() % 3 == 0) e.owner = std::rand() % 2;
@@ -480,7 +482,7 @@ void Game::updatePlaying(float dt)
         if (best && bd < 0.7f) {
             int p = best->index;
             float before = bar;
-            if (!boss.active) bar = std::min(100.0f, bar + f.value);
+            if (!boss.active) bar = std::min(100.0f, bar + f.value * fillSpeed_);
             score += 10;
             f.collected = true;
             audio.play("fragment", 0.6f, 1.0f + std::min(0.5f, (bar - before) * 0.02f) + (std::rand() % 10) * 0.01f);
@@ -511,7 +513,8 @@ void Game::updatePlaying(float dt)
     // ---- the Forgetting Wall
     float lead = std::max(players[0].joined ? players[0].x : -1e9f, players[1].joined ? players[1].x : -1e9f);
     {
-        float speed = config().f("wall.base_speed", 1.6f) + config().f("wall.speed_per_era", 0.45f) * era;
+        // the old four-era scale: seven stages cover the same speed range
+        float speed = config().f("wall.base_speed", 1.6f) + config().f("wall.speed_per_era", 0.45f) * era * 3.0f / art::LAST_ERA;
         float gapNow = lead - wallX;
         float catchDist = config().f("wall.catchup_distance", 24.0f);
         if (gapNow > catchDist) speed += (gapNow - catchDist) * config().f("wall.catchup_strength", 0.25f);
@@ -574,7 +577,15 @@ void Game::updatePlaying(float dt)
     for (auto& pl : players)
         if (pl.joined) { minX = std::min(minX, pl.cx()); maxX = std::max(maxX, pl.cx()); }
     float target = (minX + maxX) / 2 + 2.0f;
-    cam.update(target, maxX - minX, wallX - 3.0f, dt);
+    // up and down: keep the highest player (and the boss) comfortably inside the view
+    float highest = 1e9f;
+    for (auto& pl : players)
+        if (pl.joined) highest = std::min(highest, pl.y);
+    float wantTop = highest - 3.0f;
+    if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
+    cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
+    // never show past the start of the level: no empty strip at the left edge
+    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt);
 
     // ---- endless level: keep ~3 chunks ahead, drop what is far behind the wall
     unsigned mask = 0;
@@ -592,17 +603,17 @@ void Game::updatePlaying(float dt)
     // extra flyers drift in as the eras go by (spawn rate scales with era)
     static float spawnClock = 0;
     spawnClock += dt;
-    float every = config().f("enemies.extra_spawn_seconds", 9.0f) / (1.0f + era * 0.35f);
+    float every = config().f("enemies.extra_spawn_seconds", 9.0f) / (1.0f + tier() * 0.35f);
     if (spawnClock > every && !boss.active) {
         spawnClock = 0;
-        Enemy e = makeEnemy(EN_FLYER, cam.right() + 2, 3.0f + (std::rand() % 4), era, etune);
+        Enemy e = makeEnemy(EN_FLYER, cam.right() + 2, 3.0f + (std::rand() % 4), tier(), etune);
         if (!soloNow && era >= 1 && std::rand() % 4 == 0) e.owner = std::rand() % 2;
         enemies.push_back(e);
     }
 
     // ---- passive fill from distance (small; kills are the main source)
     if (lead > bestX) {
-        bar = boss.active ? bar : std::min(100.0f, bar + (lead - bestX) * config().f("memory.passive_per_tile", 0.03f));
+        bar = boss.active ? bar : std::min(100.0f, bar + (lead - bestX) * config().f("memory.passive_per_tile", 0.03f) * fillSpeed_);
         bestX = lead;
     }
     if (opt.fill && !boss.active) bar = std::min(100.0f, bar + dt * 12);
@@ -610,7 +621,7 @@ void Game::updatePlaying(float dt)
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
-            boss.start(cam.x, era, config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
+            boss.start(cam.x, tier(), config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
             audio.play("boss_appear");
             cam.addShake(0.6f);
             showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
@@ -625,15 +636,15 @@ void Game::spawnMarkers()
 {
     for (const auto& m : markers) {
         switch (m.c) {
-        case 'S': enemies.push_back(makeEnemy(EN_BLOB, m.x, m.y, era, etune)); break;
-        case 'G': enemies.push_back(makeEnemy(EN_FLYER, m.x, m.y, era, etune)); break;
+        case 'S': enemies.push_back(makeEnemy(EN_BLOB, m.x, m.y, tier(), etune)); break;
+        case 'G': enemies.push_back(makeEnemy(EN_FLYER, m.x, m.y, tier(), etune)); break;
         case 'B':
             // Fog Brutes appear from the 8-bit era on; before that a Static Blob stands in
-            enemies.push_back(makeEnemy(era >= 1 ? EN_BRUTE : EN_BLOB, m.x, m.y, era, etune));
+            enemies.push_back(makeEnemy(era >= 1 ? EN_BRUTE : EN_BLOB, m.x, m.y, tier(), etune));
             break;
         case 'a':
         case 'b': {
-            Enemy e = makeEnemy(EN_BLOB, m.x, m.y, era, etune);
+            Enemy e = makeEnemy(EN_BLOB, m.x, m.y, tier(), etune);
             e.owner = solo() ? -1 : (m.c == 'a' ? 0 : 1);
             enemies.push_back(e);
             break;
@@ -700,7 +711,7 @@ void Game::killEnemy(Enemy& e, int byPlayer)
     int n = etune.drops[e.type];
     spawnFragments(e.cx(), e.cy(), n, e.type == EN_BRUTE ? 1.2f : 0.7f);
     score += 50 * n;
-    Color c = era == 0 ? Color{235, 235, 225, 255} : (e.type == EN_FLYER ? Color{240, 80, 110, 255} : Color{150, 140, 200, 255});
+    Color c = era <= 1 ? Color{235, 235, 225, 255} : (e.type == EN_FLYER ? Color{240, 80, 110, 255} : Color{150, 140, 200, 255});
     particles.burst(e.cx(), e.cy(), 14 + n * 3, c, 6, 0.5f, 0.14f, 6);
     if (e.type == EN_BRUTE) { cam.addShake(0.5f); hitPause = 0.06f; }
     if (std::rand() % 100 < config().i("powerups.drop_percent", 6))
@@ -797,7 +808,7 @@ void Game::collectPowerUp(int p, PowerUp& pu)
         break;
     case PU_MAGNET: pl.magnetTime = config().f("powerups.magnet_seconds", 10.0f); break;
     case PU_PHOTO:
-        if (!boss.active) bar = std::min(100.0f, bar + config().f("powerups.photo_value", 8.0f));
+        if (!boss.active) bar = std::min(100.0f, bar + config().f("powerups.photo_value", 8.0f) * fillSpeed_);
         score += 200;
         break;
     case PU_SPEED: pl.speedTime = config().f("powerups.speed_seconds", 8.0f); break;
@@ -813,7 +824,7 @@ void Game::beginEraTransition()
     transT = 0;
     transSwitched = false;
     transFromEra = era;
-    transLen = era + 1 >= art::ERA_25D ? 4.4f : 3.4f;   // the camera moves on the last two upgrades
+    transLen = art::SWING[era + 1] != art::SWING[era] ? 4.4f : 3.4f;   // the camera swing takes longer
     audio.play("era_up");
     TraceLog(LOG_INFO, "UPGRADE: era transition %d -> %d at frame %d", era, era + 1, frameNo_);
 }
@@ -854,7 +865,7 @@ void Game::switchEra(int newEra)
             if (pl.joined)
                 for (int a = 0; a < AB_COUNT; ++a)
                     if (pl.has[a]) mask |= 1u << a;
-        spawner.forceChunk("intro_era" + std::to_string(era));
+        spawner.forceChunk(introChunk(era));
         size_t before = markers.size();
         spawner.fill(level, cam.right() + config().f("level.lookahead_tiles", 30.0f), era, mask, !solo(), markers);
         if (markers.size() != before) spawnMarkers();
@@ -862,11 +873,17 @@ void Game::switchEra(int newEra)
     audio.setEra(era);
     audio.play("unlock");
     events().eraChanged.emit(era);
-    std::string sub = abilityForEra(0, era) < 0 && abilityForEra(1, era) < 0
-                          ? std::string(T("era_sub_" + std::to_string(era)))   // no new ability (modern day)
-                          : std::string(T("new_ability")) + "  " + T("p1_name") + ": " +
-                                T(std::string("ability_") + abilityId(abilityForEra(0, era))) + "   " + T("p2_name") + ": " +
-                                T(std::string("ability_") + abilityId(abilityForEra(1, era)));
+    // only the abilities this stage brings (and the attack button when it unlocks)
+    std::string sub;
+    for (int p = 0; p < 2; ++p) {
+        int ab = abilityForEra(p, era);
+        if (ab < 0) continue;
+        sub += std::string(sub.empty() ? "" : "   ") + T(solo() ? "p1_name" : (p == 0 ? "p1_name" : "p2_name")) + ": " +
+               T(std::string("ability_") + abilityId(ab));
+    }
+    if (era == config().i("player.attack_from_era", 2)) sub += std::string(sub.empty() ? "" : "   ") + T("ability_attack");
+    if (!sub.empty()) sub = std::string(T("new_ability")) + "  " + sub;
+    sub = std::string(T("era_name_" + std::to_string(era))) + (sub.empty() ? "" : "\n") + sub;
     showBanner(std::string(T("memory_restored")) + " " + T("memory_" + std::to_string(era)), sub, transLen - 0.6f + 1.5f);
     particles.burst(cam.x, 7, 120, WHITE, 14, 1.2f, 0.2f);
     for (auto& pl : players) if (pl.joined && pl.faded) { pl.faded = false; pl.invuln = 2; }
@@ -877,7 +894,7 @@ void Game::startEnding()
     screen = Screen::Ending;
     endingT = 0;
     era = art::LAST_ERA;
-    audio.setEra(art::LAST_ERA);
+    audio.setEra(era);
     audio.play("unlock");
     events().memoryComplete.emit();
 }

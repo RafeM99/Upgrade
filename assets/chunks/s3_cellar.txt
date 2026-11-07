@@ -1,0 +1,9 @@
+# abilities=ground_pound stages=3 difficulty=2 coop=false weight=2
+# 16-bit: the treehouse floorboards are rotten. Pound through to the box of keepsakes.
+.....................................
+.....S.....................S.........
+############=====####################
+############.FFF.####################
+############.FFFP####################
+#####################################
+#####################################
