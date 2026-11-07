@@ -130,6 +130,7 @@ private:
     PlayerInput inputs_[2];
     bool firstTick_ = true;
     bool prologueSeen_ = false;
+    int lastPadCount_ = -1;   // -1: not counted yet (no notice for pads already in at start)
     struct Trace { float x, y; bool grounded; };
     std::vector<Trace> history_[2];      // where the players have been (for the pull back)
     std::vector<Vector2> pullPath_[2];
