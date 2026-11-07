@@ -32,7 +32,18 @@ private:
     // Draws one lit part, then (unless outline is false, or the part is tiny or see-through)
     // the same mesh again as a dark inverted hull: the toon outline.
     void part(Model& m, Matrix t, Color c, float emissive = 0.0f, bool outline = true);
-    void tree(float x, float z, int seed, int kind = -1);   // kind -1: picked by the seed
+    void tree(float x, float z, int seed, int kind = -1);
+    // Gran and the Forgetting (the boss) modelled in Blender (tools/blender/make_models.py), one .glb per
+    // moving part, put together and animated here. Falls back to the primitives if missing.
+    enum { G_BODY, G_HEAD, G_UPPERARM, G_FOREARM, G_THIGH, G_SHIN, G_COUNT };
+    enum { F_BODY, F_SEG, F_TIP, F_COUNT };
+    Model gran_[G_COUNT]{}, forget_[F_COUNT]{};
+    bool granReady_ = false, forgetReady_ = false;
+    void loadParts(Model* out, const char* const* names, int n, bool& ready);
+    void unloadParts(Model* parts, int n, bool& ready);
+    void modelPart(Model& m, Matrix t, Color tint, bool outline = true);
+    void drawGranModel(Game& g);
+    void drawForgetting(Game& g);   // kind -1: picked by the seed
     void cottage(float x, float z);
     void house(float x, float z, int seed);
 };
