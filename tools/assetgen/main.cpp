@@ -18,6 +18,7 @@ int main(int argc, char** argv)
     int n = 0;
     if (art) n += generateSprites(dir);
     if (audio) n += generateSounds(dir);
+    if (audio) n += generateEra4Sounds(dir);
     std::printf("assetgen: wrote %d files under %s\n", n, dir.c_str());
     return 0;
 }
