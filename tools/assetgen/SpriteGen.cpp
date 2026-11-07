@@ -1232,9 +1232,10 @@ void drawBossShirt(Canvas& c, int frame)
                solid(collar));
     }
     // the open neck: dark, empty; the collar stands round it
-    r.ellipse(1.5f, 0.46f, 0.2f, 0.11f, solid(voidc));
-    r.poly({{1.24f, 0.38f}, {1.5f, 0.54f}, {1.42f, 0.84f}, {1.16f, 0.62f}}, solid(collar));
-    r.poly({{1.76f, 0.38f}, {1.5f, 0.54f}, {1.58f, 0.84f}, {1.84f, 0.62f}}, solid(collar));
+    r.capsule(1.3f, 0.4f, 1.7f, 0.4f, 0.07f, solid(collar));
+    r.ellipse(1.5f, 0.5f, 0.2f, 0.1f, solid(voidc));
+    r.poly({{1.22f, 0.42f}, {1.5f, 0.58f}, {1.42f, 0.86f}, {1.14f, 0.62f}}, solid(collar));
+    r.poly({{1.78f, 0.42f}, {1.5f, 0.58f}, {1.58f, 0.86f}, {1.86f, 0.62f}}, solid(collar));
     // button line and buttons
     r.capsule(1.5f, 0.6f, 1.5f, 2.32f, 0.03f, solid(fold));
     for (float by : {1.86f, 2.12f}) r.dot(1.5f, by, collar);
@@ -1260,12 +1261,13 @@ void drawBossBell(Canvas& c, int frame)
     r.capsule(1.5f, 2.1f, 1.5f + swing, 2.5f, 0.05f, solid(iron));
     r.circle(1.5f + swing, 2.58f, 0.2f, lit(iron));
     // handle and collar
-    r.capsule(1.5f, 0.28f, 1.5f, 0.66f, 0.14f, lit(wood));
-    r.ellipse(1.5f, 0.24f, 0.2f, 0.16f, lit(wood));
+    r.capsule(1.5f, 0.3f, 1.5f, 0.66f, 0.13f, solid(wood));
+    r.ellipse(1.5f, 0.24f, 0.2f, 0.16f, solid(wood));
+    if (!hurt) r.capsule(1.44f, 0.2f, 1.44f, 0.6f, 0.03f, solid(pc(0xf5c9a0, 2)));
     r.rect(1.24f, 0.62f, 0.52f, 0.16f, lit(rim), 0.05f);
     // the bell: a dome flaring out to the lip
-    const float prof[][2] = {{0.78f, 0.34f}, {0.84f, 0.46f}, {0.95f, 0.53f}, {1.15f, 0.58f}, {1.4f, 0.63f},
-                             {1.6f, 0.7f}, {1.8f, 0.82f}, {1.98f, 0.98f}, {2.12f, 1.14f}, {2.2f, 1.24f}};
+    const float prof[][2] = {{0.76f, 0.3f}, {0.82f, 0.46f}, {0.94f, 0.55f}, {1.15f, 0.59f}, {1.4f, 0.61f},
+                             {1.62f, 0.66f}, {1.82f, 0.76f}, {1.98f, 0.9f}, {2.1f, 1.06f}, {2.2f, 1.24f}};
     std::vector<Vector2> bell;
     for (auto& p : prof) bell.push_back({1.5f + p[1], p[0]});
     for (int i = 9; i >= 0; --i) bell.push_back({1.5f - prof[i][1], prof[i][0]});
@@ -1279,9 +1281,10 @@ void drawBossBell(Canvas& c, int frame)
     storyEye(r, 1.5f, 1.52f, 0.66f, hurt, ringc, 0.07f);
     // ringing: sound marks on the side the clapper strikes
     if (swing != 0) {
-        float s = swing < 0 ? -1.0f : 1.0f, bx = 1.5f + s * 1.32f;
-        r.capsule(bx, 1.7f, bx + s * 0.12f, 1.56f, 0.04f, solid(wave));
-        r.capsule(bx + s * 0.06f, 1.98f, bx + s * 0.24f, 1.9f, 0.04f, solid(wave));
+        float s = swing < 0 ? -1.0f : 1.0f;
+        r.capsule(1.5f + s * 0.86f, 0.9f, 1.5f + s * 1.04f, 0.74f, 0.045f, solid(wave));
+        r.capsule(1.5f + s * 0.98f, 1.14f, 1.5f + s * 1.22f, 1.06f, 0.045f, solid(wave));
+        r.capsule(1.5f + s * 1.12f, 1.4f, 1.5f + s * 1.36f, 1.4f, 0.045f, solid(wave));
     }
 }
 
