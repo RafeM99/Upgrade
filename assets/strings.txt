@@ -61,6 +61,7 @@ memory_lost_sub = Both of you faded. Hold on to each other.
 memory_lost_sub_solo = You faded. The memory slips a little further away.
 
 boss_hint = NOW! Jump on it!
+boss_hint_short = Jump on it when it lands!
 # One boss for each memory: the Forgetting takes the shape of something in it.
 boss_name_0 = THE 3 A.M. CLOCK
 boss_name_1 = THE EMPTY SHIRT

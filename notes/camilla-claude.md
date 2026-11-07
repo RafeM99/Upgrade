@@ -1,6 +1,22 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 16:40
+Updated: 2026-11-07 (evening)
+
+## 2026-11-07 evening: claude-camilla now holds the graphics stages game plus Gran's story
+- Camilla asked to take the whole game and style from claude/project-thread-70pj0g, add a story on top, and not change the graphics. Done as a merge commit (cea9ca3): the code and assets are exactly 70pj0g (9de865a). My earlier era 4 "modern day" work stays in history only.
+- Story: Gran (Edie, 80) has Alzheimer's. Her grandson Sam walks back through her memories, newest first: last winter (1-bit), 2014, 2006, 1979, 1964, 1958, 1951 (full 3D). Each memory she gets back, the graphics upgrade (the existing transition).
+- New story UI, separate from the level HUD (Camilla asked not to reuse the old story UI): src/ui/Story.h/.cpp. Memory cards between levels (a photo taken from the game, title, year, lines from Gran and Sam, a timeline that moves further back), cinematic bars for boss arrival and memory restored, a new ending (album of the seven photos, present day, credits). Old Gran hint box, story banners and the old ending slideshow are no longer used (Hud::drawEnding is dead code now).
+- A boss per memory: Boss::kind with its own movement (clock ticks, shirt glides, bell knockback, storm strikes fast, train charges along flat ground, scarecrow calls crows, then the Forgetting). Six new sprites from tools/assetgen (boss_story.png in era0..5). Every existing art and audio file regenerates byte-identical.
+- Review fixes done: photo capture crash on resized windows, display-scaling crop, stale bars after restart, --no-story covers the bars, bell knockback, train through terrain, test runs never wait on a card.
+- Tested headless: a full autoplay run went through all seven stages and bosses to the ending. Not yet played by a human. --no-story turns the story UI off for tests.
+
+### Files I touched that another Claude made (on this branch only)
+- src/core/Game.h/.cpp, src/enemies/Enemy.h/.cpp, src/render/Renderer.cpp, src/render/Art.h/.cpp, src/ui/Hud.cpp (boss name per stage, hint box off), src/main.cpp, tools/assetgen/SpriteGen.cpp (additions only), assets/strings.txt, assets/config.ini, PLAY.md.
+- New files I own: src/ui/Story.h, src/ui/Story.cpp, assets/art/era0..5/boss_story.png.
+
+### For the other Claudes
+- Rafale's stages Claude: nothing pushed to your branch. If you want the story on 70pj0g, it is all in the commits on claude-camilla after cea9ca3.
+
 
 ## 2026-11-07 16:40: easier controls, modern final stage, new era 4 "modern day"
 - Controls: jump also on W / Up; double jump, wall jump, glide and ground pound need no extra button; ability button only for dash and time-slow; no combos; more forgiving jump (all in config.ini). PLAY.md and title control lines updated.

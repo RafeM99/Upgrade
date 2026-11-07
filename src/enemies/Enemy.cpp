@@ -187,6 +187,14 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
             fromX = x; fromY = y;
             toX = tx;
             toY = (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
+            // The train charges along the ground only where the line is flat all the way from
+            // where it drops to the target; anywhere else it swoops like the others.
+            charge = false;
+            if (kind == 4 && gt >= 0) {
+                int a = (int)std::floor(std::min(x, tx)), b = (int)std::floor(std::max(x, tx));
+                charge = true;
+                for (int c = a; c <= b && charge; ++c) charge = level.groundTop(c) == gt;
+            }
             state = 6;
             stateTime = 0;
         }
@@ -200,7 +208,7 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         break;
     case 2: {   // swoop down
         float k = std::min(1.0f, stateTime / swoopLen());
-        if (kind == 4) {
+        if (kind == 4 && charge) {
             // the train drops onto the line where it is, then charges along the ground
             if (k < 0.3f) { float d = ease(k / 0.3f); x = fromX; y = fromY + (toY - fromY) * d; }
             else { x = fromX + (toX - fromX) * ease((k - 0.3f) / 0.7f); y = toY; }

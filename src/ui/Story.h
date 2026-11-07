@@ -40,6 +40,7 @@ public:
     // ---- cinematic bars during play
     void showBars(const std::string& label, const std::string& title, const std::string& line, float seconds);
     void updateBars(float dt) { barsT_ = barsT_ > dt ? barsT_ - dt : 0; }
+    void clearBars() { barsT_ = 0; }
     void drawBars(Game& g);
 
     // ---- the ending

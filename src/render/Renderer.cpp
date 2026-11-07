@@ -538,7 +538,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 1.3f, wc);
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 0.7f, wc);
             solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
-            if (b.kind == 4) {   // the last train: mark the whole stretch of line it will charge along
+            if (b.kind == 4 && b.charge) {   // the last train: mark the whole stretch of line it will charge along
                 float x0 = std::min(b.fromX, b.toX), x1 = std::max(b.fromX, b.toX);
                 solidQuad(x0, b.toY + b.h / 2 - 0.15f, x1 - x0, 0.12f, 0.3f, wc);
             }

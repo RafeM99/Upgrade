@@ -117,6 +117,7 @@ private:
     int frameNo_ = 0;
     PlayerInput inputs_[2];
     bool firstTick_ = true;
+    bool prologueSeen_ = false;
 
     void update(float dt);
     void updateTitle();

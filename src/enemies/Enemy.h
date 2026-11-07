@@ -59,6 +59,7 @@ struct Boss {
     bool defeated = false;
     int kind = 6;              // which memory's boss this is (the stage it appears in)
     bool landed = false;       // set for one update when a swoop ends on the ground
+    bool charge = false;       // the train: this swoop drops, then charges along flat ground
 
     void start(float camX, int era, int hpBase, int hpPerEra, int kind);
     void update(float dt, float camLeft, float camRight, const Level& level, const Player* players, int era, float timeScale);
