@@ -2,6 +2,7 @@
 // Screens: title -> story card -> playing (with era transitions and pause) -> story card -> ... -> ending.
 #pragma once
 #include "audio/Audio.h"
+#include "enemies/BossPowers.h"
 #include "enemies/Enemy.h"
 #include "level/Level.h"
 #include "player/Input.h"
@@ -37,6 +38,7 @@ struct PowerUp {
 struct Options {
     bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false, story = true;
     int startEra = 0, maxFrames = 0, shotEvery = 0;
+    int difficulty = -1;   // --difficulty; -1: use [boss] difficulty in config.ini
     unsigned seed = 0;
     std::string shot, shotPrefix;
     int width = 1280, height = 720;
@@ -100,6 +102,11 @@ public:
     Story story;
     float hitPause = 0;
 
+    // the bosses' powers over time (enemies/BossPowers.h, core/GamePowers.cpp)
+    int difficulty = DIFF_GENTLE;   // chosen on the title screen
+    BossPowerState powers;
+    const PowerTuning& powerTuning() const;
+
     void startRun();
     void showBanner(const std::string& title, const std::string& sub, float seconds);
     bool storyOn() const;
@@ -118,6 +125,15 @@ private:
     PlayerInput inputs_[2];
     bool firstTick_ = true;
     bool prologueSeen_ = false;
+    std::vector<Vector2> history_[2], pullPath_[2];   // where the players have been (for the pull back)
+    float historyClock_ = 0;
+    static constexpr float kPullTime = 0.7f;
+    void startBossPowers();
+    bool bossHeldByPower() const;
+    void recordHistory(float dt);
+    void clearHistory();
+    void applyBossPower();
+    void updateBossPowers(float dt);
 
     void update(float dt);
     void updateTitle();
