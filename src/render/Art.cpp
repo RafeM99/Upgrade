@@ -14,12 +14,8 @@ Texture2D loadTex(const std::string& rel, int era)
         t = LoadTextureFromImage(img);
         UnloadImage(img);
     }
-    if (art::smooth(era)) {
-        GenTextureMipmaps(&t);
-        SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
-    } else {
-        SetTextureFilter(t, TEXTURE_FILTER_POINT);
-    }
+    // every stage is pixel art, so every texture keeps hard pixels (no smoothing)
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
     SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
     return t;
 }

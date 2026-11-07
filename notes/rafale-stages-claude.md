@@ -3,6 +3,17 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (later): flat, crisp restyle after raf's feedback
+
+raf said the first pass looked glossy and did not follow the reference picture. Changed:
+- post.fs: no bloom, glow, vignette, scanlines, LCD grid or colour grading on any stage; only each
+  stage's colour limit (2 colours, 4 greys, 16 colours, 15-bit colour).
+- SpriteGen: hard-banded cel shading (no gradients, no specular, no rim light), ordered-dither
+  "static" instead of random noise, hard alpha and outlines on every stage, banded skies and hills.
+  All art regenerated, including the 2.5D set and the ending pictures.
+- 2.5D/3D textures use point filtering. 3D models: low-poly meshes and two-band flat lighting,
+  no fog or highlights. Tile lighting has no coloured glows. HUD bars have no gloss.
+
 ## 2026-11-07: seven graphics stages, a level set per stage, faster Memory Bar
 
 raf asked for a stage for each step of handheld graphics history (a reference picture of the

@@ -24,14 +24,9 @@ float g_lightAmount = 0;   // 0 in flat eras, 1 in 2.5D
 Color lit(Color base, float face, float x, float y)
 {
     if (g_lightAmount <= 0) return base;
+    // flat face shading only: the top is a touch brighter, the sides darker. No glows.
+    (void)x; (void)y;
     float r = 0.5f + 0.5f * face, gg = r, b = r;
-    for (const auto& l : g_lights) {
-        float d = std::hypot(l.x - x, l.y - y);
-        if (d >= l.radius) continue;
-        float k = (1 - d / l.radius);
-        k *= k;
-        r += l.r * k; gg += l.g * k; b += l.b * k;
-    }
     auto mixk = [&](float k) { return 1.0f + (k - 1.0f) * g_lightAmount; };
     return Color{(unsigned char)std::min(255.0f, base.r * mixk(r)), (unsigned char)std::min(255.0f, base.g * mixk(gg)),
                  (unsigned char)std::min(255.0f, base.b * mixk(b)), base.a};
@@ -117,9 +112,9 @@ void shadow(float cx, float floorY, float r, float alpha)
     const int N = 16;
     for (int i = 0; i < N; ++i) {
         float a0 = i * 6.2831853f / N, a1 = (i + 1) * 6.2831853f / N;
-        rlColor4ub(0, 0, 0, (unsigned char)(alpha * 120));
+        // a hard-edged flat shadow, like a sprite's drop shadow
+        rlColor4ub(0, 0, 0, (unsigned char)(alpha * 90));
         rlVertex3f(cx, Y3(floorY) + 0.02f, -0.3f);
-        rlColor4ub(0, 0, 0, 0);
         rlVertex3f(cx + std::cos(a1) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a1) * r * 0.6f);
         rlVertex3f(cx + std::cos(a0) * r, Y3(floorY) + 0.02f, -0.3f + std::sin(a0) * r * 0.6f);
     }

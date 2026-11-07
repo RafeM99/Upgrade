@@ -48,15 +48,15 @@ void Models3D::init()
     auto set1 = [&](const char* n, float v) { SetShaderValue(sh_, GetShaderLocation(sh_, n), &v, SHADER_UNIFORM_FLOAT); };
     set3("sunDir", Vector3Normalize({0.45f, -0.8f, -0.4f}));
     set3("sunCol", {1.0f, 0.93f, 0.8f});
-    set3("skyCol", {0.62f, 0.76f, 1.0f});
-    set3("groundCol", {0.45f, 0.42f, 0.32f});
+    set3("skyCol", {0.95f, 0.97f, 1.0f});
+    set3("groundCol", {0.7f, 0.68f, 0.6f});
     set3("fogCol", {0.93f, 0.9f, 0.86f});
     set1("fogStart", 30.0f);
     set1("fogEnd", 90.0f);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
-    sphere_ = LoadModelFromMesh(GenMeshSphere(1, 12, 18));
-    cyl_ = LoadModelFromMesh(GenMeshCylinder(1, 1, 14));
+    sphere_ = LoadModelFromMesh(GenMeshSphere(1, 7, 10));   // low-poly
+    cyl_ = LoadModelFromMesh(GenMeshCylinder(1, 1, 8));
     torus_ = LoadModelFromMesh(GenMeshTorus(0.12f, 2.0f, 28, 10));
     for (Model* m : {&cube_, &sphere_, &cyl_, &torus_}) m->materials[0].shader = sh_;
     ready_ = sh_.id > 0;

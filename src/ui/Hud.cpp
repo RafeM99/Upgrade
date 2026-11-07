@@ -61,10 +61,9 @@ void memoryBar(Game& g)
         DrawRectangleRounded(R(x - 6, y - 6, w + 12, h + 12), 0.5f, 8, hexc(0x1a1030));
         DrawRectangleRounded(R(x - 3, y - 3, w + 6, h + 6), 0.5f, 8, hexc(0x5a4a8a));
         DrawRectangleRounded(R(x, y, w, h), 0.4f, 8, hexc(0x241a40));
-        if (k > 0) {
-            DrawRectangleGradientH((int)(OX + x * S), (int)(OY + y * S), (int)(w * k * S), (int)(h * S), hexc(0x3aa0e8), hexc(0x7ef0c0));
-            DrawRectangleRec(R(x, y + 2, w * k, 6), fade(WHITE, 0.45f));
-            DrawRectangleRec(R(x, y + h - 5, w * k, 4), fade(hexc(0x1a1030), 0.35f));
+        if (k > 0) {   // flat colour, one lighter band on top: no gloss
+            DrawRectangleRec(R(x, y, w * k, h), hexc(0x3aa0e8));
+            DrawRectangleRec(R(x, y, w * k, 6), hexc(0x7ec8f0));
         }
     } else if (era == 0) {
         DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xebebe1));
@@ -81,20 +80,12 @@ void memoryBar(Game& g)
     } else if (era == 2) {
         DrawRectangleRounded(R(x - 5, y - 5, w + 10, h + 10), 0.4f, 6, hexc(0x140f1e));
         DrawRectangleRounded(R(x, y, w, h), 0.3f, 6, hexc(0x2a2a4a));
-        if (k > 0) {
-            DrawRectangleGradientH((int)(OX + x * S), (int)(OY + y * S), (int)(w * k * S), (int)(h * S), hexc(0xe8506a), hexc(0xf7d73a));
-            DrawRectangleRec(R(x, y + 3, w * k, 5), fade(WHITE, 0.35f));
-        }
+        if (k > 0) DrawRectangleRec(R(x, y, w * k, h), hexc(0xe8506a));
     } else {
         DrawRectangleRounded(R(x - 8, y - 8, w + 16, h + 16), 1.0f, 12, fade(hexc(0x100818), 0.65f));
         DrawRectangleRounded(R(x, y, w, h), 1.0f, 12, fade(hexc(0x3a2a4a), 0.9f));
-        if (k > 0.02f) {
-            DrawRectangleRounded(R(x, y, w * k, h), 1.0f, 12, hexc(0xffb050));
-            DrawRectangleRounded(R(x + 4, y + 3, std::max(0.0f, w * k - 8), h * 0.38f), 1.0f, 12, fade(WHITE, 0.45f));
-            float shine = std::fmod(g.time * 0.4f, 1.0f) * w * k;
-            DrawRectangleRec(R(x + shine, y + 2, 10, h - 4), fade(WHITE, 0.25f));
-        }
-        DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 12, 2 * S, fade(hexc(0xfff0d0), 0.6f + 0.4f * std::sin(g.time * 2)));
+        if (k > 0.02f) DrawRectangleRounded(R(x, y, w * k, h), 1.0f, 12, hexc(0xffb050));
+        DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 12, 2 * S, hexc(0xfff0d0));
     }
     // tick marks at 25 / 50 / 75
     Color tick = stage == 1 ? hexc(art::SHADES4[3]) : (era == 0 ? hexc(0xebebe1) : hexc(0xfaf3e6, 200));

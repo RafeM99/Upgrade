@@ -220,60 +220,42 @@ Fill solid(Col c) { return [c](const Frag&) { return c; }; }
 // Era-aware shading: flat in 1-bit and 8-bit, banded in 16-bit, lit in 2.5D.
 Fill shade(Col c, float strength = 1.0f)
 {
+    // Hand-pixelled cel shading: flat colours in hard bands, never a gradient or a gloss.
+    //   1-bit, 4-shade, 8-bit: one flat colour (8-bit keeps a single highlight cluster).
+    //   16-bit: base + one shadow tone.  32-bit, 2.5D and 3D textures: shadow, base, highlight.
     return [c, strength](const Frag& f) {
-        if (g_era == 4) {
-            // late 2D: a lit ball, cut into four hand-picked tones. Shadows lean cool and
-            // purple, highlights warm, and a thin cool rim light catches the back edge.
-            float nz = std::sqrt(std::max(0.0f, 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f));
-            float d = std::max(0.0f, f.nx * -0.45f + f.ny * -0.65f + nz * 0.62f);
-            float lv = 0.35f + 0.75f * d;
-            lv = 1.0f + (lv - 1.0f) * strength;
-            Col o;
-            if (lv < 0.62f) o = mixc(mul(c, 0.58f), hex(0x3a2a6a), 0.22f);
-            else if (lv < 0.84f) o = mixc(mul(c, 0.8f), hex(0x5a4a8a), 0.08f);
-            else if (lv < 1.02f) o = c;
-            else o = mixc(mul(c, 1.12f), hex(0xfff2c8), 0.18f);
-            float r2 = f.nx * f.nx + f.ny * f.ny;
-            if (strength > 0.5f && r2 > 0.62f && r2 < 0.95f && f.nx > 0.35f && f.ny > -0.2f)
-                o = mixc(o, hex(0xbfe8ff), 0.35f);
-            o.a = c.a;
-            return o;
-        }
         if (g_style <= 1) {
             if (g_style == 1 && f.nx * f.nx + f.ny * f.ny < 0.2f && f.nx < -0.1f && f.ny < -0.1f && strength > 0.5f)
                 return mixc(c, hex(0xffffff), 0.25f);
             return c;
         }
-        if (g_style == 2) {
-            float k = 1.0f + strength * 0.3f * (-0.45f * f.nx - 0.75f * f.ny);
-            if (f.nx * f.nx + f.ny * f.ny > 0.72f) k *= 1.0f - 0.18f * strength;
-            Col o = mul(c, k);
-            o.a = c.a;
-            return o;
-        }
-        float nz2 = 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f;
-        float nz = std::sqrt(std::max(0.0f, nz2));
-        float lx = -0.45f, ly = -0.65f, lz = 0.62f;
-        float d = std::max(0.0f, f.nx * lx + f.ny * ly + nz * lz);
-        float k = 0.5f + 0.65f * d;
-        k = 1.0f + (k - 1.0f) * strength;
-        float spec = std::pow(std::max(0.0f, d), 24.0f) * 0.35f * strength;
-        Col o = mul(c, k);
-        o = mixc(o, hex(0xffffff), clamp01(spec));
+        float nz = std::sqrt(std::max(0.0f, 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f));
+        float d = std::max(0.0f, f.nx * -0.45f + f.ny * -0.65f + nz * 0.62f);
+        Col o = c;
+        if (d < 0.32f && strength > 0.2f) o = mixc(mul(c, 0.72f), hex(0x2a2050), 0.12f);   // shadow, a little cool
+        else if (g_era >= 4 && d > 0.86f && strength > 0.5f) o = mixc(c, hex(0xfff6dc), 0.22f);   // highlight
         o.a = c.a;
         return o;
     };
 }
 
-// Pixel-sized TV static between two colours, seeded by frame so it flickers.
+float bayer4f(int x, int y)
+{
+    static const int m[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+    return m[(y & 3) * 4 + (x & 3)] / 16.0f;
+}
+
+// The Forgetting's "static", as an ordered dither pattern between two colours: a clean,
+// regular pixel texture instead of random noise. The seed shifts the pattern per frame.
 Fill staticFill(Col a, Col b, int seed, float density = 0.5f)
 {
     return [a, b, seed, density](const Frag& f) {
-        float r = rnd(f.ix, f.iy, seed);
-        Col c = r < density ? b : a;
+        int ox = seed % 4, oy = (seed / 4) % 4;
+        Col c = bayer4f(f.ix + ox, f.iy + oy) < density * 0.6f ? b : a;
         if (g_style >= 2) {
-            float k = 1.0f + 0.25f * (-0.4f * f.nx - 0.7f * f.ny);
-            c = mul(c, k);
+            float nz = std::sqrt(std::max(0.0f, 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f));
+            float d = std::max(0.0f, f.nx * -0.45f + f.ny * -0.65f + nz * 0.62f);
+            if (d < 0.32f) c = mul(c, 0.75f);
         }
         c.a = a.a;
         return c;
@@ -343,13 +325,9 @@ Col quantize(Col c, int ix, int iy)
         auto q = [](float v) { return std::round(clamp01(v) * 15.0f) / 15.0f; };
         return {q(c.r), q(c.g), q(c.b), c.a};
     }
-    if (g_era == 4) {
-        // 32 levels per channel and a little more saturation: a bright backlit screen
-        float l = lum(c);
-        auto q = [&](float v) { return std::round(clamp01(l + (v - l) * 1.12f) * 31.0f) / 31.0f; };
-        return {q(c.r), q(c.g), q(c.b), c.a};
-    }
-    return c;
+    // 32-bit and later: 32 levels per channel
+    auto q = [](float v) { return std::round(clamp01(v) * 31.0f) / 31.0f; };
+    return {q(c.r), q(c.g), q(c.b), c.a};
 }
 
 // Downsample a canvas into the sheet image at (ox, oy) in pixels.
@@ -369,11 +347,11 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
             float n = (float)(cv.ss * cv.ss);
             Col c{};
             if (wa > 0) c = {acc.r / wa, acc.g / wa, acc.b / wa, wa / n};
-            if (lowRes(g_era)) c.a = c.a >= 0.5f ? 1.0f : 0.0f;
+            c.a = c.a >= 0.5f ? 1.0f : 0.0f;   // every stage is pixel art: hard edges
             if (c.a > 0) c = quantize(c, x, y);
             out[(size_t)y * tw + x] = c;
         }
-    if (outline && lowRes(g_era)) {
+    if (outline) {
         std::vector<Col> res = out;
         Col oc = g_era == 0 ? ONEBIT_DARK : (g_era == 1 ? hex(SHADES4[0]) : hex(0x140f1e));
         for (int y = 0; y < th; ++y)
@@ -385,7 +363,7 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
                     int nx = x + dx[k], ny = y + dy[k];
                     if (nx >= 0 && ny >= 0 && nx < tw && ny < th && out[(size_t)ny * tw + nx].a > 0) near = true;
                 }
-                if (near && g_era == 4) {
+                if (near && g_era >= 4) {
                     // coloured outline: a deep, slightly purple version of the colour inside
                     Col in{};
                     for (int k = 0; k < 4 && in.a <= 0; ++k) {
@@ -408,7 +386,7 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
         }
 }
 
-const int SUPER[ERA_COUNT] = {1, 2, 2, 2, 4, 4, 4};
+const int SUPER[ERA_COUNT] = {1, 2, 2, 2, 2, 2, 2};
 
 // Builds a one-row sheet of `frames` frames, each fw x fh tiles.
 Image makeSheet(int frames, float fw, float fh, bool outline, const std::function<void(Canvas&, int)>& draw)
@@ -693,7 +671,7 @@ void drawTile(Canvas& c, int t)
                 bool mortar = ly == 7 || (lx == 3 && ly < 7 && ly > 1);
                 return mortar ? ONEBIT_LIGHT : ONEBIT_DARK;
             }
-            if (g_style >= 2) d = mixc(dirt, dirtDark, f.y * 0.6f);
+            if (g_style >= 2 && f.y > 0.62f) d = mixc(dirt, dirtDark, 0.45f);   // one darker band low in the tile
             if (rnd(f.ix, f.iy, 5) < 0.12f) d = dirtDark;
             return d;
         });
@@ -707,7 +685,7 @@ void drawTile(Canvas& c, int t)
             c.rect(0, 0, 1, 0.28f, [&](const Frag& f) {
                 if (g_style == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // one bright top edge
                 Col g = f.y < 0.12f ? grass : grassDark;
-                if (g_style >= 2) g = mixc(grass, grassDark, f.y / 0.28f);
+                if (g_style >= 2) g = f.y < 0.1f ? grass : (f.y < 0.19f ? mixc(grass, grassDark, 0.5f) : grassDark);
                 return g;
             });
             // grass tufts hanging down
@@ -870,6 +848,7 @@ void bgLayer(Px& p, int era, int layer)
         for (int y = 0; y < H; ++y)
             for (int x = 0; x < W; ++x) {
                 float t = (float)y / H;
+                if (g_era >= 1) t = std::floor(t * 7.0f) / 7.0f;   // the sky in flat bands, not a gradient
                 Col c;
                 if (era == 0) {
                     c = ONEBIT_DARK;
@@ -884,13 +863,12 @@ void bgLayer(Px& p, int era, int layer)
                     float dx = (x % (W / 2)) - W * 0.36f, dy = y - H * 0.22f;
                     float d = std::sqrt(dx * dx + dy * dy) / H;
                     if (d < 0.06f) c = hex(0xfffbea);
-                    else c = mixc(c, hex(0xfff4d0), clamp01(0.3f - d) * 1.4f);
                 } else {
                     c = mixc(mixc(hex(0x2a2a6a), hex(0xe86a6a), clamp01(t * 1.6f)), hex(0xffc070), clamp01(t * 2.2f - 1.1f));
                     float dx = (x % (W / 2)) - W * 0.3f, dy = y - H * 0.55f;   // sun
                     float d = std::sqrt(dx * dx + dy * dy) / H;
-                    if (d < 0.09f) c = mixc(c, hex(0xfff0c0), 0.95f);
-                    else c = mixc(c, hex(0xffd090), clamp01(0.35f - d) * 1.2f);
+                    if (d < 0.09f) c = hex(0xfff0c0);
+                    else if (d < 0.13f) c = mixc(c, hex(0xffd090), 0.4f);
                 }
                 p.set(x, y, era <= 2 ? q(c, x, y) : c);
             }
@@ -904,8 +882,8 @@ void bgLayer(Px& p, int era, int layer)
                     for (int y = (int)(oy - r); y <= oy + r; ++y)
                         for (int x = (int)(ox - r); x <= ox + r; ++x)
                             if ((x - ox) * (x - ox) + (y - oy) * (y - oy) * 2.2f < r * r)
-                                p.set(x, y, q(era == 1 ? hex(0xfaf3e6) : (g_era == 4 ? mixc(hex(0xffffff), hex(0xc8d8f0), (y - oy + r) / (2 * r))
-                                                                                       : mixc(hex(0xfff0f0), hex(0xd8a0c0), (y - oy + r) / (2 * r))), x, y));
+                                p.set(x, y, q(era == 1 ? hex(0xfaf3e6) : ((y - oy) > r * 0.35f ? (g_era == 4 ? hex(0xc8d8f0) : hex(0xd8a0c0))
+                                                                                       : (g_era == 4 ? hex(0xffffff) : hex(0xfff0f0))), x, y));
                 }
             }
         return;
@@ -919,6 +897,7 @@ void bgLayer(Px& p, int era, int layer)
         if (era == 2 && g_era != 4 && layer == 1) top -= std::max(0.0f, std::fabs(std::sin(x / (float)W * 6.2831853f * 4)) - 0.6f) * 40 * s;  // peaks
         for (int y = (int)top; y < H; ++y) {
             float d = (y - top) / (H - top + 1);
+            if (g_era >= 1) d = std::floor(d * 3.0f) / 3.0f;   // hills in flat bands
             Col c;
             if (era == 0) {
                 // 1-bit: outline ridges with a little dither under them
@@ -959,7 +938,7 @@ void bgLayer(Px& p, int era, int layer)
                 float nx = (x - cx) / rx, ny = (y - cy) / ry;
                 if (nx * nx + ny * ny > 1) continue;
                 Col o = c;
-                if (shadeIt) o = mul(c, 1.0f + 0.25f * (-0.4f * nx - 0.7f * ny));
+                if (shadeIt && (-0.4f * nx - 0.7f * ny) < -0.25f) o = mul(c, 0.78f);   // one flat shadow band
                 p.set(x, y, era <= 2 ? q(o, x, y) : o);
             }
     };
@@ -1089,11 +1068,7 @@ void bgLayer(Px& p, int era, int layer)
                 float lx = x + W / n * 0.5f;
                 rectAt(lx - 1.5f, baseY - 50, 3, 52, hex(0x2a2a3a));
                 blobAt(lx, baseY - 52, 5, 5, hex(0xffe0a0), false);
-                for (int g = 1; g < 18; ++g)
-                    for (int a = 0; a < 30; ++a) {
-                        float ang = a / 30.0f * 6.2831853f;
-                        p.set((int)(lx + std::cos(ang) * g), (int)(baseY - 52 + std::sin(ang) * g), withA(hex(0xffd080), 0.02f));
-                    }
+
             }
         }
     }
@@ -1121,6 +1096,7 @@ Image wallTexture(int stage)
             } else {
                 int per = 8;
                 float n = vnoise(y / (float)H * per, fx * 3, per, 3) * 0.6f + vnoise(y / (float)H * per * 2, fx * 6, per * 2, 4) * 0.4f;
+                n = std::floor(n * 4.0f) / 3.0f;   // four flat tones of fog
                 c = mixc(hex(0x1a1030), era == 2 ? hex(0x8a7fb4) : hex(0xb0a8d0), n);
                 if (era == 2) c = quantize(c, x, y);
             }

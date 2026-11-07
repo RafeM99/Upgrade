@@ -1,6 +1,5 @@
 #version 330
-// lit3d.fs: soft key light from the morning sun, sky/ground fill, warm and cool glows from
-// the two players, a rim light so shapes read against the background, and a little haze.
+// lit3d.fs: the modelled 3D stage, lit flat and bright in two hard bands.
 in vec3 fragPosition;
 in vec3 fragNormal;
 uniform vec4 colDiffuse;
@@ -20,26 +19,14 @@ out vec4 finalColor;
 
 void main()
 {
+    // Flat, bright lighting like early handheld 3D: a lit side and a shadow side in two
+    // hard bands, plus a plain sky/ground fill. No highlights, rim light or haze.
     vec3 n = normalize(fragNormal);
-    vec3 v = normalize(viewPos - fragPosition);
     vec3 base = colDiffuse.rgb;
-    float diff = max(dot(n, -sunDir), 0.0);
-    diff = smoothstep(0.0, 1.0, diff);                     // soft, slightly toon falloff
-    vec3 amb = mix(groundCol, skyCol, n.y * 0.5 + 0.5);
-    vec3 c = base * (amb * 0.45 + sunCol * diff * 0.7);
-    for (int i = 0; i < 4; ++i) {
-        if (lightRad[i] <= 0.0) continue;
-        vec3 d = lightPos[i] - fragPosition;
-        float dist = length(d);
-        float k = clamp(1.0 - dist / lightRad[i], 0.0, 1.0);
-        c += base * lightCol[i] * k * k * max(dot(n, d / max(dist, 0.001)), 0.0) * 1.4;
-    }
-    vec3 h = normalize(-sunDir + v);
-    c += sunCol * pow(max(dot(n, h), 0.0), 32.0) * 0.18;  // a soft highlight
-    float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-    c += skyCol * rim * 0.18;
-    c = mix(c, base * 1.25, clamp(emissive, 0.0, 1.0));
-    float f = clamp((length(viewPos - fragPosition) - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
-    c = mix(c, fogCol, f * 0.45);
+    float diff = dot(n, -sunDir);
+    float band = diff > 0.25 ? 1.0 : (diff > -0.2 ? 0.72 : 0.58);
+    vec3 amb = n.y > -0.3 ? skyCol : groundCol;
+    vec3 c = base * (0.35 * amb + 0.75 * band * sunCol);
+    c = mix(c, base, clamp(emissive, 0.0, 1.0));
     finalColor = vec4(c, colDiffuse.a);
 }
