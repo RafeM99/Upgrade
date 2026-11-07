@@ -1,5 +1,12 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-07 late night: HUD clean-up and tile seams
+- No more big box in the middle of the screen: stage name, memory slips and player 2 joins are a slim notice under the top HUD.
+- Power-ups: an icon in each player's bottom corner (Gran left, Sam right) with a time bar, and a short pop-up of what it does when picked up.
+- Player panels smaller on every stage (small names, content-width panels, power-up words moved to the icons).
+- Tile seams on 4-shade, 8-bit and 16-bit fixed in 7a7607a: the tile grid is drawn half a native pixel left on odd-width buffers (Renderer::drawEra). 0492a55 was a first attempt (camera shift) and is replaced. A before/after diff of all 7 stages shows only terrain tiles changed.
+- All on claude-camilla only, not on main.
+
 ## 2026-11-07 night: boss powers over time, difficulty selector, 3D camera
 - Each boss has a power over time (src/enemies/BossPowers.h, src/core/GamePowers.cpp): Clock TIME STOP, Shirt REWIND, Bell HURRY, Storm HEAVY RAIN, Train ECHOES, Scarecrow HARVEST RUSH, Forgetting PULL BACK. Announced first, named under the boss bar.
 - Difficulty Gentle / Medium / Hard on the title screen (Up/Down or 1/2/3), --difficulty, [boss] difficulty. Hard adds one hit to every boss.

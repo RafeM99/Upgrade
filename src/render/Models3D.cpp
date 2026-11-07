@@ -1,11 +1,13 @@
 #include "render/Models3D.h"
 #include "core/Game.h"
 #include "core/Paths.h"
+#include "core/Config.h"
 #include "raymath.h"
 #include "rlgl.h"
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace {
 
@@ -68,6 +70,62 @@ void Models3D::init()
     cone_ = LoadModelFromMesh(GenMeshCone(1, 1, 8));
     for (Model* m : {&cube_, &sphere_, &cyl_, &torus_, &cone_}) m->materials[0].shader = sh_;
     ready_ = sh_.id > 0;
+
+    static const char* const granNames[G_COUNT] = {"gran_body", "gran_head", "gran_upperarm", "gran_forearm", "gran_thigh", "gran_shin"};
+    static const char* const forgetNames[F_COUNT] = {"forget_body", "forget_seg", "forget_tip"};
+    loadParts(gran_, granNames, G_COUNT, granReady_);
+    loadParts(forget_, forgetNames, F_COUNT, forgetReady_);
+}
+
+void Models3D::loadParts(Model* out, const char* const* names, int n, bool& ready)
+{
+    ready = false;
+    for (int i = 0; i < n; ++i) {
+        std::string path = assetPath(std::string("models/") + names[i] + ".glb");
+        if (!FileExists(path.c_str())) { unloadParts(out, i, ready); return; }
+        out[i] = LoadModel(path.c_str());
+        if (out[i].meshCount == 0) { UnloadModel(out[i]); unloadParts(out, i, ready); return; }
+        for (int k = 0; k < out[i].materialCount; ++k) out[i].materials[k].shader = sh_;
+    }
+    ready = true;
+}
+
+void Models3D::unloadParts(Model* parts, int n, bool& ready)
+{
+    for (int i = 0; i < n; ++i) {
+        for (int k = 0; k < parts[i].materialCount; ++k)
+            parts[i].materials[k].shader = Shader{rlGetShaderIdDefault(), rlGetShaderLocsDefault()};
+        UnloadModel(parts[i]);
+        parts[i] = Model{};
+    }
+    ready = false;
+}
+
+// A Blender part: its own material colours, times the tint (for fading and hit flashes), then
+// the dark inverted hull for the toon outline, pushed out along the smooth normals.
+void Models3D::modelPart(Model& m, Matrix t, Color tint, bool outline)
+{
+    float zero = 0.0f, one = 1.0f;
+    SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
+    m.transform = t;
+    DrawModel(m, {0, 0, 0}, 1.0f, tint);
+    if (!outline || tint.a < 250) return;
+    int hull = 0;
+    float w = kOutline;
+    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
+    rlEnableBackfaceCulling();
+    rlSetCullFace(RL_CULL_FACE_FRONT);
+    // every material drawn in the ink colour
+    Color saved[16];
+    int nm = std::min(m.materialCount, 16);
+    for (int k = 0; k < nm; ++k) { saved[k] = m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color; m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = kInk; }
+    DrawModel(m, {0, 0, 0}, 1.0f, WHITE);
+    for (int k = 0; k < nm; ++k) m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = saved[k];
+    rlSetCullFace(RL_CULL_FACE_BACK);
+    rlDisableBackfaceCulling();
+    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::shutdown()
@@ -76,6 +134,8 @@ void Models3D::shutdown()
         m->materials[0].shader = Shader{rlGetShaderIdDefault(), rlGetShaderLocsDefault()};
         UnloadModel(*m);
     }
+    unloadParts(gran_, granReady_ ? G_COUNT : 0, granReady_);
+    unloadParts(forget_, forgetReady_ ? F_COUNT : 0, forgetReady_);
     UnloadShader(sh_);
 }
 
@@ -378,6 +438,7 @@ void Models3D::drawGround(Game& g)
 // ------------------------------------------------------------------ Gran and Sam
 void Models3D::drawPlayer(Game& g, int p)
 {
+    if (p == 0 && granReady_) { drawGranModel(g); return; }
     const Player& pl = g.players[p];
     const bool gran = p == 0;
     float a = 1.0f;
@@ -527,6 +588,9 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
 // toon outline as the other models; its SANDS RUN BACK power spins it right over.
 void Models3D::drawBoss(Game& g)
 {
+    // akshat: the final boss is the Hourglass (time-themed). Rafale's Blender tentacle Forgetting is
+    // kept and can be switched back on with [boss] forgetting_model = 1 in config.ini.
+    if (forgetReady_ && config().b("boss.forgetting_model", false)) { drawForgetting(g); return; }
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
     bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
@@ -615,4 +679,113 @@ void Models3D::drawFragment(float x, float y, float t, float alpha)
     Matrix m = then(then(then(S(0.2f, 0.2f, 0.2f), MatrixRotateZ(PI / 4)), then(S(1, 1.6f, 1), MatrixRotateY(t * 3))),
                     T(x, Y3(y) + std::sin(t * 4) * 0.08f, 0.3f));
     part(cube_, m, withA(hexc(0xf7d73a), alpha), 0.75f);
+}
+
+// ------------------------------------------------------------------ Gran, modelled in Blender
+// A run cycle like the reference: leaning into it, elbows bent, knees lifting.
+void Models3D::drawGranModel(Game& g)
+{
+    const Player& pl = g.players[0];
+    float a = 1.0f;
+    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
+    if (pl.faded) a = 0.45f;
+    Color tint = withA(pl.faded ? hexc(0xb8b8c8) : WHITE, a);
+
+    float yaw = pl.facing > 0 ? -0.52f : PI + 0.52f;
+    float ph = g.time * 12.0f;
+    bool running = pl.onGround && std::fabs(pl.vx) > 0.6f;
+    float run = running ? std::min(1.0f, std::fabs(pl.vx) / 4.0f + 0.4f) : 0.0f;
+    float s = std::sin(ph), c = std::cos(ph);
+
+    // joint angles (radians); positive swings a limb forward (+X)
+    float thighF = 0.75f * s * run, thighB = -0.75f * s * run;
+    float kneeF = -(0.25f + std::max(0.0f, -c) * 1.2f) * run, kneeB = -(0.25f + std::max(0.0f, c) * 1.2f) * run;
+    float armF = -0.6f * s * run - 0.05f, armB = 0.6f * s * run - 0.05f;
+    float elbow = 0.25f + 1.15f * run;
+    float lean = -0.22f * run, bob = std::fabs(s) * 0.05f * run, headNod = 0.12f * run;
+    if (!pl.onGround && !pl.gliding) {   // jumping: knees up, arms thrown up
+        thighF = 1.0f; kneeF = -1.2f; thighB = -0.2f; kneeB = -0.6f;
+        armF = 2.5f; armB = 2.1f; elbow = 0.4f; lean = -0.1f; bob = 0;
+    }
+    if (pl.gliding || pl.frame == art::PF_SPECIAL) { armF = 3.0f; elbow = 0.1f; armB = 0.3f; }
+    if (pl.attackTime > 0) { armF = 1.57f; elbow = 0.0f; }
+    float crouch = 0.0f;
+    if (pl.pounding) { thighF = thighB = 1.2f; kneeF = kneeB = -1.6f; armF = armB = -0.4f; crouch = 0.18f; lean = 0.1f; }
+    if (pl.dashTime > 0) lean = -0.45f;
+
+    Matrix root = then(MatrixRotateY(yaw), T(pl.cx(), Y3(pl.bottom()) + bob - crouch, 0.2f));
+    const float hipY = 0.55f;
+    Matrix hips = then(then(MatrixRotateZ(lean), T(0, hipY, 0)), root);
+    auto R = MatrixRotateZ;
+
+    // legs first (behind), the far one darker by the light anyway
+    for (int side = 0; side < 2; ++side) {
+        float z = side ? 0.1f : -0.1f;
+        float th = side ? thighF : thighB, kn = side ? kneeF : kneeB;
+        // legs hang from the hips but do not lean with the body
+        Matrix thigh = then(R(th - lean), then(T(0, 0, z), hips));
+        modelPart(gran_[G_THIGH], thigh, tint);
+        Matrix shin = then(R(kn), then(T(0, -0.26f, 0), thigh));
+        modelPart(gran_[G_SHIN], shin, tint);
+    }
+    // far arm, body, head, near arm
+    auto arm = [&](float z, float sw) {
+        Matrix up = then(R(sw), then(T(0, 0.4f, z), hips));
+        modelPart(gran_[G_UPPERARM], up, tint);
+        Matrix fore = then(R(elbow), then(T(0, -0.21f, 0), up));
+        modelPart(gran_[G_FOREARM], fore, tint);
+    };
+    arm(-0.25f, armB);
+    modelPart(gran_[G_BODY], hips, tint);
+    modelPart(gran_[G_HEAD], then(R(headNod * 0.5f + (pl.onGround ? 0 : 0.1f)), then(T(0, 0.48f, 0), hips)), tint);
+    arm(0.25f, armF);
+
+    // her umbrella when she glides
+    if (pl.gliding || pl.frame == art::PF_SPECIAL) {
+        auto at = [&](Matrix m) { return then(m, root); };
+        part(cyl_, at(then(S(0.02f, 0.7f, 0.02f), T(0.1f, 1.25f, 0.25f))), withA(hexc(0x3a2a2a), a));
+        part(sphere_, at(then(S(0.62f, 0.22f, 0.62f), T(0.1f, 1.95f, 0.25f))), withA(hexc(0xb03a6a), a));
+    }
+}
+
+// ------------------------------------------------------------------ the Forgetting, modelled in Blender
+// A big tentacle alien that floats and bobs, eye on the players, its eight tentacles curling
+// in slow waves; they splay out when it slams down.
+void Models3D::drawForgetting(Game& g)
+{
+    const Boss& b = g.boss;
+    float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
+    bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
+    Color tint = withA(flash ? Color{255, 210, 220, 255} : WHITE, a);
+
+    float t = b.t;
+    float bob = std::sin(t * 2.2f) * 0.15f;
+    float slam = b.state == 3 ? 1.0f : 0.0f;
+    const float k = 1.8f;    // size in the level
+    // turned toward the camera and a little toward the nearest player
+    float px = g.players[0].cx();
+    if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) px = g.players[1].cx();
+    float yaw = px < b.x ? -PI / 2 - 0.7f : -PI / 2 + 0.7f;
+    float tilt = std::sin(t * 1.3f) * 0.06f;
+    Matrix root = then(then(then(S(k, k, k), MatrixRotateX(tilt)), MatrixRotateY(yaw)), T(b.x, Y3(b.y) + 0.4f + bob, 0.4f));
+
+    modelPart(forget_[F_BODY], root, tint);
+    // tentacles hang from a ring under the dome; each is 5 segments and a curled tip
+    const int N = 8, SEGS = 5;
+    for (int i = 0; i < N; ++i) {
+        float ang = (i + 0.5f) * 2 * PI / N;
+        // ring position (game space, before root): x forward, z sideways
+        float rx = std::cos(ang) * 0.55f, rz = std::sin(ang) * 0.52f;
+        // turn the chain so its "forward" bend axis points out from the centre
+        Matrix m = then(then(MatrixRotateZ(0.35f + 0.6f * slam), MatrixRotateY(-ang)), then(T(rx, -0.5f, rz), root));
+        float sc = 1.0f;
+        for (int j = 0; j < SEGS; ++j) {
+            modelPart(forget_[F_SEG], then(S(sc, sc, sc), m), tint);
+            float wave = std::sin(t * 2.6f + i * 0.9f - j * 0.8f) * (0.32f - 0.2f * slam) + 0.06f * j * (1 - slam);
+            float sway = std::cos(t * 1.9f + i * 1.7f - j * 0.6f) * 0.15f;
+            m = then(then(MatrixRotateZ(wave), MatrixRotateX(sway)), then(T(0, -0.38f * sc, 0), m));
+            sc *= 0.86f;
+        }
+        modelPart(forget_[F_TIP], then(S(sc, sc, sc), m), tint);
+    }
 }

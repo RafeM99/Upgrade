@@ -113,6 +113,11 @@ public:
     Cutscene cutscene;   // akshat: Pokemon-style boss scenes (assets/cutscenes.txt)
     float hitPause = 0;
 
+    // power-ups: the last one each player picked up, for the corner pop-up (seconds left, type)
+    float puPopT[2] = {0, 0};
+    int puPopType[2] = {0, 0};
+    int hourglassBy = 0;          // who picked up the hourglass (its icon sits in their corner)
+
     // the bosses' powers over time (enemies/BossPowers.h, core/GamePowers.cpp)
     int difficulty = DIFF_GENTLE;   // chosen on the title screen
     BossPowerState powers;
@@ -136,6 +141,7 @@ private:
     PlayerInput inputs_[2];
     bool firstTick_ = true;
     bool prologueSeen_ = false;
+    int lastPadCount_ = -1;   // -1: not counted yet (no notice for pads already in at start)
     struct Trace { float x, y; bool grounded; };
     std::vector<Trace> history_[2];      // where the players have been (for the pull back)
     std::vector<Vector2> pullPath_[2];

@@ -41,6 +41,14 @@ void Game::init(const Options& o)
     const bool hidden = opt.maxFrames > 0 || opt.autoplay;
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | (hidden ? FLAG_WINDOW_HIDDEN : 0));
     InitWindow(opt.width, opt.height, "Upgrade");
+    // akshat: a normal run always comes to the front, even when started from a terminal or a
+    // background process (macOS otherwise leaves the window behind everything else).
+    if (!hidden) {
+        int mon = GetCurrentMonitor();
+        SetWindowPosition((GetMonitorWidth(mon) - opt.width) / 2, (GetMonitorHeight(mon) - opt.height) / 2);
+        SetWindowState(FLAG_WINDOW_TOPMOST);
+        SetWindowFocused();
+    }
     SetExitKey(KEY_NULL);   // Esc opens the pause menu instead of quitting
     SetTargetFPS(60);
 
@@ -128,6 +136,7 @@ void Game::startRun()
     bossBeatenThisEra = false;
     powers.reset();
     clearHistory();
+    puPopT[0] = puPopT[1] = 0;
     transActive = false;
     lostTimer = 0;
     slowTime = wallSlowTime = 0;
@@ -178,8 +187,24 @@ void Game::run()
 {
     while (!WindowShouldClose()) {
         float frameDt = std::min(GetFrameTime(), 0.1f);
+        // akshat: stay on top only long enough to come to the front, then behave like a normal window
+        if (frameNo_ == 60 && IsWindowState(FLAG_WINDOW_TOPMOST)) { ClearWindowState(FLAG_WINDOW_TOPMOST); SetWindowFocused(); }
         if (opt.maxFrames > 0 || opt.autoplay) frameDt = DT;   // tests run at a fixed rate
         // input is sampled once per frame; presses go to the first tick only
+        input.beginFrame();
+        // a gamepad was plugged in or taken out: say who it plays as (in play only)
+        int pads = input.padCount();
+        if (lastPadCount_ >= 0 && pads != lastPadCount_ && screen == Screen::Playing && !opt.autoplay) {
+            if (pads > lastPadCount_) {
+                std::string who;
+                for (int p = 0; p < 2; ++p)
+                    if (input.padFor(p) >= 0) who += std::string(who.empty() ? "" : "   ") + T(p == 0 ? "p1_name" : "p2_name") + ": " + T("pad_word") + " " + std::to_string(input.padFor(p) + 1);
+                showBanner(T("pad_connected"), who, 2.5f);
+            } else {
+                showBanner(T("pad_disconnected"), T("pad_disconnected_sub"), 2.5f);
+            }
+        }
+        lastPadCount_ = pads;
         if (screen == Screen::Playing) {
             for (int p = 0; p < 2; ++p) inputs_[p] = opt.autoplay ? botInput(p) : input.read(p);
         }
@@ -299,14 +324,9 @@ void Game::updateTitle()
     }
     // difficulty: Up / Down (arrows or d-pad) or 1 / 2 / 3. These keys never start the game.
     int d = difficulty;
-    bool padUp = false, padDown = false;
-    for (int p = 0; p < 2; ++p)
-        if (IsGamepadAvailable(p)) {
-            padUp |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_UP);
-            padDown |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
-        }
-    if (IsKeyPressed(KEY_UP) || padUp) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
-    if (IsKeyPressed(KEY_DOWN) || padDown) d = (d + 1) % DIFF_COUNT;
+    // arrows, d-pad or left stick on any pad (W / S count too: they change it, not start)
+    if (input.menuUp()) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
+    if (input.menuDown()) d = (d + 1) % DIFF_COUNT;
     for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
     if (d != difficulty) { difficulty = d; audio.play("select"); return; }
     bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
@@ -326,7 +346,7 @@ void Game::updateTitle()
 void Game::updatePause()
 {
     if (!firstTick_) return;
-    if (input.pausePressed()) { screen = Screen::Playing; audio.setMusicDuck(1); return; }
+    if (input.pausePressed() || input.menuBack()) { screen = Screen::Playing; audio.setMusicDuck(1); return; }
     if (input.menuUp()) { pauseItem = (pauseItem + 3) % 4; audio.play("select"); }
     if (input.menuDown()) { pauseItem = (pauseItem + 1) % 4; audio.play("select"); }
     if (input.menuSelect()) {
@@ -467,6 +487,7 @@ void Game::updatePlaying(float dt)
     }
     if (firstTick_ && !players[1].joined && !opt.autoplay && input.read(1).any) joinPlayer2();
     particles.update(dt);
+    for (float& t : puPopT) t = std::max(0.0f, t - dt);
 
     // hit-pause: a tiny freeze on big hits for punch
     if (hitPause > 0) { hitPause -= dt; return; }
@@ -1062,7 +1083,11 @@ void Game::collectPowerUp(int p, PowerUp& pu)
         break;
     case PU_SPEED: pl.speedTime = config().f("powerups.speed_seconds", 8.0f); break;
     }
-    showBanner(T("powerup_" + std::to_string(pu.type)), T("powerup_desc_" + std::to_string(pu.type)), 1.6f);
+    // no banner in the middle of the screen: the HUD shows an icon in this player's bottom
+    // corner and a short pop-up saying what it does
+    puPopT[p] = 3.2f;
+    puPopType[p] = pu.type;
+    if (pu.type == PU_SLOW) hourglassBy = p;
     events().powerupCollected.emit(p, pu.type);
 }
 

@@ -1,12 +1,19 @@
 #include "player/Input.h"
 #include "core/Config.h"
+#include "core/Paths.h"
 #include "raylib.h"
 
 #include <cstring>
 #include <sstream>
 #include <string>
 
+// raylib reports any joystick as "available", even one GLFW has no button mapping for; such a
+// pad reads every button as up. GLFW (built into raylib) can tell the two apart.
+extern "C" int glfwJoystickIsGamepad(int jid);
+
 namespace {
+
+bool usablePad(int i) { return IsGamepadAvailable(i) && glfwJoystickIsGamepad(i); }
 
 struct KeyName { const char* name; int key; };
 const KeyName KEYS[] = {
@@ -56,6 +63,56 @@ void InputMap::load()
         for (int a = 0; a < 7; ++a)
             keys_[p][a] = parseKeys(config().s("input.p" + std::to_string(p + 1) + "_" + names[a], defaults[p][a]));
     pause_ = parseKeys(config().s("input.pause", "ESCAPE,P"));
+    firstPadPlayer_ = config().i("input.first_pad_player", 1) == 2 ? 2 : 1;
+    // Extra controller mappings (SDL_GameControllerDB format), if the team adds the file.
+    std::string db = assetPath("gamecontrollerdb.txt");
+    if (FileExists(db.c_str())) {
+        char* text = LoadFileText(db.c_str());
+        if (text) {
+            int ok = SetGamepadMappings(text);
+            TraceLog(ok ? LOG_INFO : LOG_WARNING, "UPGRADE: controller mappings from gamecontrollerdb.txt %s", ok ? "loaded" : "failed");
+            UnloadFileText(text);
+        }
+    }
+}
+
+void InputMap::beginFrame()
+{
+    for (int i = 0; i < 4; ++i) {
+        prevStickY_[i] = stickY_[i];
+        stickY_[i] = IsGamepadAvailable(i) ? GetGamepadAxisMovement(i, GAMEPAD_AXIS_LEFT_Y) : 0.0f;
+    }
+}
+
+int InputMap::padCount() const
+{
+    int n = 0;
+    for (int i = 0; i < 4; ++i) if (usablePad(i)) ++n;
+    return n;
+}
+
+std::vector<InputMap::PadInfo> InputMap::pads() const
+{
+    std::vector<PadInfo> out;
+    for (int i = 0; i < 4; ++i) {
+        if (!IsGamepadAvailable(i)) continue;
+        const char* n = GetGamepadName(i);
+        PadInfo info{i, n ? n : "controller", usablePad(i), -1};
+        for (int p = 0; p < 2; ++p) if (padFor(p) == i) info.player = p;
+        out.push_back(info);
+    }
+    return out;
+}
+
+// Pads are handed out in slot order, whatever slots they sit in: the first one found plays
+// Gran (or Sam, with first_pad_player = 2), the next one the other player.
+int InputMap::padFor(int player) const
+{
+    int found[4], n = 0;
+    for (int i = 0; i < 4; ++i) if (usablePad(i)) found[n++] = i;   // unrecognised pads never take a player
+    int order = player;
+    if (firstPadPlayer_ == 2) order = n == 1 ? (player == 1 ? 0 : -1) : (player == 0 ? 1 : 0);
+    return order >= 0 && order < n ? found[order] : -1;
 }
 
 PlayerInput InputMap::read(int p) const
@@ -71,16 +128,21 @@ PlayerInput InputMap::read(int p) const
     in.attackPressed = pressed(k[5]);
     in.abilityPressed = pressed(k[6]);
     in.any = in.jumpPressed || in.attackPressed || in.abilityPressed || pressed(k[0]) || pressed(k[1]);
-    if (IsGamepadAvailable(p)) {
-        float ax = GetGamepadAxisMovement(p, GAMEPAD_AXIS_LEFT_X), ay = GetGamepadAxisMovement(p, GAMEPAD_AXIS_LEFT_Y);
-        in.left |= ax < -0.35f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
-        in.right |= ax > 0.35f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
-        in.up |= ay < -0.5f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_UP);
-        in.down |= ay > 0.5f || IsGamepadButtonDown(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
-        in.jumpHeld |= IsGamepadButtonDown(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        bool jp = IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        bool ap = IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        bool bp = IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
+    const int pad = padFor(p);
+    if (pad >= 0) {
+        float ax = GetGamepadAxisMovement(pad, GAMEPAD_AXIS_LEFT_X), ay = GetGamepadAxisMovement(pad, GAMEPAD_AXIS_LEFT_Y);
+        in.left |= ax < -0.35f || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
+        in.right |= ax > 0.35f || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
+        in.up |= ay < -0.5f || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_LEFT_FACE_UP);
+        in.down |= ay > 0.5f || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
+        in.jumpHeld |= IsGamepadButtonDown(pad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+        bool jp = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);                     // A
+        bool ap = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_LEFT) ||                   // X
+                  IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);                      // LB
+        bool bp = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) ||                  // B
+                  IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);                     // RB
+        bool yp = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_UP);                       // Y
+        if (yp) { bp = true; in.down = true; }   // Y is the second ability: the same as down + B
         in.jumpPressed |= jp;
         in.attackPressed |= ap;
         in.abilityPressed |= bp;
@@ -92,7 +154,7 @@ PlayerInput InputMap::read(int p) const
 bool InputMap::pausePressed() const
 {
     if (pressed(pause_)) return true;
-    for (int p = 0; p < 2; ++p)
+    for (int p = 0; p < 4; ++p)
         if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_MIDDLE_RIGHT)) return true;
     return false;
 }
@@ -100,37 +162,46 @@ bool InputMap::pausePressed() const
 bool InputMap::menuUp() const
 {
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) return true;
-    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_UP)) return true;
+    for (int p = 0; p < 4; ++p) {
+        if (!IsGamepadAvailable(p)) continue;
+        if (IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_UP)) return true;
+        if (stickY_[p] < -0.6f && prevStickY_[p] >= -0.6f) return true;   // stick pushed up
+    }
     return false;
 }
 bool InputMap::menuDown() const
 {
     if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) return true;
-    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN)) return true;
+    for (int p = 0; p < 4; ++p) {
+        if (!IsGamepadAvailable(p)) continue;
+        if (IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN)) return true;
+        if (stickY_[p] > 0.6f && prevStickY_[p] <= 0.6f) return true;     // stick pushed down
+    }
     return false;
 }
 bool InputMap::menuSelect() const
 {
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) return true;
-    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) return true;
+    for (int p = 0; p < 4; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) return true;
     return false;
 }
+
 bool InputMap::menuLeft() const
 {
     if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) return true;
-    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_LEFT)) return true;
+    for (int p = 0; p < 4; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_LEFT)) return true;
     return false;
 }
 bool InputMap::menuRight() const
 {
     if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) return true;
-    for (int p = 0; p < 2; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) return true;
+    for (int p = 0; p < 4; ++p) if (IsGamepadAvailable(p) && IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) return true;
     return false;
 }
 bool InputMap::menuBack() const
 {
     if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) return true;
-    for (int p = 0; p < 2; ++p)
+    for (int p = 0; p < 4; ++p)
         if (IsGamepadAvailable(p) && (IsGamepadButtonPressed(p, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || IsGamepadButtonPressed(p, GAMEPAD_BUTTON_MIDDLE_RIGHT)))
             return true;
     return false;
