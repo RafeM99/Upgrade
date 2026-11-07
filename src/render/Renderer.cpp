@@ -137,6 +137,15 @@ void ring(float cx, float cy, float r, Color c, float z = 0.05f)
 
 Color hexc(unsigned h, unsigned char a = 255) { return Color{(unsigned char)(h >> 16), (unsigned char)(h >> 8), (unsigned char)h, a}; }
 
+// Pixel stages: the whole number each native pixel is scaled by in a window this tall. The
+// one that keeps the view nearest its designed VIEW_TILES_H tiles (the buffer is then sized to
+// fill the window exactly, so the view is a little taller or shorter than that).
+int pixelScale(int era, int screenH)
+{
+    const double designed = TILE_PX[era] * VIEW_TILES_H;
+    return std::max(1, (int)std::lround(screenH / designed));
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ setup
@@ -181,12 +190,16 @@ void Renderer::ensureTargets()
         int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
         int w = (int)std::lround(h * 16.0 / 9.0);
         if (lowRes(e)) {
-            // Framing (ui helper): the pixel stages are scaled by the largest whole number that
-            // fits the window height, and the buffer is made just wide enough that the scaled
-            // image covers the whole window width. So no stage ever gets side bars; at most a
-            // thin, centred band top and bottom where the height does not divide evenly.
+            // Framing: the pixel stages are scaled by a whole number (pixelScale), and the buffer
+            // is made just big enough that the scaled image covers the whole window, both ways.
+            // So no stage gets bars: the view shows a few rows more or fewer than the designed
+            // VIEW_TILES_H tiles instead (drawEra and drawBackground allow for it). The height is
+            // kept even, so the view centre stays on a pixel edge; the odd row past the window
+            // edge is simply off screen.
             const int sw = std::max(1, GetScreenWidth()), sh = std::max(1, GetScreenHeight());
-            const int k = std::max(1, sh / h);
+            const int k = pixelScale(e, sh);
+            h = std::max(h / 2, (sh + k - 1) / k);
+            h += h & 1;
             w = std::max(w / 2, (sw + k - 1) / k);
         }
         if (rt_[e].id != 0 && rtW_[e] == w && rtH_[e] == h) continue;
@@ -215,8 +228,8 @@ Rectangle Renderer::screenRect() const
     int e = std::max(0, std::min(LAST_ERA, renderEra_));
     if (lowRes(e) && rtW_[e] > 0) {
         // pixel stages: scale the native buffer by a whole number, so every pixel is the same size
-        // (ensureTargets sizes the buffer width so this fills the window width; see there)
-        int k = std::max(1, (int)(sh / rtH_[e]));
+        // (ensureTargets sizes the buffer so this fills the whole window; see there)
+        int k = pixelScale(e, (int)sh);
         float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
         return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
     }
@@ -232,7 +245,14 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
     const float* parallax = parallaxByStyle[STYLE[era]];
     for (int l = 0; l < std::min(layers, BG_LAYERS); ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
-        float scale = (float)h / t.height;
+        // pixel stages: one texel per pixel, never resampled. The buffer can be a few rows taller
+        // or shorter than the picture (see ensureTargets): a taller one keeps the picture on the
+        // bottom edge (as the view keeps the floor there) and the sky goes on upwards as a mirror
+        // image of its top rows; a shorter one trims top and bottom alike, as the view does.
+        const bool native = lowRes(era);
+        float scale = native ? 1.0f : (float)h / t.height;
+        float th = native ? (float)t.height : (float)h;
+        float y = native ? (h >= t.height ? (float)(h - t.height) : (float)((h - t.height) / 2)) : 0.0f;
         float tw = t.width * scale;
         float off = std::fmod(camX * pxPerTile * parallax[l], tw);
         if (off < 0) off += tw;
@@ -240,9 +260,13 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
         // 1-bit: exactly one texel per native pixel (the +1 overlap would stretch 312 texels
         // over 313 pixels and double a column)
         float dw = era == 0 ? tw : tw + 1;
-        for (float x = -off; x < w; x += tw)
-            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, dw, (float)h}, {0, 0}, 0,
-                           Color{255, 255, 255, (unsigned char)(alpha * 255)});
+        const Color tint{255, 255, 255, (unsigned char)(alpha * 255)};
+        const float gap = std::min(y, (float)t.height);   // rows above the picture
+        for (float x = -off; x < w; x += tw) {
+            DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, y, dw, th}, {0, 0}, 0, tint);
+            if (l == 0 && gap > 0)
+                DrawTexturePro(t, Rectangle{0, 0, (float)t.width, -gap}, Rectangle{x, y - gap, dw, gap}, {0, 0}, 0, tint);
+        }
     }
 }
 
@@ -352,8 +376,10 @@ void Renderer::drawEra(Game& g, int era, float swing)
 {
     const EraArt& A = g.art.era[era];
     RenderTexture2D& rt = rt_[era];
-    g.cam.aspect = (float)rtW_[era] / rtH_[era];
-    float pxPerTile = rtH_[era] / g.cam.viewH;
+    // (pixel stages: the buffer's height in tiles can differ a little from viewH, see
+    // ensureTargets; this aspect makes the camera's viewW() the width really shown)
+    g.cam.aspect = lowRes(era) ? (float)rtW_[era] / (TILE_PX[era] * g.cam.viewH) : (float)rtW_[era] / rtH_[era];
+    float pxPerTile = lowRes(era) ? (float)TILE_PX[era] : rtH_[era] / g.cam.viewH;
     const float depth = swing;   // blocks extrude as the camera swings
     g_lightAmount = smooth(era) ? std::min(1.0f, swing) : 0.0f;
     const bool full3D = era == LAST_ERA;
@@ -392,6 +418,13 @@ void Renderer::drawEra(Game& g, int era, float swing)
     Camera3D c3 = g.cam.camera3D(nearP, farP);
     g.cam.swing = savedSwing;
     if (lowRes(era) && c3.projection == CAMERA_ORTHOGRAPHIC) {
+        // the buffer is sized to fill the window (ensureTargets), so it can be a few rows taller
+        // or shorter than the camera's view: show exactly its height, one texel per pixel. A
+        // taller view keeps the floor on the bottom edge and shows more sky; a shorter one trims
+        // top and bottom alike.
+        float viewH = (float)rtH_[era] / TILE_PX[era];
+        if (viewH > c3.fovy) c3.target.y += (viewH - c3.fovy) / 2;
+        c3.fovy = viewH;
         // snap the camera to the native pixel grid, so sprites never land between pixels
         float tp = (float)TILE_PX[era];
         c3.target.x = std::round(c3.target.x * tp) / tp;
