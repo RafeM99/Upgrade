@@ -33,8 +33,6 @@ unsigned hashi(int x, int s)
 }
 float rndf(int x, int s) { return (hashi(x, s) & 0xffff) / 65535.0f; }
 
-const Color kInk = {30, 22, 34, 255};   // outline colour
-const float kOutline = 0.0028f;         // outline width per unit of camera distance: about 2 px at 720p
 
 // Gran's cottage stands just behind the start and comes back every COTTAGE_EVERY tiles.
 constexpr float COTTAGE_X0 = 10.0f, COTTAGE_EVERY = 72.0f;
@@ -49,18 +47,15 @@ void Models3D::init()
     sh_.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(sh_, "matNormal");
     locView_ = GetShaderLocation(sh_, "viewPos");
     locEmissive_ = GetShaderLocation(sh_, "emissive");
-    locOutline_ = GetShaderLocation(sh_, "outlineW");
-    locHull_ = GetShaderLocation(sh_, "hullMode");
+    locRim_ = GetShaderLocation(sh_, "rim");
     locLightPos_ = GetShaderLocation(sh_, "lightPos");
     locLightCol_ = GetShaderLocation(sh_, "lightCol");
     locLightRad_ = GetShaderLocation(sh_, "lightRad");
-    auto set3 = [&](const char* n, Vector3 v) { SetShaderValue(sh_, GetShaderLocation(sh_, n), &v, SHADER_UNIFORM_VEC3); };
-    auto set1 = [&](const char* n, float v) { SetShaderValue(sh_, GetShaderLocation(sh_, n), &v, SHADER_UNIFORM_FLOAT); };
-    set3("sunDir", Vector3Normalize({0.45f, -0.8f, -0.4f}));
-    set3("sunCol", {1.0f, 0.93f, 0.8f});
-    set3("skyCol", {0.95f, 0.97f, 1.0f});
-    set3("groundCol", {0.7f, 0.68f, 0.6f});
-    (void)set1;
+    locSunDir_ = GetShaderLocation(sh_, "sunDir");
+    locSunCol_ = GetShaderLocation(sh_, "sunCol");
+    locSkyCol_ = GetShaderLocation(sh_, "skyCol");
+    locGroundCol_ = GetShaderLocation(sh_, "groundCol");
+    setLight(false);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
     sphere_ = LoadModelFromMesh(GenMeshSphere(1, 7, 10));   // low-poly
@@ -74,6 +69,24 @@ void Models3D::init()
     static const char* const forgetNames[F_COUNT] = {"forget_body", "forget_seg", "forget_tip"};
     loadParts(gran_, granNames, G_COUNT, granReady_);
     loadParts(forget_, forgetNames, F_COUNT, forgetReady_);
+}
+
+// The 3D stage's fresh morning light, or (dusk) the low golden sun of the 2.5D hay meadow,
+// coming from the left like the light painted on its backdrop.
+void Models3D::setLight(bool dusk)
+{
+    auto set3 = [&](int loc, Vector3 v) { SetShaderValue(sh_, loc, &v, SHADER_UNIFORM_VEC3); };
+    if (dusk) {
+        set3(locSunDir_, Vector3Normalize({0.6f, -0.55f, -0.45f}));
+        set3(locSunCol_, {1.0f, 0.86f, 0.66f});
+        set3(locSkyCol_, {1.0f, 0.88f, 0.8f});
+        set3(locGroundCol_, {0.72f, 0.62f, 0.5f});
+    } else {
+        set3(locSunDir_, Vector3Normalize({0.45f, -0.8f, -0.4f}));
+        set3(locSunCol_, {1.0f, 0.93f, 0.8f});
+        set3(locSkyCol_, {0.95f, 0.97f, 1.0f});
+        set3(locGroundCol_, {0.7f, 0.68f, 0.6f});
+    }
 }
 
 void Models3D::loadParts(Model* out, const char* const* names, int n, bool& ready)
@@ -100,31 +113,15 @@ void Models3D::unloadParts(Model* parts, int n, bool& ready)
     ready = false;
 }
 
-// A Blender part: its own material colours, times the tint (for fading and hit flashes), then
-// the dark inverted hull for the toon outline, pushed out along the smooth normals.
-void Models3D::modelPart(Model& m, Matrix t, Color tint, bool outline)
+// A Blender part: its own material colours, times the tint (for fading and hit flashes), with
+// the lighter rim along its silhouette.
+void Models3D::modelPart(Model& m, Matrix t, Color tint, bool rim)
 {
-    float zero = 0.0f, one = 1.0f;
+    float zero = 0.0f, r = rim && rims_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, tint);
-    if (!outline || tint.a < 250) return;
-    int hull = 0;
-    float w = kOutline;
-    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
-    rlEnableBackfaceCulling();
-    rlSetCullFace(RL_CULL_FACE_FRONT);
-    // every material drawn in the ink colour
-    Color saved[16];
-    int nm = std::min(m.materialCount, 16);
-    for (int k = 0; k < nm; ++k) { saved[k] = m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color; m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = kInk; }
-    DrawModel(m, {0, 0, 0}, 1.0f, WHITE);
-    for (int k = 0; k < nm; ++k) m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = saved[k];
-    rlSetCullFace(RL_CULL_FACE_BACK);
-    rlDisableBackfaceCulling();
-    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::shutdown()
@@ -138,32 +135,21 @@ void Models3D::shutdown()
     UnloadShader(sh_);
 }
 
-void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool outline)
+void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool rim)
 {
+    // boxes get no rim: their flat faces would light up whole, and the face bands already
+    // separate them. Rounded parts get the thin lighter rim.
+    float r = rim && rims_ && &m != &cube_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &emissive, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, c);
-    if (!outline || c.a < 250) return;
-    // tiny parts (eyes, buttons, glasses) stay as they are: an outline would swallow them
-    float sx = Vector3Length({t.m0, t.m1, t.m2}), sy = Vector3Length({t.m4, t.m5, t.m6}), sz = Vector3Length({t.m8, t.m9, t.m10});
-    if (std::max(sx, std::max(sy, sz)) < 0.075f) return;
-    int hull = &m == &cube_ ? 1 : ((&m == &cyl_ || &m == &cone_) ? 2 : 0);
-    float one = 1.0f, w = kOutline;
-    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
-    rlEnableBackfaceCulling();
-    rlSetCullFace(RL_CULL_FACE_FRONT);
-    DrawModel(m, {0, 0, 0}, 1.0f, kInk);
-    rlSetCullFace(RL_CULL_FACE_BACK);
-    rlDisableBackfaceCulling();
-    float zero = 0.0f;
-    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::begin(Game& g, const Camera3D& cam)
 {
     rlDrawRenderBatchActive();
+    camPos_ = cam.position;
     SetShaderValue(sh_, locView_, &cam.position, SHADER_UNIFORM_VEC3);
     Vector3 pos[4]{}, col[4]{};
     float rad[4] = {0, 0, 0, 0};
@@ -272,9 +258,6 @@ void Models3D::cottage(float x, float z)
         for (int f = 0; f < 3; ++f)
             part(sphere_, then(S(0.09f, 0.09f, 0.09f), T(wx - 0.28f + f * 0.28f, wy - 0.4f, fz + 0.14f)), f % 2 ? hexc(0xf28cb4) : hexc(0xe8364f));
     }
-    // a little window in the gable
-    part(cube_, then(S(0.6f, 0.5f, 0.08f), T(x, top + 0.55f, fz - 0.5f)), trim);
-    part(cube_, then(S(0.42f, 0.34f, 0.08f), T(x, top + 0.55f, fz - 0.46f)), hexc(0xffe2a0), 0.7f, false);
     // porch: a deck, two posts and a little roof over the door
     part(cube_, then(S(2.2f, 0.18f, 1.1f), T(x, 2.12f, fz + 0.55f)), hexc(0xb07a50));
     for (int s = -1; s <= 1; s += 2)
@@ -329,12 +312,21 @@ void Models3D::drawScenery(Game& g)
     part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.5f, -3.46f)), hexc(0xe8e2d6), 0, false);
     part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.2f, -3.46f)), hexc(0xe8e2d6), 0, false);
     if (cotOn) cottage(cot, -7.0f);
+    drawGardenFront(g, g.cam.left() - 4, g.cam.right() + 10);
 
     // near row: bushes, flower beds and lamps, just behind the fence
     for (int k = (int)std::floor(l / 3); k <= (int)(r / 3); ++k) {
         float x = k * 3.0f + 1.5f + (rndf(k, 31) - 0.5f) * 1.2f;
         if (nearCot(x, 4.5f)) continue;
         int kind = (int)(hashi(k, 32) % 6);
+        // a lamp would poke through a platform: a bush instead. Standing behind the path, the 3/4
+        // view lines it up on screen with the path columns where the line of sight from the
+        // camera crosses the path (z 1 to -3): check those.
+        if (kind == 0) {
+            auto across = [&](float zp) { return camPos_.x + (x - camPos_.x) * (camPos_.z - zp) / (camPos_.z + 4.3f); };
+            float a = across(1.0f), b = across(-3.0f);
+            if (!clearAbove(g, std::min(a, b) - 0.8f, std::max(a, b) + 0.8f)) kind = 2;
+        }   // a lamp would poke through a platform: a bush
         if (kind == 0) {   // street lamp
             float z = -4.3f;
             part(cyl_, then(S(0.07f, 2.6f, 0.07f), T(x, 2, z)), hexc(0x2a2a36));
@@ -431,6 +423,210 @@ void Models3D::drawGround(Game& g)
                              mixc(dirt, WHITE, 0.3f), 0, false);
             x = e + 1;
         }
+    }
+}
+
+// ------------------------------------------------------------------ small props
+// A tuft of tall grass: a fan of thin blades leaning out from one root.
+void Models3D::grassTuft(float x, float y, float z, float h, int seed, Color c)
+{
+    int n = 4 + (int)(hashi(seed, 101) % 3);
+    float ry = rndf(seed, 102) * PI;
+    for (int i = 0; i < n; ++i) {
+        float a = (i - (n - 1) * 0.5f) * 0.24f + (rndf(seed + i, 103) - 0.5f) * 0.2f;
+        float hh = h * (0.65f + 0.35f * rndf(seed + i, 104));
+        Color bc = i % 2 ? mixc(c, WHITE, 0.12f) : mixc(c, BLACK, 0.08f * (i % 3));
+        part(cone_, then(then(then(S(0.05f, hh, 0.05f), MatrixRotateZ(a)), MatrixRotateY(ry)), T(x + a * 0.15f, y, z)), bc, 0, false);
+    }
+}
+
+// A clump of one kind of wild flower: poppies, daisies, cornflowers, buttercups or clover.
+void Models3D::flowerClump(float x, float y, float z, int seed, float size, bool stems)
+{
+    static const unsigned heads[5] = {0xd8382e, 0xf6f2e4, 0x4a6ad0, 0xf2cc3a, 0xd88ab0};
+    int kind = (int)(hashi(seed, 111) % 5), n = 3 + (int)(hashi(seed, 112) % 4);
+    for (int i = 0; i < n; ++i) {
+        float px = x + (rndf(seed + i, 113) - 0.5f) * 0.9f * size, pz = z + (rndf(seed + i, 114) - 0.5f) * 0.5f * size;
+        float hh = (0.2f + 0.22f * rndf(seed + i, 115)) * size, r = 0.065f * size;
+        if (stems) part(cyl_, then(S(0.012f, hh, 0.012f), T(px, y, pz)), hexc(0x4a7a34), 0, false);
+        part(sphere_, then(S(r, r * 0.7f, r), T(px, y + hh, pz)), hexc(heads[kind]), 0.15f, false);
+        if (kind == 1) part(sphere_, then(S(r * 0.4f, r * 0.4f, r * 0.4f), T(px, y + hh + r * 0.45f, pz)), hexc(0xf2c030), 0.2f, false);
+    }
+}
+
+// True when nothing solid hangs over this stretch of the path (a floating platform, a step):
+// tall props (lamps, trees by the path) are only put where they cannot poke through one.
+bool Models3D::clearAbove(Game& g, float x0, float x1)
+{
+    for (int ix = (int)std::floor(x0); ix <= (int)std::floor(x1); ++ix) {
+        if (ix < g.level.firstCol()) continue;
+        for (int ty = 0; ty < LEVEL_H; ++ty) {
+            char ch = g.level.tile(ix, ty);
+            bool solid = g.level.isSolidChar(ch) || ch == '1' || ch == '2';
+            if (solid && Y3((float)ty + 1) >= 1.99f) return false;
+        }
+    }
+    return true;
+}
+
+// ------------------------------------------------------------------ the 2.5D hay meadow
+// The 2.5D stage's field between the path and the painted backdrop, and the strip of lawn in
+// front of the path: modelled props in the golden light, no rim light (this stage is the paper
+// theatre before the full 3D one). Further props step towards the dusk colour in the same flat
+// bands as the lawn under them.
+void Models3D::drawMeadow(Game& g)
+{
+    setLight(true);
+    rims_ = false;
+    const float l = g.cam.left() - 8, r = g.cam.right() + 14;
+    const Color dusk = hexc(0xf0b48a);
+    auto hz = [&](Color c, float z) { return mixc(c, dusk, z > -1.5f ? 0.0f : (z > -8 ? 0.1f : (z > -20 ? 0.24f : 0.36f))); };
+    const float G = 1.98f;   // the field behind the path
+    const Color hayL = hexc(0xf0d890), hayD = hexc(0xa88a50), straw = hexc(0xe6c878);
+
+    // a cart track winding through the field: two worn ruts with grass between
+    for (float x = std::floor(l * 2) / 2; x < r; x += 0.5f) {
+        auto zc = [](float xx) { return -7.0f + 1.3f * std::sin(xx * 0.11f) + 0.6f * std::sin(xx * 0.29f + 1.0f); };
+        float z0 = zc(x), z1 = zc(x + 0.5f), ang = std::atan2(z1 - z0, 0.5f);
+        for (int s = -1; s <= 1; s += 2)
+            part(cube_, then(then(S(0.56f, 0.02f, 0.34f), MatrixRotateY(-ang)), T(x + 0.25f, G + 0.01f, (z0 + z1) / 2 + s * 0.45f)),
+                 hz(hexc(0x9a7652), z0), 0, false);
+    }
+
+    // the hedge line across the back of the field, with gaps, and trees standing out of it
+    // (low, so the painted haystacks behind still show over it)
+    for (int k = (int)std::floor(l / 0.7f); k <= (int)(r / 0.7f); ++k) {
+        int seg = (int)std::floor(k / 14.0f), in = k - seg * 14;
+        if (hashi(seg, 121) % 3 == 0 ? in > 4 : in > 11) continue;   // gaps of different widths
+        float x = k * 0.7f + (rndf(k, 122) - 0.5f) * 0.3f, z = -13.0f + (rndf(k, 123) - 0.5f) * 0.5f;
+        float sc = 0.75f + 0.4f * rndf(k, 124);
+        Color c = mixc(hexc(0x557f38), hexc(0x78a046), rndf(k, 125));
+        part(sphere_, then(S(0.6f * sc, 0.42f * sc, 0.5f), T(x, G + 0.25f * sc, z)), hz(c, z), 0, false);
+    }
+    for (int k = (int)std::floor(l / 9); k <= (int)(r / 9); ++k) {   // hedgerow trees, now and then
+        if (hashi(k, 126) % 3 != 0) continue;
+        tree(k * 9.0f + rndf(k, 127) * 4, -13.6f - rndf(k, 128), k * 31 + 7, hashi(k, 129) % 2);
+    }
+    // windrows: long low rows of cut hay lying in the field
+    for (int k = (int)std::floor(l / 6); k <= (int)(r / 6); ++k) {
+        for (int row = 0; row < 3; ++row) {
+            if (hashi(k * 3 + row, 161) % 3 == 0) continue;
+            float len = 2.5f + 3.0f * rndf(k * 3 + row, 162), x = k * 6.0f + rndf(k * 3 + row, 163) * 2;
+            float z = -5.0f - row * 2.6f - rndf(k * 3 + row, 164) * 0.6f;
+            part(sphere_, then(S(len / 2, 0.13f, 0.32f), T(x + len / 2, G, z)), hz(hexc(0xe0cc84), z), 0, false);
+        }
+    }
+
+    // field props in hashed slots: stooks in rows, bales alone, in pairs or stacked, fence runs
+    for (int k = (int)std::floor(l / 2.2f); k <= (int)(r / 2.2f); ++k) {
+        unsigned h = hashi(k, 131);
+        float x = k * 2.2f + (rndf(k, 132) - 0.5f) * 1.4f;
+        float z = -3.2f - rndf(k, 133) * 9.5f;
+        float rot = (rndf(k, 134) - 0.5f) * 1.2f, sc = 0.85f + 0.3f * rndf(k, 135);
+        switch (h % 7) {
+        case 0: case 1: {   // a stook: sheaves leaned together, tied round the waist, ears on top
+            float hh = 0.85f * sc;
+            part(cone_, then(then(S(0.34f * sc, hh, 0.34f * sc), MatrixRotateY(rot * 3)), T(x, G, z)), hz(straw, z), 0, false);
+            part(cyl_, then(S(0.19f * sc, 0.07f, 0.19f * sc), T(x, G + hh * 0.48f, z)), hz(hayD, z), 0, false);
+            part(cone_, then(then(S(0.16f * sc, 0.28f * sc, 0.16f * sc), MatrixRotateX(PI)), T(x, G + hh + 0.12f, z)), hz(hayL, z), 0, false);
+            if (h % 14 == 1) {   // a second stook beside it
+                part(cone_, then(S(0.3f, 0.75f, 0.3f), T(x + 0.8f, G, z - 0.5f)), hz(straw, z), 0, false);
+                part(cyl_, then(S(0.17f, 0.07f, 0.17f), T(x + 0.8f, G + 0.36f, z - 0.5f)), hz(hayD, z), 0, false);
+            }
+            break;
+        }
+        case 2: case 3: {   // small square bales: one, two side by side, or three stacked
+            int n = 1 + (int)(h / 7 % 3);
+            Matrix root = then(MatrixRotateY(rot), T(x, G, z));
+            const Vector3 at[3] = {{-0.48f, 0.21f, 0}, {0.48f, 0.21f, 0.05f}, {0.0f, 0.63f, 0.02f}};
+            for (int i = 0; i < n; ++i) {
+                Vector3 p = n == 1 ? Vector3{0, 0.21f, 0} : at[i];
+                part(cube_, then(then(S(0.9f, 0.42f, 0.5f), T(p.x, p.y, p.z)), root), hz(hayL, z), 0, false);
+                for (int t = -1; t <= 1; t += 2)
+                    part(cube_, then(then(S(0.035f, 0.43f, 0.51f), T(p.x + t * 0.22f, p.y, p.z)), root), hz(hayD, z), 0, false);
+            }
+            break;
+        }
+        case 4: {   // a few old fence posts, one leaning, with a rail where it still holds
+            float fz = -2.4f - rndf(k, 136) * 0.6f;
+            int n = 2 + (int)(h / 7 % 3);
+            for (int i = 0; i < n; ++i) {
+                float px = x + i * 1.1f, ph = 0.75f + 0.25f * rndf(k * 5 + i, 137);
+                float lean = (rndf(k * 5 + i, 138) - 0.5f) * 0.25f;
+                part(cube_, then(then(S(0.11f, ph, 0.11f), T(0, ph / 2, 0)), then(MatrixRotateZ(lean), T(px, G, fz))), hz(hexc(0x8a6a4c), fz), 0, false);
+            }
+            if (h % 2) part(cube_, then(S(1.1f * (n - 1) + 0.1f, 0.07f, 0.05f), T(x + 0.55f * (n - 1), G + 0.62f, fz + 0.07f)), hz(hexc(0x9a7a56), fz), 0, false);
+            break;
+        }
+        default: break;   // open field
+        }
+    }
+
+    // wild flowers and tall grass along the back of the path and out into the field
+    for (int k = (int)std::floor(l / 0.9f); k <= (int)(r / 0.9f); ++k) {
+        float x = k * 0.9f + rndf(k, 141) * 0.6f, z = -1.9f - rndf(k, 142) * 3.5f;
+        if (hashi(k, 143) % 3 == 0) flowerClump(x, G, z, k * 3 + 1, 1.0f, false);
+        else grassTuft(x, G, z, 0.35f + 0.25f * rndf(k, 144), k * 5 + 2, hz(mixc(hexc(0x6a9a3a), hexc(0x94b048), rndf(k, 145)), z));
+    }
+
+    // the near foreground, on the low lawn in front of the path: big grass tufts, flowers, stones
+    for (int k = (int)std::floor(l / 0.7f); k <= (int)(r / 0.7f); ++k) {
+        float x = k * 0.7f + rndf(k, 151) * 0.5f, z = 0.6f + rndf(k, 152) * 2.8f;
+        unsigned h = hashi(k, 153) % 6;
+        if (h <= 2) grassTuft(x, 0, z, 0.55f + 0.4f * rndf(k, 154), k * 7 + 3, mixc(hexc(0x3e7a30), hexc(0x6a9a3a), rndf(k, 155)));
+        else if (h == 3) flowerClump(x, 0, z, k * 11 + 5, 1.5f, true);
+        else if (h == 4 && hashi(k, 156) % 3 == 0)
+            part(sphere_, then(S(0.28f, 0.14f, 0.22f), T(x, 0.03f, z)), mixc(hexc(0x8a8478), hexc(0xb0a898), rndf(k, 157)), 0, false);
+    }
+    setLight(false);
+    rims_ = true;
+}
+
+// ------------------------------------------------------------------ the garden in front
+// The 3D stage's lawn in front of the path: a flagstone garden path with the odd puddle, box
+// hedges, flower beds and tufts of grass, all on the low lawn (y 0) and low enough never to hide
+// the path top.
+void Models3D::drawGardenFront(Game& g, float l, float r)
+{
+    (void)g;
+    // the flagstone path
+    for (int k = (int)std::floor(l / 0.95f); k <= (int)(r / 0.95f); ++k) {
+        float x = k * 0.95f + (rndf(k, 201) - 0.5f) * 0.1f, z = 2.9f + (k % 2 ? 0.12f : -0.1f);
+        if (hashi(k / 5, 202) % 9 == 0 && k % 5 >= 1 && k % 5 <= 3) {   // a puddle across a few stones
+            if (k % 5 == 2) {
+                part(cyl_, then(S(1.15f, 0.012f, 0.55f), T(x, 0.004f, 2.9f)), hexc(0x8ab4dc), 0.55f, false);
+                part(cyl_, then(S(0.5f, 0.014f, 0.16f), T(x - 0.3f, 0.006f, 2.85f)), hexc(0xd8ecf8), 0.8f, false);
+            }
+            continue;
+        }
+        float w = 0.72f + 0.12f * rndf(k, 203), d = 0.62f + 0.14f * rndf(k, 204);
+        Color c = mixc(hexc(0xc4bcae), hexc(0xa8a094), rndf(k, 205));
+        part(cube_, then(then(S(w, 0.07f, d), MatrixRotateY((rndf(k, 206) - 0.5f) * 0.18f)), T(x, 0.02f, z)), c, 0, false);
+    }
+    // box hedges and flower beds in front of the flagstones, in hashed stretches
+    for (int k = (int)std::floor(l / 4.0f); k <= (int)(r / 4.0f); ++k) {
+        unsigned h = hashi(k, 211) % 4;
+        float x = k * 4.0f + 0.4f + rndf(k, 212) * 0.6f;
+        if (h == 0) {   // a low clipped box hedge
+            float len = 2.0f + rndf(k, 213) * 1.2f;
+            part(cube_, then(S(len, 0.34f, 0.42f), T(x + len / 2, 0.17f, 4.2f)), hexc(0x4f9a40));
+            for (float bx = x + 0.3f; bx < x + len - 0.2f; bx += 0.5f)
+                part(sphere_, then(S(0.28f, 0.16f, 0.22f), T(bx, 0.34f, 4.2f)), mixc(hexc(0x5aa848), hexc(0x6cb854), rndf((int)(bx * 7), 215)), 0, false);
+        } else if (h <= 2) {   // a flower bed: a soil bed, bushes and flowers
+            part(cube_, then(S(2.8f, 0.1f, 0.85f), T(x + 1.4f, 0.03f, 4.3f)), hexc(0x6a4430), 0, false);
+            for (int i = 0; i < 4; ++i) {
+                float fx = x + 0.35f + i * 0.7f;
+                if (i % 2) flowerClump(fx, 0.08f, 4.3f, k * 13 + i, 1.4f, true);
+                else part(sphere_, then(S(0.3f, 0.26f, 0.28f), T(fx, 0.18f, 4.3f)), mixc(hexc(0x4a8f3c), hexc(0x66a84a), rndf(k + i, 214)), 0, false);
+            }
+        }
+    }
+    // grass tufts and the odd daisy clump between the path base and the flagstones, and in front
+    for (int k = (int)std::floor(l / 0.55f); k <= (int)(r / 0.55f); ++k) {
+        float x = k * 0.55f + rndf(k, 221) * 0.5f;
+        float z = hashi(k, 222) % 2 ? 1.5f + rndf(k, 223) * 0.8f : 5.0f + rndf(k, 224) * 1.5f;
+        if (hashi(k, 225) % 5 == 0) flowerClump(x, 0, z, k * 17 + 3, 1.3f, true);
+        else grassTuft(x, 0, z, 0.32f + 0.22f * rndf(k, 226), k * 19 + 1, mixc(hexc(0x3f8a34), hexc(0x62a848), rndf(k, 227)));
     }
 }
 

@@ -153,6 +153,8 @@ private:
     PlayerInput botInput(int p);
 
     void spawnMarkers();
+    void addEnemy(Enemy e);              // settles it out of the terrain first
+    float freeY(float x, float y) const;  // lifts a collectable out of a solid tile
     void spawnFragments(float x, float y, int n, float spread);
     void killEnemy(Enemy& e, int byPlayer);
     void damageEnemy(Enemy& e, int dmg, int byPlayer, float knock);

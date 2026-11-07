@@ -73,6 +73,7 @@ private:
     float shownChars() const;
     bool typed() const { return shownChars() >= card_.totalChars; }
     void drawLines(Game& g, float x, float y, float w, float alpha);
-    void drawPolaroid(Game& g, int era, float cx, float cy, float w, float angle, float alpha, const std::string& caption);
+    // era -1: an empty photograph. variant: tape and placement (no rotation, it shimmers).
+    void drawPolaroid(Game& g, int era, float cx, float cy, float w, int variant, float alpha, const std::string& caption);
     void drawTimeline(Game& g, int current, int restoredUpTo, float alpha);
 };

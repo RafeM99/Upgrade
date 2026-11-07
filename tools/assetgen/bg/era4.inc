@@ -84,14 +84,15 @@ static void e4_canopy(Scene& sc, float cx, float cy, float rx, float ry, int see
             for (int i = 0; i < n; ++i) {
                 float nx = (px - lx[i]) / lr[i], ny = (py - ly[i]) / (lr[i] * 0.9f);
                 float d = nx * nx + ny * ny;
-                float jit = (rnd(bx * 7 + seed, by, 404 + i) - 0.5f) * 0.35f;
+                float ang = std::atan2(ny, nx);
+                float jit = 0.16f * std::sin(ang * 5 + seed * 1.7f + i * 2.3f) + 0.08f * std::sin(ang * 9 + i * 4.1f + seed);
                 if (d > 1.0f + jit) continue;
                 float key = ly[i] + lr[i] * 0.3f;
                 if (key > bestKey) { bestKey = key; best = i; bnx = nx; bny = ny; }
             }
             if (best < 0) continue;
             float gx = (px - cx) / rx, gy = (py - cy) / ry;
-            float l = -(0.55f * bnx + 0.8f * bny) * 0.75f - (0.35f * gx + 0.55f * gy) * 0.8f + (rnd(bx, by * 3 + seed, 405) - 0.5f) * 0.25f;
+            float l = -(0.55f * bnx + 0.8f * bny) * 0.75f - (0.35f * gx + 0.55f * gy) * 0.8f;
             int t = l > 0.62f ? 0 : (l > 0.05f ? 1 : (l > -0.55f ? 2 : 3));
             e4_rect(sc, bx, by, b, b, L.c[t]);
         }
@@ -148,8 +149,9 @@ static void e4_pine(Scene& sc, int x, int base, int h, int halfW, int seed, cons
             int w = std::max(b, (int)(hw * (0.2f + 0.8f * u)));
             w = (w / b) * b;
             for (int dx = -w; dx < w; dx += b) {
-                bool hem = (y + b >= ty1);
-                if (hem && ((dx / b) & 1) && rnd(dx, y, seed) < 0.7f) continue;   // jagged hem
+                bool hem = (y + 2 * b >= ty1);
+                int tooth = (dx + 300) / 3;
+                if (hem && (tooth & 1) && rnd(tooth, t, seed) < 0.7f) continue;   // jagged hem, 3px teeth
                 float r = (dx + b * 0.5f) / std::max(1, w);
                 int tone = r < -0.35f ? 1 : (r < 0.25f ? 2 : 3);
                 if (r < -0.6f && u < 0.6f) tone = 0;
@@ -158,7 +160,7 @@ static void e4_pine(Scene& sc, int x, int base, int h, int halfW, int seed, cons
             }
         }
     }
-    e4_rect(sc, x - b / 2, top - b, b, b, L.c[1]);
+    e4_rect(sc, x, top - 2, 1, 2, L.c[1]);
 }
 // A low hedge: a long row of small cluster lumps with a flat bottom.
 static void e4_hedge(Scene& sc, int x, int base, int len, int h, int seed, const E4Leaf& L, int b)
@@ -184,10 +186,10 @@ static void e4_cloud(Scene& sc, float cx, float base, float size, int seed)
         pr[i] = size * (0.45f + 0.5f * bump) * (0.8f + 0.4f * rnd(seed, i, 432));
         py[i] = base - pr[i] * 0.55f;
     }
-    const int b = 3;
-    for (int y = (int)(base - size * 1.6f) / b * b; y < base; y += b)
-        for (int x = (int)(cx - size * 2.6f) / b * b; x < cx + size * 2.6f; x += b) {
-            float mx = x + 1.5f, my = y + 1.5f;
+    const int b = 1;
+    for (int y = (int)(base - size * 1.6f); y < base; y += b)
+        for (int x = (int)(cx - size * 2.6f); x < cx + size * 2.6f; x += b) {
+            float mx = x + 0.5f, my = y + 0.5f;
             int best = -1; float key = -1e9f, ny = 0, nx = 0;
             for (int i = 0; i < n; ++i) {
                 float dx = (mx - px[i]) / pr[i], dy = (my - py[i]) / (pr[i] * 0.85f);
@@ -208,7 +210,7 @@ static void e4_cloud(Scene& sc, float cx, float base, float size, int seed)
 // Mountains: triangular peaks with a lit left face and shaded right face, optional snow.
 static void e4_range(Scene& sc, int seed, int count, float baseY, float hMin, float hMax, Col lit, Col shade, bool snow, Col snowL, Col snowD)
 {
-    const int W = sc.W, b = 2;
+    const int W = sc.W, b = 1;
     std::vector<float> pkx(count), pkh(count), pkw(count);
     for (int i = 0; i < count; ++i) {
         pkx[i] = (i + 0.2f + 0.6f * rnd(seed, i, 440)) * W / count;
@@ -222,9 +224,10 @@ static void e4_range(Scene& sc, int seed, int count, float baseY, float hMin, fl
             float h = pkh[i] * (1 - std::fabs(dx) / pkw[i]);
             if (h > best) { best = h; bi = i; bdx = dx; }
         }
-        float hj = best + (rnd(x / 4, seed, 443) - 0.5f) * 3;
+        float hj = best + 1.2f * std::sin(x * 6.2832f * 23 / W + seed) + 0.8f * std::sin(x * 6.2832f * 57 / W + seed * 3);
         int top = (int)std::floor((baseY - hj) / b) * b;
-        float snowLine = baseY - pkh[bi] * (0.87f - 0.05f * rnd(x / 4, seed, 444)) + std::fabs(bdx) * 0.25f;
+        float snowLine = baseY - pkh[bi] * 0.85f + std::fabs(bdx) * 0.25f + 3.0f * std::sin(x * 6.2832f * 41 / W + seed) + 2.0f * std::sin(x * 6.2832f * 97 / W);
+        snowLine = std::floor(snowLine / 2) * 2;
         for (int y = top; y < sc.H; y += b) {
             bool left = bdx < 0;
             // gullies: a few diagonal streaks on each face
@@ -248,19 +251,19 @@ static void e4_sky(Scene& sc)
         e4_rect(sc, 0, y0, W, y1 - y0, hex(bands[i]));
     }
     // the sun: a pale stepped disc with a soft ring, blocks of 2
-    float sx = W * 0.79f, sy = H * 0.15f;
-    for (int y = (int)sy - 32; y < sy + 32; y += 2)
-        for (int x = (int)sx - 32; x < sx + 32; x += 2) {
-            float d = std::sqrt((x + 1 - sx) * (x + 1 - sx) + (y + 1 - sy) * (y + 1 - sy));
-            if (d < 19) e4_rect(sc, x, y, 2, 2, d < 13 && (x - sx) + (y - sy) < 4 ? hex(0xfff6d2) : hex(0xfbe7a2));
-            else if (d < 25) e4_rect(sc, x, y, 2, 2, mixc(hex(0x5496de), hex(0xfff0c0), 0.28f));
+    float sx = W * 0.79f, sy = H * 0.22f;
+    for (int y = (int)sy - 32; y < sy + 32; ++y)
+        for (int x = (int)sx - 32; x < sx + 32; ++x) {
+            float d = std::sqrt((x + 0.5f - sx) * (x + 0.5f - sx) + (y + 0.5f - sy) * (y + 0.5f - sy));
+            if (d < 19) e4_px(sc, x, y, d < 13 && (x - sx) + (y - sy) < 4 ? hex(0xfff6d2) : hex(0xfbe7a2));
+            else if (d < 25) e4_px(sc, x, y, mixc(hex(0x5496de), hex(0xfff0c0), 0.28f));
         }
-    struct C { float x, y, s; } cl[9] = {{0.06f, 0.22f, 22}, {0.20f, 0.10f, 12}, {0.31f, 0.30f, 26}, {0.47f, 0.13f, 15},
-                                         {0.57f, 0.36f, 10}, {0.66f, 0.24f, 20}, {0.92f, 0.31f, 18}, {0.995f, 0.09f, 11}, {0.40f, 0.42f, 8}};
+    struct C { float x, y, s; } cl[9] = {{0.06f, 0.24f, 20}, {0.20f, 0.20f, 12}, {0.31f, 0.32f, 24}, {0.47f, 0.21f, 15},
+                                         {0.57f, 0.37f, 10}, {0.66f, 0.29f, 19}, {0.92f, 0.33f, 17}, {0.985f, 0.19f, 11}, {0.40f, 0.42f, 8}};
     for (int i = 0; i < 9; ++i) e4_cloud(sc, W * cl[i].x, H * cl[i].y, cl[i].s, 50 + i);
     // a few tiny wisps
     for (int i = 0; i < 6; ++i) {
-        int x = (int)(W * (0.1f + i * 0.17f)), y = (int)(H * (0.06f + 0.05f * (i % 3)));
+        int x = (int)(W * (0.1f + i * 0.17f + 0.04f * rnd(i, 0, 436))), y = (int)(H * (0.15f + 0.04f * (i % 3)));
         e4_rect(sc, x, y, 14 + i * 2, 2, hex(0xd8e8f8));
         e4_rect(sc, x + 4, y - 2, 8, 2, hex(0xf0f6fc));
     }
@@ -274,9 +277,9 @@ static void e4_far(Scene& sc)
     // nearer range: deeper blue
     e4_range(sc, 11, 9, H * 0.72f, H * 0.14f, H * 0.28f, hex(0x82a4cc), hex(0x6a8cbc), false, Col{}, Col{});
     // blue-green rolling hills
-    for (int x = 0; x < W; x += 2) {
-        int top = (int)std::floor((H * 0.645f + ridge((float)x, W, 5, 5, 3, 1.5f)) / 2) * 2;
-        for (int y = top; y < H; y += 2) e4_rect(sc, x, y, 2, 2, y < top + 2 ? hex(0x7ab0a4) : hex(0x5e9496));
+    for (int x = 0; x < W; ++x) {
+        int top = (int)std::lround(H * 0.645f + ridge((float)x, W, 5, 5, 3, 1.5f));
+        for (int y = top; y < H; ++y) sc.put(x, y, y < top + 2 ? hex(0x7ab0a4) : hex(0x5e9496));
     }
     // dense band of far pines, teal and hazy
     E4Leaf F;
@@ -286,7 +289,7 @@ static void e4_far(Scene& sc)
         int x = (int)(i * W / 150.0f + u * 6);
         int h = 20 + (int)(rnd(i, 2, 450) * 22) + (int)(ridge((float)x, W, 8, 4, 2, 0));
         int base = (int)(H * 0.76f) + (int)(rnd(i, 3, 450) * 8);
-        e4_pine(sc, x, base, h, 6 + (int)(h * 0.2f), i, F, hex(0x2e5250), 2);
+        e4_pine(sc, x, base, h, 6 + (int)(h * 0.2f), i, F, hex(0x2e5250), 1);
     }
     e4_rect(sc, 0, (int)(H * 0.76f), W, H, hex(0x2e6264));
 }
@@ -312,9 +315,9 @@ static void e4_mid(Scene& sc)
     const int W = sc.W, H = sc.H;
     const E4Leaf L = e4_leaf(0.55f);
     // green hillside under the viaduct
-    for (int x = 0; x < W; x += 2) {
-        int top = (int)std::floor((H * 0.80f + ridge((float)x, W, 2, 4, 2.5f, 1)) / 2) * 2;
-        for (int y = top; y < H; y += 2) e4_rect(sc, x, y, 2, 2, y < top + 2 ? hex(0x8ec05a) : (y < top + 6 ? hex(0x6aa24c) : hex(0x58904a)));
+    for (int x = 0; x < W; ++x) {
+        int top = (int)std::lround(H * 0.80f + ridge((float)x, W, 2, 4, 2.5f, 1));
+        for (int y = top; y < H; ++y) sc.put(x, y, y < top + 2 ? hex(0x8ec05a) : (y < top + 6 ? hex(0x6aa24c) : hex(0x58904a)));
     }
     // ---- the viaduct
     const int rail = (int)(H * 0.47f);           // rail level (top of deck)
@@ -399,11 +402,11 @@ static void e4_mid(Scene& sc)
         for (int k = 0; k < 7; ++k) {
             float px = tx + 6 + k * 22 + k * k * 1.5f, py = ly - 42 - k * 7 - (k > 2 ? (k - 2) * 2 : 0);
             float r = 6 + k * 1.6f;
-            const int b = 3;
+            const int b = 1;
             for (int y = (int)(py - r); y < py + r; y += b)
                 for (int x = (int)(px - r * 1.3f); x < px + r * 1.3f; x += b) {
-                    float nx = (x + 1.5f - px) / (r * 1.3f), ny = (y + 1.5f - py) / r;
-                    float d = nx * nx + ny * ny + (rnd(x, y, 480 + k) - 0.5f) * 0.12f;
+                    float nx = (x + 0.5f - px) / (r * 1.3f), ny = (y + 0.5f - py) / r;
+                    float d = nx * nx + ny * ny;
                     if (d > 1) continue;
                     float l = -(0.5f * nx + 0.85f * ny);
                     Col c = l > 0.3f ? hex(0xfcfcfc) : (l > -0.3f ? hex(0xdfe4ee) : hex(0xb4bccc));
@@ -451,12 +454,12 @@ static void e4_mid(Scene& sc)
         int x = (int)((i + 0.15f + 0.7f * u) * W / 16);
         int base = (int)(H * 0.86f) + (int)(rnd(i, 1, 490) * 6);
         float size = 20 + 12 * rnd(i, 2, 490);
-        if (i % 5 == 3) e4_pine(sc, x, base, (int)(size * 2.4f), (int)(size * 0.6f), i, L, td, 2);
-        else e4_tree(sc, x, base, size, (i * 7) % 4, 600 + i, L, tl, td, 3);
+        if (i % 5 == 3) e4_pine(sc, x, base, (int)(size * 2.4f), (int)(size * 0.6f), i, L, td, 1);
+        else e4_tree(sc, x, base, size, (i * 7) % 4, 600 + i, L, tl, td, 1);
     }
     for (int i = 0; i < 26; ++i) {
         int x = (int)(i * W / 26.0f);
-        e4_hedge(sc, x, (int)(H * 0.88f), 40, 12 + (int)(rnd(i, 3, 491) * 6), 700 + i, L, 2);
+        e4_hedge(sc, x, (int)(H * 0.88f), 40, 12 + (int)(rnd(i, 3, 491) * 6), 700 + i, L, 1);
     }
     // a distant church spire and rooftops peeking between the trees
     {
@@ -533,21 +536,29 @@ static void e4_building(Scene& sc, int x, int base, int w, int h, int seed, cons
     e4_rect(sc, x - 2, base - h, w + 4, 3, wl.trim);                    // cornice
     e4_rect(sc, x, base - h + 3, w, 2, mixc(wl.d, hex(0x40406a), 0.2f)); // its shadow
     // upper windows
-    int floors = std::max(1, (h - 44) / 26);
+    // signs sit high on the facade, right under the cornice, well above the players' heads
+    const int top0 = (sign && kind != 1) ? 22 : 10;
+    if (sign && kind != 1) {
+        Col board = kind == 2 ? hex(0x2a4a3a) : (rnd(seed, 3, 513) < 0.5f ? hex(0x2a5a4a) : hex(0x2a3a6a));
+        int bw = std::min(w - 6, e4_textW(sign) + 10);
+        int bx = x + (w - bw) / 2, by = base - h + 7;
+        e4_rect(sc, bx - 1, by - 1, bw + 2, 13, wl.trim);
+        e4_rect(sc, bx, by, bw, 11, board);
+        e4_rect(sc, bx, by, bw, 1, mixc(board, hex(0xffffff), 0.3f));
+        e4_text(sc, x + (w - e4_textW(sign)) / 2, by + 3, sign, kind == 2 ? hex(0xe8c868) : hex(0xf4e4b0));
+    }
+    int floors = std::max(1, (h - 34 - top0) / 26);
     int cols = std::max(2, (w - 8) / 22);
     for (int f = 0; f < floors; ++f)
         for (int c = 0; c < cols; ++c) {
             int wx = x + 6 + c * ((w - 12) / cols) + ((w - 12) / cols - 10) / 2;
-            int wy = base - h + 10 + f * 26;
+            int wy = base - h + top0 + f * 26;
             e4_window(sc, wx, wy, 10, 14, rnd(seed, f * 9 + c, 512) < 0.3f, seed + f * 9 + c, wl.trim);
         }
     // ground floor
     int gf = base - 40;
     if (kind == 0) {   // shop: sign, awning, window, door
-        Col board = rnd(seed, 3, 513) < 0.5f ? hex(0x2a5a4a) : hex(0x2a3a6a);
-        e4_rect(sc, x + 2, gf - 4, w - 4, 11, board);
-        e4_rect(sc, x + 2, gf - 4, w - 4, 1, mixc(board, hex(0xffffff), 0.3f));
-        if (sign) e4_text(sc, x + (w - e4_textW(sign)) / 2, gf - 1, sign, hex(0xf4e4b0));
+        e4_rect(sc, x + 2, gf - 2, w - 4, 3, wl.trim);   // fascia moulding
         int ww = w - 28;
         e4_rect(sc, x + 4, gf + 18, ww, 18, hex(0x3e4c6a));
         e4_rect(sc, x + 4, gf + 18, ww, 6, hex(0xf6d68a));                   // lit inside, under the awning shade
@@ -567,39 +578,58 @@ static void e4_building(Scene& sc, int x, int base, int w, int h, int seed, cons
     } else {   // pub: hanging sign on a bracket, dark green front
         e4_rect(sc, x + 2, gf, w - 4, 40, hex(0x2a4a3a));
         e4_rect(sc, x + 2, gf, w - 4, 2, hex(0x4a7a5a));
-        if (sign) e4_text(sc, x + (w - e4_textW(sign)) / 2, gf + 4, sign, hex(0xe8c868));
         e4_window(sc, x + 8, gf + 14, 16, 18, true, seed + 50, hex(0x1e3a2a));
         e4_window(sc, x + w - 26, gf + 14, 16, 18, true, seed + 51, hex(0x1e3a2a));
         e4_rect(sc, x + w / 2 - 6, gf + 12, 12, 28, hex(0x5a3a2a));
-        e4_rect(sc, x - 12, gf - 10, 14, 2, hex(0x2a2a36));   // bracket
-        e4_rect(sc, x - 10, gf - 8, 12, 14, hex(0x8a3a2a));
-        e4_rect(sc, x - 9, gf - 7, 10, 12, hex(0xe8c868));
-        e4_rect(sc, x - 6, gf - 4, 4, 6, hex(0x8a3a2a));
+        int sy = base - h + 30;                                 // hanging sign, high on a bracket
+        e4_rect(sc, x - 12, sy, 14, 2, hex(0x2a2a36));
+        e4_rect(sc, x - 10, sy + 2, 12, 14, hex(0x8a3a2a));
+        e4_rect(sc, x - 9, sy + 3, 10, 12, hex(0xe8c868));
+        e4_rect(sc, x - 6, sy + 6, 4, 6, hex(0x8a3a2a));
     }
 }
-static void e4_lamp(Scene& sc, int x, int base)
+// Street lamps differ per instance: post height, paint, single lantern or a two-arm bracket.
+static void e4_lamp(Scene& sc, int x, int base, int seed)
 {
-    const Col iron = hex(0x2e4a46), ironL = hex(0x4a6a62);
+    const bool green = rnd(seed, 0, 520) < 0.6f;
+    const Col iron = green ? hex(0x2e4a46) : hex(0x34364a), ironL = green ? hex(0x4a6a62) : hex(0x50546a);
+    const int ph = 44 + (int)(rnd(seed, 1, 520) * 14);       // post height
+    const bool twin = rnd(seed, 2, 520) < 0.35f;
     e4_rect(sc, x - 3, base - 6, 7, 6, iron);
-    e4_rect(sc, x - 1, base - 52, 3, 46, iron);
-    e4_rect(sc, x - 1, base - 52, 1, 46, ironL);
-    e4_rect(sc, x - 4, base - 54, 9, 2, iron);
-    e4_rect(sc, x - 3, base - 64, 7, 10, hex(0xf8e0a0));
-    e4_rect(sc, x - 3, base - 64, 2, 10, hex(0xfff4d0));
-    e4_rect(sc, x - 4, base - 66, 9, 2, iron);
-    e4_rect(sc, x - 2, base - 68, 5, 2, iron);
-    e4_rect(sc, x, base - 70, 1, 2, iron);
-    e4_rect(sc, x - 6, base - 46, 13, 1, iron);   // ladder bar
+    e4_rect(sc, x - 1, base - ph, 3, ph - 6, iron);
+    e4_rect(sc, x - 1, base - ph, 1, ph - 6, ironL);
+    if (rnd(seed, 3, 520) < 0.5f) e4_rect(sc, x - 6, base - ph + 6, 13, 1, iron);   // ladder bar
+    auto lantern = [&](int lx, int ly) {
+        e4_rect(sc, lx - 4, ly, 9, 2, iron);
+        e4_rect(sc, lx - 3, ly - 10, 7, 10, hex(0xf8e0a0));
+        e4_rect(sc, lx - 3, ly - 10, 2, 10, hex(0xfff4d0));
+        e4_rect(sc, lx - 4, ly - 12, 9, 2, iron);
+        e4_rect(sc, lx - 2, ly - 14, 5, 2, iron);
+        e4_rect(sc, lx, ly - 16, 1, 2, iron);
+    };
+    if (twin) {
+        e4_rect(sc, x - 9, base - ph - 1, 19, 2, iron);
+        e4_rect(sc, x - 9, base - ph - 1, 19, 1, ironL);
+        lantern(x - 9, base - ph + 9);
+        lantern(x + 9, base - ph + 9);
+        e4_rect(sc, x - 9, base - ph + 1, 1, 0 + 8, iron);
+        e4_rect(sc, x + 9, base - ph + 1, 1, 8, iron);
+        e4_rect(sc, x - 1, base - ph - 6, 3, 5, iron);
+    } else {
+        lantern(x, base - ph);
+    }
 }
-static void e4_bench(Scene& sc, int x, int base)
+static void e4_bench(Scene& sc, int x, int base, int seed = 0)
 {
-    const Col wood = hex(0xa86a3a), woodL = hex(0xc88a50), iron = hex(0x2e3440);
-    e4_rect(sc, x, base - 16, 26, 2, woodL);
-    e4_rect(sc, x, base - 13, 26, 2, wood);
-    e4_rect(sc, x - 1, base - 8, 28, 2, woodL);
-    e4_rect(sc, x - 1, base - 6, 28, 1, hex(0x6a4030));
+    const bool green = rnd(seed, 0, 525) < 0.4f;
+    const Col wood = green ? hex(0x3a7a52) : hex(0xa86a3a), woodL = green ? hex(0x5a9a6a) : hex(0xc88a50), iron = hex(0x2e3440);
+    const int L = 22 + (int)(rnd(seed, 1, 525) * 10);
+    e4_rect(sc, x, base - 16, L, 2, woodL);
+    e4_rect(sc, x, base - 13, L, 2, wood);
+    e4_rect(sc, x - 1, base - 8, L + 2, 2, woodL);
+    e4_rect(sc, x - 1, base - 6, L + 2, 1, mul(wood, 0.6f));
     e4_rect(sc, x + 2, base - 16, 2, 16, iron);
-    e4_rect(sc, x + 22, base - 16, 2, 16, iron);
+    e4_rect(sc, x + L - 4, base - 16, 2, 16, iron);
 }
 static void e4_station(Scene& sc, int x, int base, int w)
 {
@@ -607,7 +637,7 @@ static void e4_station(Scene& sc, int x, int base, int w)
     int h = 90;
     // hipped slate roof
     for (int r = 0; r < 18; ++r) e4_rect(sc, x + 18 - r, base - h - 18 + r, w - 36 + 2 * r, 1, r % 4 == 0 ? hex(0x7a849c) : hex(0x5e6680));
-    e4_rect(sc, x + w / 2 - 8, base - h - 34, 16, 18, sand);   // clock tower
+    e4_rect(sc, x + w / 2 - 8, base - h - 34, 16, 20, sand);   // clock tower
     e4_rect(sc, x + w / 2 + 4, base - h - 34, 4, 18, sandD);
     sc.tri(x + w / 2 - 10.f, base - h - 34.f, x + w / 2 + 10.f, base - h - 34.f, x + w / 2.f, base - h - 48.f, hex(0x5e6680));
     sc.disc(x + w / 2.f, base - h - 26.f, 5, 5, trim, trim, false);
@@ -626,10 +656,11 @@ static void e4_station(Scene& sc, int x, int base, int w)
     }
     // the sign board
     const char* nm = "STATION";
-    int bw = e4_textW(nm) + 10;
-    e4_rect(sc, x + (w - bw) / 2, base - h + 36, bw, 10, hex(0x2a3a6a));
-    e4_rect(sc, x + (w - bw) / 2, base - h + 36, bw, 1, hex(0x5a6a9a));
-    e4_text(sc, x + (w - e4_textW(nm)) / 2, base - h + 39, nm, hex(0xf4ecd8));
+    int bw = e4_textW(nm) + 10, sby = base - h - 15;
+    e4_rect(sc, x + (w - bw) / 2 - 1, sby - 1, bw + 2, 12, trim);
+    e4_rect(sc, x + (w - bw) / 2, sby, bw, 10, hex(0x2a3a6a));
+    e4_rect(sc, x + (w - bw) / 2, sby, bw, 1, hex(0x5a6a9a));
+    e4_text(sc, x + (w - e4_textW(nm)) / 2, sby + 3, nm, hex(0xf4ecd8));
     // under the canopy: shade, doors and a timetable board
     int cy = base - 34;
     e4_rect(sc, x - 20, cy, w + 40, 34, mixc(hex(0x6a5a5a), hex(0x3a3a6a), 0.25f));
@@ -656,8 +687,8 @@ static void e4_station(Scene& sc, int x, int base, int w)
         e4_rect(sc, px - 3, cy + 3, 7, 2, hex(0x2f7a56));
         e4_rect(sc, px - 2, base - 3, 5, 3, hex(0x2f7a56));
     }
-    e4_bench(sc, x + 8, base);
-    e4_bench(sc, x + w - 34, base);
+    e4_bench(sc, x + 8, base, 1);
+    e4_bench(sc, x + w - 36, base, 2);
 }
 
 static void e4_near(Scene& sc)
@@ -672,40 +703,43 @@ static void e4_near(Scene& sc)
     const E4Wall blue{hex(0xa4c4c8), hex(0x84a0b0), hex(0xf4f0e4), false};
     const E4Wall pink{hex(0xe0aaa0), hex(0xbc8a8a), hex(0xf8eee0), false};
 
+    // The camera opens on roughly x 120..810 of this layer, so the signed shops sit fully inside
+    // that span or fully outside it, never across the start view's edges or the tile seam.
     // trees behind the buildings first, so the roofs cut in front of them
-    e4_tree(sc, (int)(W * 0.03f), base - 4, 50, 3, 11, L, tl, td, 3);
-    e4_tree(sc, (int)(W * 0.262f), base - 2, 52, 0, 12, L, tl, td, 3);
-    e4_pine(sc, (int)(W * 0.30f), base, 110, 26, 13, L, td, 3);
-    e4_tree(sc, (int)(W * 0.59f), base - 2, 50, 2, 14, L, tl, td, 3);
-    e4_tree(sc, (int)(W * 0.935f), base - 2, 54, 1, 15, L, tl, td, 3);
+    e4_tree(sc, 40, base - 4, 50, 3, 11, L, tl, td, 1);
+    e4_tree(sc, 392, base - 2, 46, 0, 12, L, tl, td, 1);
+    e4_pine(sc, 446, base, 104, 24, 13, L, td, 1);
+    e4_tree(sc, 722, base - 2, 50, 2, 14, L, tl, td, 1);
+    e4_pine(sc, 818, base, 86, 20, 16, L, td, 1);
+    e4_tree(sc, 1168, base - 2, 54, 1, 15, L, tl, td, 1);
 
     // a row of shops on the left
-    e4_building(sc, (int)(W * 0.07f), base, 74, 112, 21, brick, "BAKERY", 0);
-    e4_building(sc, (int)(W * 0.07f) + 76, base, 64, 96, 22, cream, nullptr, 1);
-    e4_building(sc, (int)(W * 0.07f) + 142, base, 70, 120, 23, blue, "CAFE", 0);
+    e4_building(sc, 150, base, 74, 112, 21, brick, "BAKERY", 0);
+    e4_building(sc, 226, base, 64, 96, 22, cream, nullptr, 1);
+    e4_building(sc, 292, base, 70, 120, 23, blue, "CAFE", 0);
     // the station
-    e4_station(sc, (int)(W * 0.36f), base, 150);
+    e4_station(sc, 520, base, 150);
     // high street on the right
-    e4_building(sc, (int)(W * 0.65f), base, 72, 104, 31, sandW, "THE RAILWAY", 2);
-    e4_building(sc, (int)(W * 0.65f) + 74, base, 62, 118, 32, brick, nullptr, 1);
-    e4_building(sc, (int)(W * 0.65f) + 138, base, 76, 100, 33, pink, "CHEMIST", 0);
+    e4_building(sc, 876, base, 72, 104, 31, sandW, "THE RAILWAY", 2);
+    e4_building(sc, 950, base, 62, 118, 32, brick, nullptr, 1);
+    e4_building(sc, 1014, base, 76, 100, 33, pink, "CHEMIST", 0);
 
-    // street furniture and hedges along the pavement
-    int lamps[6] = {(int)(W * 0.05f), (int)(W * 0.24f), (int)(W * 0.33f), (int)(W * 0.56f), (int)(W * 0.63f), (int)(W * 0.89f)};
-    for (int lx : lamps) e4_lamp(sc, lx, base);
-    e4_hedge(sc, (int)(W * 0.215f), base, 50, 16, 81, L, 2);
-    e4_hedge(sc, (int)(W * 0.505f), base, 60, 14, 82, L, 2);
-    e4_hedge(sc, (int)(W * 0.84f), base, 70, 18, 83, L, 2);
-    e4_hedge(sc, (int)(W * 0.975f), base, 40, 14, 84, L, 2);
-    e4_bench(sc, (int)(W * 0.60f), base);
-    e4_bench(sc, (int)(W * 0.86f), base);
+    // street furniture and hedges along the pavement; lamps at uneven gaps
+    const int lamps[7] = {22, 136, 372, 474, 708, 852, 1122};
+    for (int i = 0; i < 7; ++i) e4_lamp(sc, lamps[i], base, 60 + i);
+    e4_hedge(sc, 380, base, 34, 15, 81, L, 1);
+    e4_hedge(sc, 690, base, 56, 14, 82, L, 1);
+    e4_hedge(sc, 1100, base, 64, 18, 83, L, 1);
+    e4_hedge(sc, 1210, base, 46, 13, 84, L, 1);
+    e4_bench(sc, 742, base, 7);
+    e4_bench(sc, 1140, base, 8);
     // a post box and a telephone box
     {
-        int px = (int)(W * 0.316f);
+        int px = 360;
         e4_rect(sc, px, base - 18, 8, 18, hex(0xc8382e));
         e4_rect(sc, px - 1, base - 20, 10, 3, hex(0xa82a26));
         e4_rect(sc, px + 2, base - 14, 4, 1, hex(0x2a2a36));
-        int bx = (int)(W * 0.62f) + 6;
+        int bx = 784;
         e4_rect(sc, bx, base - 40, 14, 40, hex(0xc8382e));
         e4_rect(sc, bx + 11, base - 40, 3, 40, hex(0x9a2a26));
         e4_rect(sc, bx - 1, base - 43, 16, 3, hex(0xa82a26));
