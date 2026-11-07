@@ -1,6 +1,14 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 16:20
+Updated: 2026-11-07 16:40
+
+## 2026-11-07 16:40: easier controls, modern final stage, new era 4 "modern day"
+- Controls: jump also on W / Up; double jump, wall jump, glide and ground pound need no extra button; ability button only for dash and time-slow; no combos; more forgiving jump (all in config.ini). PLAY.md and title control lines updated.
+- Era 3 (2.5D): calmer modern look: one warm/cool palette, soft lighting, contact shadows, landing dust, gentle bloom. Only era 3 art regenerated.
+- New era 4 "MODERN DAY . NOW": 5 eras now. New render/ModernLook + modern_* shaders, own art (tools/assetgen/Era4Art.cpp), sound (Era4Sound.cpp), 3 levels + intro_era4. Ending after era 4. memory_4 = "The video calls", Home moved to memory_5.
+- All merged and built; each era 0 to 4 runs headless without errors. Not yet played by a human.
+- Known: autoplay bots struggle with the era 3 boss, so a full bot run to the ending was not confirmed with the boss on.
+- Files from Sohan's Claude edited: Renderer, Hud, Game, Audio, GameCamera, ArtSpec, Art, SpriteGen, SoundGen, post.fs, player/*, config.ini, strings.txt, PLAY.md.
 
 ## 2026-11-07 16:20: first stage (1-bit) easier on the eyes
 - Fixed a sampling bug in assets/shaders/post.fs (era 0 branch only) which smeared every edge into random dots. Softer two-tone colours, gentler LCD grid.

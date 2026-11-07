@@ -17,17 +17,22 @@ Linux needs the X11/GL dev packages raylib lists (libx11-dev libxrandr-dev libxi
 | | Player 1 (Gran, orange) | Player 2 (Sam, blue) | Gamepad |
 |---|---|---|---|
 | Move | A / D | Left / Right | stick or d-pad |
-| Jump (hold to glide in 2.5D) | Space | Right Ctrl or Enter | A |
-| Attack (from 8-bit on) | F | Right Shift | X |
-| Ability | G | / | B or RB |
-| Second ability | S + G | Down + / | down + B |
+| Jump | W or Space | Up (or Right Ctrl, Enter) | A |
+| Attack (from 8-bit on) | F | . or Right Shift | X |
+| Ability (dash, time-slow) | G | / | B or RB |
 | Pause | Esc or P | | Start |
 
-Player 2 joins at any time by pressing one of their buttons. Keys are set in `assets/config.ini` under `[input]`.
+No two-key combos. Movement abilities use the jump button and down:
+- Double jump (P1, 8-bit): press jump again in the air.
+- Ground pound (P1, 16-bit): press down (S, Down arrow, or down on the pad) in the air.
+- Glide (P1, 2.5D): hold jump while falling.
+- Dash (P2, 8-bit): press Ability. Dashes the way you face.
+- Wall jump (P2, 16-bit): press jump against a wall (or just after leaving it).
+- Time-slow pulse (P2, 2.5D): press Ability while standing still on the ground. Moving or in the air, Ability dashes.
 
-Abilities: P1 gets double jump (8-bit), ground pound (16-bit, Ability in the air) and glide (2.5D, hold jump).
-P2 gets dash (8-bit, Ability), wall jump (16-bit, jump against a wall) and the time-slow pulse (2.5D, Down + Ability).
 Playing alone, Player 1 gets both sets so every chunk can be passed.
+Player 2 joins at any time by pressing one of their buttons. Keys and jump feel (coyote time, jump buffer,
+air control, gravity) are set in `assets/config.ini` under `[input]` and `[player]`.
 
 ## How a run goes
 1. Run right. Jump on the creatures of the Forgetting. They drop memory fragments that fill the Memory Bar.
