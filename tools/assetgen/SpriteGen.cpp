@@ -683,12 +683,14 @@ void drawPlayer(Canvas& c, int who, int frame)
     if (g_era == 0) { drawPlayer1bit(c, gran, frame); return; }
     const int e = g_era;
     Pose p = playerPose(frame);
-    // Gran's hair greys and she stoops a little more each stage; Sam grows from a small child
-    // (4-shade) through a teenager (16-bit) to a grown man (2.5D).
-    const uint32_t granHair[ERA_COUNT] = {0, 0x5a4a44, 0x5a5468, 0x9a92a0, 0xc4c0d0, 0xe0dcea, 0xe8e6f0};
-    const float granHead[ERA_COUNT] = {0, 0.27f, 0.26f, 0.235f, 0.215f, 0.2f, 0.2f};
-    const float stoop[ERA_COUNT] = {0, 0, 0.015f, 0.03f, 0.045f, 0.06f, 0.06f};
-    const float samSize[ERA_COUNT] = {0, 0.78f, 0.8f, 0.88f, 0.95f, 1.0f, 1.0f};
+    // The run goes back through Maren's life while the graphics go forward: she is an old
+    // shopkeeper with white hair and glasses in the 4-shade stage, a mother, a bride, an
+    // apprentice of fifteen, then a small girl in the last two stages. Wren is always ten.
+    const uint32_t granHair[ERA_COUNT] = {0, 0xe0dcea, 0x8a7a74, 0x6a4632, 0x7a4a2c, 0x7a4a2c, 0x7a4a2c};
+    const float granHead[ERA_COUNT] = {0, 0.24f, 0.235f, 0.22f, 0.215f, 0.2f, 0.2f};
+    const float stoop[ERA_COUNT] = {0, 0.06f, 0.02f, 0, 0, 0, 0};
+    const float marenSize[ERA_COUNT] = {1, 1, 1, 1, 0.94f, 0.78f, 0.74f};
+    const float wrenSize = 0.8f;
 
     Col skin = pc(gran ? 0xf2c29b : 0xe9b58c, 3);
     Col top = gran ? pc(0xf08a24, 1) : pc(0x3c8cf0, 2);
@@ -698,17 +700,16 @@ void drawPlayer(Canvas& c, int who, int frame)
     Col hair = gran ? pc(granHair[e], 2) : pc(0x6b3e22, 0);
     Col cap = pc(0x22c4b0, 1);
     Col ink = pc(0x1c1420, 0);
-    if (e == 2) { hair = gran ? hex(0x5a5468) : hex(0x8c4a2f); cap = hex(0x1e8a4c); }
+    if (e == 2) { hair = gran ? hex(0x8a7a74) : hex(0x8c4a2f); cap = hex(0x1e8a4c); }
     if (e == 3) cap = hex(0x4a9a3a);
 
     float hr = granHead[e], st = gran ? stoop[e] : 0.0f;
-    if (!gran) {
-        float k = samSize[e];
+    float k = gran ? marenSize[e] : wrenSize;
+    if (k < 1.0f) {
         c.tk = k;
         c.tox = 0.5f * (1 - k);
         c.toy = 1.49f * (1 - k);
         hr = granHead[e] * (1.0f + (1.0f - k) * 0.9f);   // children have bigger heads for their size
-        if (e >= 5) hr = 0.19f;
     }
     const int tp = TILE_PX[e];
     const int eyePx = tp >= 64 ? 3 : (tp >= 32 ? 2 : 1);
@@ -779,15 +780,15 @@ void drawPlayer(Canvas& c, int who, int frame)
     if (gran) {
         c.ellipse(hx - hr * 0.64f, hy + hr * 0.02f, hr * 0.42f, hr * 0.66f, lit(hair));   // back of the hair
         c.ellipse(hx - hr * 0.32f, hy - hr * 0.66f, hr * 0.8f, hr * 0.44f, lit(hair));    // top
-        c.circle(hx - hr * 0.62f, hy - hr * 0.98f, hr * 0.36f, lit(hair));                // bun
+        if (e <= 3) c.circle(hx - hr * 0.62f, hy - hr * 0.98f, hr * 0.36f, lit(hair));    // bun
+        else c.ellipse(hx - hr * 1.02f, hy + hr * 0.1f, hr * 0.26f, hr * 0.5f, lit(hair));   // plait
     } else {
         c.ellipse(hx - hr * 0.64f, hy + hr * 0.0f, hr * 0.42f, hr * 0.58f, lit(hair));
         c.rect(hx - hr * 1.02f, hy - hr * 1.12f, hr * 1.86f, hr * 0.7f, lit(cap), hr * 0.32f);   // cap
         c.rect(hx + hr * 0.3f, hy - hr * 0.6f, hr * 0.98f, hr * 0.24f, solid(farSide(cap)), hr * 0.1f);   // brim
-        if (e >= 5) c.rect(hx + hr * 0.05f, hy + hr * 0.62f, hr * 0.5f, hr * 0.2f, solid(farSide(hair)), hr * 0.08f);   // stubble
     }
     // face: one dark eye, then glasses for Gran, a mouth and cheek from 16-bit on
-    if (gran && e >= 3) {   // glasses: a thin rim over the eye and the arm back to the ear
+    if (gran && e >= 1 && e <= 2) {   // reading glasses, while she is old: a thin rim over the eye and the arm back to the ear
         Col frameC = pc(0x3a2a3a, 0);
         c.rect(ex - 1.0f / tp, ey - (eyePx + 1.0f) / tp, (eyePx + 2.0f) / tp, 1.0f / tp, solid(frameC));
         c.rect(hx - hr * 0.3f, ey - (eyePx + 1.0f) / tp, hr * 0.62f, 1.0f / tp, solid(frameC));

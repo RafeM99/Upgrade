@@ -3,6 +3,15 @@
 Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`, built on Sohan's
 `claude-sohan-upgrade` (c349652), which builds on Rafale's cloud Claude's game. Nothing pushed to main.
 
+## 2026-11-07 (night): merged Sohan's new story into my branch (PR #5)
+
+- Merged main ("The Four Minutes") into my branch. Hud.cpp keeps the per-stage HUD and now shows
+  the story line in its banner box; the hint is spoken by player 1 by name (Maren).
+- Sprites follow the story: Maren gets younger each stage (white hair and glasses in 4-shade,
+  a small girl with plaits by 2.5D and 3D); Wren is ten in every stage. Same in Models3D.
+- Not done: background scenes still show my places (garden, town...), not the story's places
+  (shop, harbour, wedding, apprentice, long winter, millpond).
+
 ## 2026-11-07 (evening): engineer's review, worked through with helpers
 
 raf forwarded a graphics engineer's review (stages looked AI-made). Done, in its fix order:

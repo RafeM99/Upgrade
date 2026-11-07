@@ -390,13 +390,15 @@ void Models3D::drawPlayer(Game& g, int p)
     };
     Color skin = col(gran ? 0xf2c29b : 0xe9b58c), top = col(gran ? 0xf08a24 : 0x3c8cf0);
     Color legs = col(gran ? 0x6b4a3a : 0x2b3f6b), shoes = col(gran ? 0x4a2e22 : 0xf4f4f4);
-    Color hair = col(gran ? 0xdcd8ea : 0x6b3e22), dark = col(0x1c1420);
+    // at the millpond Maren is a small girl with brown plaits; Wren, ten, is a little taller
+    Color hair = col(gran ? 0x7a4a2c : 0x6b3e22), dark = col(0x1c1420);
+    const float k = gran ? 0.74f : 0.8f;
 
     float yaw = pl.facing > 0 ? -0.52f : PI + 0.52f;
     float lean = 0;
     if (pl.dashTime > 0) lean = -0.35f;
     float crouch = pl.pounding ? 0.12f : 0.0f;
-    Matrix root = then(then(MatrixRotateZ(lean), MatrixRotateY(yaw)), T(pl.cx(), Y3(pl.bottom()) - crouch * 0.5f, 0.2f));
+    Matrix root = then(then(then(S(k, k, k), MatrixRotateZ(lean)), MatrixRotateY(yaw)), T(pl.cx(), Y3(pl.bottom()) - crouch * 0.5f, 0.2f));
     auto at = [&](Matrix local) { return then(local, root); };
 
     // walk cycle
@@ -450,9 +452,8 @@ void Models3D::drawPlayer(Game& g, int p)
         part(sphere_, at(then(S(0.025f, 0.035f, 0.025f), T(0.19f, hy + 0.04f, e * 0.08f))), dark);
     if (gran) {
         part(sphere_, at(then(S(0.22f, 0.17f, 0.22f), T(-0.03f, hy + 0.08f, 0))), hair);
-        part(sphere_, at(then(S(0.1f, 0.09f, 0.1f), T(-0.1f, hy + 0.25f, 0))), hair);    // bun
-        for (int e = -1; e <= 1; e += 2)   // glasses
-            part(torus_, at(then(then(S(0.035f, 0.035f, 0.035f), MatrixRotateZ(PI / 2)), T(0.2f, hy + 0.04f, e * 0.08f))), dark);
+        for (int e = -1; e <= 1; e += 2)   // plaits
+            part(cyl_, at(then(S(0.045f, 0.2f, 0.045f), T(-0.12f, hy - 0.22f, e * 0.17f))), hair);
     } else {
         part(sphere_, at(then(S(0.22f, 0.15f, 0.22f), T(-0.04f, hy + 0.06f, 0))), hair);
         Color cap = col(0x22c4b0);
