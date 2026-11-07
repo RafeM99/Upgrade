@@ -3,7 +3,7 @@
 //
 // Build:  cmake --build build --target levelcheck
 // Run:    ./build/levelcheck                 every chunk in assets/chunks
-//         ./build/levelcheck --chunk c06_double [-v]
+//         ./build/levelcheck --chunk c06_double [-v] [--stats]
 //         ./build/levelcheck --generated 200 every stage tier 0..3 of generateChunk(), 200 seeds each
 //         ./build/levelcheck --two           also try each player alone in two-player mode (warnings)
 // Exit code: 0 when everything passes, 1 when anything fails.
@@ -24,9 +24,15 @@
 //   F         every fragment: the player box can get within 1 tile of it on a path that can still
 //             reach the exit.
 //   P         every power-up: the player box can touch it on such a path.
-//   enemies   box inside solid tiles; walkers (S B a b) floating with no floor, or falling out of
-//             the level; walkers with no room to walk; brutes (B, 1.5 x 1.8) too big for the space.
+//   enemies   the box an enemy keeps clear of the terrain (its hitbox grown like enemyTerrainBox
+//             in src/enemies/Enemy.cpp) overlaps solid tiles; walkers (S B a b) floating with no
+//             floor, or falling out of the level; walkers with no room to walk; brutes (B) too big.
+//   crawl     a single empty row between the floor and a solid tile above, longer than one tile
+//             (cells under a "#.#" desk count together): enemies fit, the 1.3-tall player does not.
+//   pit       a 1-wide hole straight out of the bottom of the level between two floors.
 //   ends      bottom row at the first and last column is ground, so chunks join up.
+// A soft-lock is only reported where no state on the same spot (within 0.1 tile, at any speed)
+// can still reach the exit, so landing somewhere running the wrong way does not count.
 // Abilities come from the chunk header: the earliest stage it can be placed in (min_era,
 // min_stage, stages=, difficulty, requires) and everything unlocked by then; alone, Player 1 has
 // both players' abilities. Co-op chunks are checked for each player on their own (solo=false).
@@ -54,6 +60,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -305,7 +312,6 @@ struct Search {
         const bool walk = m.jump == 0 && m.a1 == A_NONE && m.wj == WJ_OFF;
         int hold = 0, frame = 0, still = 0, apexAt = -1, a1At = -1, sinceWj = 99, wjCount = 0, dirOverride = 0;
         int stage = m.a1 == A_NONE ? 2 : 0;   // 0 waiting for a1, 1 waiting for a2, 2 done
-        if (stage == 0 && m.a2 == A_NONE) {}
         bool glide = false, airborne = false, switched = false;
         int last = -2;
         std::vector<int> fr, pu;
@@ -377,6 +383,8 @@ struct Search {
             }
             touch(p, fr, pu);
             if (p.y > LEVEL_H + 1) { settle(DEATH); return r; }
+            // over the top of the level and off the left (behind the Forgetting) or the right end
+            if (p.x < 0 || p.x > T->level.endCol()) return r;
             if (!p.onGround) airborne = true;
             if (p.onGround) {
                 if (airborne) { settle(addNode(p, own ? maskOf(L) : n.mask)); return r; }
@@ -422,7 +430,8 @@ struct Search {
         };
         auto withWalls = [&](Macro m) {
             Result r = run(id, m);
-            if (wj && r.wall) {
+            // wall jumps from plain jumps and after a full double jump
+            if (wj && r.wall && (m.a1 == A_NONE || m.a1 == A_DJ_LONG) && (m.jump == 0 || m.jump == 8 || m.jump == 24)) {
                 m.wj = WJ_CLIMB; run(id, m);
                 m.wj = WJ_ZIGZAG; run(id, m);
             }
@@ -439,12 +448,12 @@ struct Search {
                 for (int J : jumps) {
                     Macro m;
                     m.d1 = d1; m.d2 = d2; m.jump = J;
-                    if (J == 0 && d1 != d2 && d2 != 0) {}   // walk then turn in the air: kept
                     Result base = withWalls(m);
                     if (!rich || a1s.empty() || (J != 0 && J != 8 && J != 24)) continue;
                     if (!base.airApex && J > 0) continue;
                     for (int a1 : a1s)
                         for (int t1 : {T_APEX, T_APEX12}) {
+                            if (t1 == T_APEX12 && a1 == A_DJ_SHORT) continue;
                             // second actions only after a full double jump or a dash at the top
                             std::vector<int> a2s = (t1 == T_APEX && (a1 == A_DJ_LONG || a1 == A_DASH)) ? seconds(a1) : std::vector<int>{A_NONE};
                             for (int a2 : a2s) {
@@ -479,6 +488,7 @@ struct Search {
             int id = queue.front();
             queue.pop_front();
             expand(id);
+            if (g_stats && id % 1000 == 999) std::fprintf(stderr, "    ... %d of %zu states expanded, %lld macros (last x=%.2f y=%.3f row=%d vx=%.1f)\n", id + 1, nodes.size(), sims, nodes.back().x, nodes.back().y, nodes.back().row, nodes.back().vx);
         }
         // backwards from the exit
         std::vector<std::vector<int>> rev(nodes.size());
@@ -509,8 +519,12 @@ struct Search {
 };
 
 // ------------------------------------------------------------------ enemies
-struct EnemyBox { float w, h; const char* name; };
-const EnemyBox BLOB{0.8f, 0.72f, "blob"}, FLYER{0.7f, 0.6f, "flyer"}, BRUTE{1.5f, 1.8f, "brute"};
+// The box each enemy keeps clear of the terrain: the hitbox from makeEnemy (blob 0.8 x 0.72, flyer
+// 0.7 x 0.6, brute 1.5 x 1.8, centred on the marker cell, bottom on its bottom) grown like
+// enemyTerrainBox in src/enemies/Enemy.cpp so the drawn sprite does not sink into the tiles.
+struct EnemyBox { float w, h, padBottom; const char* name; const char* size; };
+const EnemyBox BLOB{1.0f, 0.94f, 0.0f, "blob", "1.0 x 0.94"}, FLYER{1.0f, 0.84f, 0.12f, "flyer", "1.0 x 0.84"},
+               BRUTE{1.5f, 1.92f, 0.0f, "brute", "1.5 x 1.92"};
 
 bool solidE(const Level& L, float x, float y, float w, float h) { return boxHitsSolid(L, x, y, w, h, -1, false); }
 
@@ -561,16 +575,15 @@ void checkWalker(const Level& L, float x, float y, const EnemyBox& b, float spee
     if (maxX - minX < 0.5f) out.push_back(where + ": " + b.name + " has no room to walk (stuck)");
 }
 
-inline int yy_cap(int h) { return std::min(h, 3); }
-
 // ------------------------------------------------------------------ one chunk
 struct Report {
     std::string name;
     std::string head;
     std::vector<std::string> fails, warns;
     // for the generated summary
-    bool crawlFail = false, exitFail = false, softFail = false, fragFail = false, enemyFail = false, pupFail = false, endFail = false;
+    bool crawlFail = false, pitFail = false, exitFail = false, softFail = false, fragFail = false, enemyFail = false, pupFail = false, endFail = false;
     double seconds = 0;
+    std::vector<std::string> grid;   // generated chunks: the layout, to show with a failure
 };
 
 struct CheckOpts {
@@ -607,10 +620,22 @@ RunOut runPlayer(const TestLevel& T, int pid, bool solo, unsigned ab)
     for (auto& t : s.fragTouch) o.fragState.push_back(s.itemState(t));
     for (auto& t : s.pupTouch) o.pupState.push_back(s.itemState(t));
     if (o.exit) {
-        // group soft-lock states by row and column runs
-        std::map<int, std::set<int>> byRow;
+        // A state is a soft-lock only if no state at the same spot (within 0.1 tile, any speed)
+        // can still reach the exit: landing there running the wrong way is not a trap when a
+        // gentler landing on the same spot is fine.
+        std::set<std::tuple<int, int, uint64_t>> good;
         for (size_t i = 0; i < s.nodes.size(); ++i)
-            if (!s.coreach[i]) byRow[s.nodes[i].row].insert((int)std::floor(s.nodes[i].x + 0.35f));
+            if (s.coreach[i]) good.insert({(int)std::lround(s.nodes[i].x / g_quant), s.nodes[i].row, s.nodes[i].mask});
+        std::map<int, std::set<int>> byRow;
+        for (size_t i = 0; i < s.nodes.size(); ++i) {
+            if (s.coreach[i]) continue;
+            int xq = (int)std::lround(s.nodes[i].x / g_quant);
+            bool ok = false;
+            for (int d = -1; d <= 1 && !ok; ++d) ok = good.count({xq + d, s.nodes[i].row, s.nodes[i].mask}) > 0;
+            if (ok) continue;
+            byRow[s.nodes[i].row].insert((int)std::floor(s.nodes[i].x + 0.35f));
+            if (g_stats) std::fprintf(stderr, "    soft-lock state x=%.2f y=%.3f vx=%.1f mask=%llx\n", s.nodes[i].x, s.nodes[i].y, s.nodes[i].vx, (unsigned long long)s.nodes[i].mask);
+        }
         for (auto& [row, cols] : byRow) {
             int a = -1000, b = -1000;
             auto flush = [&]() {
@@ -711,16 +736,28 @@ Report checkChunk(const Chunk& c, int gridRows, int stage, unsigned ab, const Ch
         else continue;
         for (const auto& b : boxes) {
             std::string where = std::string(1, m.c) + " " + at(T, (int)m.x, (int)m.y);
-            float x = m.x + 0.5f - b.w / 2, y = m.y + 1.0f - b.h;
+            float x = m.x + 0.5f - b.w / 2, y = m.y + 1.0f + b.padBottom - b.h;
             if (solidE(T.level, x, y, b.w, b.h)) {
-                en.push_back(where + ": " + b.name + " box (" + (b.w == BRUTE.w ? "1.5 x 1.8" : b.w == BLOB.w ? "0.8 x 0.72" : "0.7 x 0.6") + ") is inside solid tiles");
+                en.push_back(where + ": " + b.name + " (" + b.size + ") overlaps solid tiles");
                 continue;
             }
-            if (walker) checkWalker(T.level, x, y, b, b.w == BRUTE.w ? 1.2f : 1.7f, en, where);
+            if (walker) checkWalker(T.level, x, y, b, &b == &BRUTE ? 1.2f : 1.7f, en, where);
         }
     }
     for (auto& e : en) R.fails.push_back(e);
     if (!en.empty()) R.enemyFail = true;
+
+    // 1-wide death pits: a single column with no floor at all between ground on both sides. The
+    // player (0.7 wide) drops into it just by walking slowly; nothing about it reads as a jump.
+    for (int x = T.x0 + 1; x < T.x0 + T.w - 1; ++x) {
+        bool bottomless = true;
+        for (int y = 0; y < LEVEL_H; ++y) if (T.level.solidFor(x, y, -1, false)) bottomless = false;
+        if (!bottomless) continue;
+        if (T.level.groundTop(x - 1) < 0 || T.level.groundTop(x + 1) < 0) continue;
+        if (std::abs(T.level.groundTop(x - 1) - T.level.groundTop(x + 1)) > 1) continue;
+        R.fails.push_back("pit x=" + std::to_string(x - T.x0) + ": a 1-wide hole straight down out of the level between two floors");
+        R.pitFail = true;
+    }
 
     // one-row crawl spaces: an empty cell with solid floor under it and a solid tile right above.
     // The player (1.3 tall) cannot get in, enemies (0.72 tall) can, so blobs hide where nobody can
@@ -733,7 +770,7 @@ Report checkChunk(const Chunk& c, int gridRows, int stage, unsigned ab, const Ch
             if (solid(x, y) || !solid(x, y + 1)) return 0;
             int h = 0;
             for (int yy = y; yy >= 0 && !solid(x, yy); --yy) ++h;
-            return yy_cap(h);
+            return std::min(h, 3);
         };
         int first = -1, lastLow = -1;
         auto flush = [&]() {
@@ -856,26 +893,31 @@ int main(int argc, char** argv)
             char nb[64];
             std::snprintf(nb, sizeof nb, "tier%d_seed%d", j.tier, j.seed);
             out[i].name = nb;
+            out[i].grid = c.rows;
         });
-        std::printf("\n%-6s %-6s %-8s %-8s %-10s %-10s %-9s %-9s %-6s %-6s\n", "tier", "chunks", "failed", "exit", "soft-lock", "fragment", "power-up", "enemy", "ends", "crawl");
+        std::printf("\n%-6s %-6s %-8s %-8s %-10s %-10s %-9s %-9s %-6s %-6s %-6s\n", "tier", "chunks", "failed", "exit", "soft-lock", "fragment", "power-up", "enemy", "ends", "crawl", "pit");
         for (int t = 0; t <= 3; ++t) {
-            int n = 0, f = 0, ex = 0, so = 0, fr = 0, pu = 0, en = 0, ends = 0, cr = 0;
+            int n = 0, f = 0, ex = 0, so = 0, fr = 0, pu = 0, en = 0, ends = 0, cr = 0, pt = 0;
             for (size_t i = 0; i < jobs.size(); ++i) {
                 if (jobs[i].tier != t) continue;
                 const Report& r = out[i];
                 ++n;
                 if (!r.fails.empty()) ++f;
-                ex += r.exitFail; so += r.softFail; fr += r.fragFail; pu += r.pupFail; en += r.enemyFail; ends += r.endFail; cr += r.crawlFail;
+                ex += r.exitFail; so += r.softFail; fr += r.fragFail; pu += r.pupFail; en += r.enemyFail; ends += r.endFail; cr += r.crawlFail; pt += r.pitFail;
             }
             auto pc = [&](int k) { static thread_local char b[12][32]; static thread_local int slot = 0; char* s = b[slot++ % 12]; std::snprintf(s, 32, "%d%%", n ? (int)std::lround(100.0 * k / n) : 0); return s; };
-            std::printf("%-6d %-6d %-8s %-8s %-10s %-10s %-9s %-9s %-6s %-6s\n", t, n, pc(f), pc(ex), pc(so), pc(fr), pc(pu), pc(en), pc(ends), pc(cr));
+            std::printf("%-6d %-6d %-8s %-8s %-10s %-10s %-9s %-9s %-6s %-6s %-6s\n", t, n, pc(f), pc(ex), pc(so), pc(fr), pc(pu), pc(en), pc(ends), pc(cr), pc(pt));
             failed += f;
         }
         std::printf("\nFirst failures per tier (seed = std::mt19937 seed passed to generateChunk):\n");
         for (int t = 0; t <= 3; ++t) {
             int shown = 0;
             for (size_t i = 0; i < jobs.size() && shown < (opt.verbose ? 1000 : 3); ++i)
-                if (jobs[i].tier == t && !out[i].fails.empty()) { printReport(out[i], opt.verbose); ++shown; }
+                if (jobs[i].tier == t && !out[i].fails.empty()) {
+                    printReport(out[i], opt.verbose);
+                    for (auto& row : out[i].grid) std::printf("         %s\n", row.c_str());
+                    ++shown;
+                }
         }
     } else {
         std::vector<Chunk> pool;
