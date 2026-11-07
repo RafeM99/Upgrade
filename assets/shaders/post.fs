@@ -18,6 +18,7 @@ uniform float flash;    // 0..1 white flash for era transitions
 uniform float desat;    // 0..1 greyscale for "memory lost"
 uniform float mosaic;   // >= 1: source pixels per block, for the transition
 uniform float glitch;   // 0..1: torn scanlines as the old era shuts down
+uniform float beat;     // 0..1: peaks on each beat of the music (akshat), a Geometry-Dash-style pulse
 uniform vec3 palette[16];
 out vec4 finalColor;
 
@@ -73,7 +74,7 @@ void main()
         }
         c = bc;
         // CRT: dark gaps between pixel rows, a touch of phosphor glow in the middle
-        if (fine) c *= mix(0.68, 1.06, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
+        if (fine) c *= mix(0.84, 1.04, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
         c *= mix(0.82, 1.0, vig);
     } else if (era == 2) {
         c = floor(c * 31.0 + 0.5) / 31.0;
@@ -97,6 +98,7 @@ void main()
         c = mix(c, c * vec3(1.06, 1.0, 0.92), 0.6);   // warm grading
         c *= mix(0.7, 1.0, vig);
     }
+    c *= 1.0 + beat * (era == 0 ? 0.04 : 0.07);
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);
     c = mix(c, vec3(1.0), clamp(flash, 0.0, 1.0));

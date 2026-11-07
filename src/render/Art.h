@@ -5,6 +5,7 @@
 
 struct EraArt {
     Texture2D player[2]{}, blob{}, flyer{}, brute{}, boss{}, tiles{}, wall{};
+    Texture2D bossKind[2]{};   // akshat: Alarm Clock, Hourglass
     Texture2D bg[art::BG_LAYERS]{};
 };
 

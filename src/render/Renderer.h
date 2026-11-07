@@ -19,8 +19,8 @@ public:
     Rectangle screenRect() const;               // where the game image sits in the window
 
     // Transition timeline, shared with Game so the sweep and the era switch line up.
-    static constexpr float kSwitchAt = 0.8f;    // seconds into the transition: era changes here
-    static constexpr float kSweepTime = 1.5f;   // the scanline crosses the screen in this long
+    static constexpr float kSwitchAt = 0.35f;   // seconds into the transition: era changes here
+    static constexpr float kSweepTime = 1.1f;   // the scanline crosses the screen in this long
     static float sweepProgress(const Game& g);  // 0..1, or -1 when no sweep is on screen
 
 private:
@@ -28,7 +28,7 @@ private:
     int rtW_[4] = {}, rtH_[4] = {};
     Shader post_{}, world_{};
     int locEra_ = -1, locTime_ = -1, locSize_ = -1, locOut_ = -1, locFlash_ = -1, locDesat_ = -1, locPal_ = -1;
-    int locMosaic_ = -1, locGlitch_ = -1;
+    int locMosaic_ = -1, locGlitch_ = -1, locBeat_ = -1;
     int renderEra_ = 0;
     int oldEra_ = -1;                            // also drawn this frame (transition), or -1
     void ensureTargets();

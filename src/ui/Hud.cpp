@@ -143,7 +143,7 @@ void Hud::drawPlaying(Game& g)
     // boss health
     if (g.boss.active && g.boss.state != 5) {
         float w = 360, x = 640 - w / 2, y = 98;
-        text(T("boss_name"), 640, y - 2, 14, hexc(0xe0b0ff), true);
+        text(T("boss_name_" + std::to_string(g.boss.kind)), 640, y - 2, 14, hexc(0xe0b0ff), true);
         DrawRectangleRec(R(x, y + 16, w, 10), fade(BLACK, 0.7f));
         DrawRectangleRec(R(x, y + 16, w * g.boss.hp / (float)g.boss.maxHp, 10), hexc(0xb050d0));
         if (g.boss.state == 3) text(T("boss_hint"), 640, y + 32, 14, fade(WHITE, 0.6f + 0.4f * std::sin(g.time * 8)), true);

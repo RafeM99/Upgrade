@@ -1,6 +1,7 @@
 #include "render/Renderer.h"
 #include "core/Game.h"
 #include "core/Paths.h"
+#include "core/Config.h"
 #include "render/ArtSpec.h"
 #include "rlgl.h"
 
@@ -157,6 +158,7 @@ void Renderer::init()
     locMosaic_ = GetShaderLocation(post_, "mosaic");
     locGlitch_ = GetShaderLocation(post_, "glitch");
     locDesat_ = GetShaderLocation(post_, "desat");
+    locBeat_ = GetShaderLocation(post_, "beat");
     locPal_ = GetShaderLocation(post_, "palette");
     float pal[48];
     for (int i = 0; i < 16; ++i) {
@@ -375,7 +377,19 @@ void Renderer::drawEra(Game& g, int era, float swing)
     // ---- boss
     if (g.boss.active) {
         const Boss& b = g.boss;
-        if (b.aiming()) {   // warning marker where it will land
+        if (b.aiming() && b.chargeAttack()) {   // warning lane for a charge (akshat)
+            float k = b.state == 6 ? 0.5f + 0.5f * std::sin(g.time * 20) : 0.6f;
+            Color wc = era == 0 ? Color{235, 235, 225, (unsigned char)(160 * k)} : Color{255, 70, 90, (unsigned char)(140 * k)};
+            float ly = (b.state == 6 ? b.toY : b.y);
+            solidQuad(g.cam.left() - 2, ly - 0.9f, g.cam.right() - g.cam.left() + 4, 0.12f, 0.3f, wc);
+            solidQuad(g.cam.left() - 2, ly + 0.8f, g.cam.right() - g.cam.left() + 4, 0.12f, 0.3f, wc);
+            for (int i = 0; i < 6; ++i) {   // arrows pointing the way it will go
+                float ax = g.cam.left() + std::fmod(i * 4.0f - g.time * 10.0f, g.cam.right() - g.cam.left() + 4) ;
+                if (ax < g.cam.left()) ax += g.cam.right() - g.cam.left() + 4;
+                solidQuad(ax, ly - 0.15f, 0.8f, 0.3f, 0.3f, wc);
+                solidQuad(ax - 0.3f, ly - 0.05f, 0.3f, 0.1f, 0.3f, wc);
+            }
+        } else if (b.aiming()) {   // warning marker where it will land
             float k = b.state == 6 ? 0.5f + 0.5f * std::sin(g.time * 20) : 1.0f;
             Color wc = era == 0 ? Color{235, 235, 225, (unsigned char)(255 * k)} : Color{255, 70, 90, (unsigned char)(255 * k)};
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 1.3f, wc);
@@ -383,10 +397,13 @@ void Renderer::drawEra(Game& g, int era, float swing)
             solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
         }
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
+        if (fr == XF_FLOAT0 + ((int)(b.t * 4) % 2) && (b.kind == BK_ALARM || b.charging))
+            fr = (b.state == 6 || b.state == 2) ? XF_FLOAT1 : XF_FLOAT0;   // crouch / charge pose
+        const Texture2D& bt = A.bossKind[std::min(1, std::max(0, b.kind))];
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
-        quad(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        quad(bt, frameRect(bt, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
     }
 
     // ---- players
@@ -473,6 +490,8 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locGlitch_, &glitch, SHADER_UNIFORM_FLOAT);
+    float beat = g.screen == Screen::Playing ? g.audio.beatPulse() * config().f("audio.beat_pulse", 1.0f) : 0.0f;
+    SetShaderValue(post_, locBeat_, &beat, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(post_);
     DrawTexturePro(rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, {0, 0}, 0, WHITE);
     EndShaderMode();
@@ -513,17 +532,17 @@ void Renderer::present(Game& g, float flash, float desat)
     // Before the switch: the old era powers down, going blocky and torn.
     if (g.transActive && !g.transSwitched) {
         float k = std::min(1.0f, g.transT / kSwitchAt);
-        blitEra(g, renderEra_, dst, flash, desat, 1.0f + k * k * 7.0f, k * 0.9f);
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + k * k * 1.5f, k * 0.35f);
         return;
     }
 
     float p = sweepProgress(g);
     if (oldEra_ >= 0 && p >= 0.0f && p < 1.0f) {
         float e = p * p * (3 - 2 * p);   // ease in and out
-        blitEra(g, oldEra_, dst, 0.0f, desat, 8.0f, 0.5f);
+        blitEra(g, oldEra_, dst, 0.0f, desat, 2.5f, 0.2f);
         float edge = dst.x + dst.width * e;
         BeginScissorMode((int)dst.x, (int)dst.y, std::max(0, (int)(edge - dst.x)), (int)dst.height);
-        blitEra(g, renderEra_, dst, flash, desat, 1.0f + 3.0f * (1.0f - e), 0.0f);   // sharpens as it goes
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + 1.5f * (1.0f - e) * (1.0f - e), 0.0f);   // sharpens as it goes
         EndScissorMode();
         drawSweep(g, dst, e);
         return;

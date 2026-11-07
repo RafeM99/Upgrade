@@ -42,8 +42,21 @@ Enemy makeEnemy(int type, float tileX, float tileY, int era, const EnemyTuning& 
 // timeScale < 1 while the time-slow pulse is active.
 void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int era, float timeScale, const EnemyTuning& t);
 
+// Boss kinds (akshat): two bosses, both made of time.
+//   Alarm Clock (end of 8-bit) - hops at a player; every landing rings out a shockwave along the
+//                    ground (jump to dodge it); after every third hop it is dizzy: stomp it.
+//   The Hourglass (end of 2.5D, the final boss) - swoops down at you, and every other attack lines
+//                    up and charges across the screen; after either it rests: stomp it.
+// The 1-bit and 16-bit eras have no boss: a full bar upgrades the world straight away.
+enum BossKind { BK_ALARM, BK_HOURGLASS, BK_COUNT };
+
 struct Boss {
     bool active = false;
+    int kind = BK_ALARM;
+    int attacks = 0;           // attacks made so far (picks the pattern)
+    bool charging = false;     // this attack is a horizontal charge (Eraser, or the 2.5D Forgetting)
+    bool landed = false;       // one frame: the Alarm Clock just landed (the Game spawns the shockwave)
+    float vy = 0;
     float x = 0, y = 0;        // centre
     float w = 2.4f, h = 2.2f;
     int hp = 3, maxHp = 3;
@@ -58,4 +71,5 @@ struct Boss {
     bool vulnerable() const { return state == 3 && hurt <= 0; }
     bool dangerous() const { return state == 2; }        // only the swoop hurts; a resting boss just pushes you back
     bool aiming() const { return state == 6 || state == 2; }
+    bool chargeAttack() const { return charging; }
 };

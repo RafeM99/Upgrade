@@ -6,6 +6,7 @@
 // All four music loops play the same melody so the memory feels continuous.
 #include "Gen.h"
 #include "raylib.h"
+#include "audio/MusicSpec.h"
 
 #include <algorithm>
 #include <cmath>
@@ -191,62 +192,131 @@ const int ROOT[8] = {45, 41, 48, 43, 45, 41, 48, 43};
 const int CHORD[8][3] = {{57, 60, 64}, {53, 57, 60}, {55, 60, 64}, {55, 59, 62},
                          {57, 60, 64}, {53, 57, 60}, {55, 60, 64}, {55, 59, 62}};
 
-void music(Buf& b, int era, float bpm)
+// A short rising noise + saw sweep over [t0, t0 + len]: the build-up into the drop.
+void riser(Buf& b, float t0, float len, float vol)
 {
-    float e = 60.0f / bpm / 2;   // one eighth note
-    Osc lead = leadWave(era);
-    float lv = era == 0 ? 0.35f : 0.3f;
-    // melody
-    for (int i = 0; i < 64; ++i) {
-        int n = MELODY[i];
-        if (n <= 0) continue;
-        int len = 1;
-        while (i + len < 64 && MELODY[i + len] == -1) ++len;
-        float dur = len * e * (era == 0 ? 0.6f : 0.95f);
-        if (era == 0 && i % 2 == 1) continue;   // sparse in the faded era
-        tone(b, i * e, dur, era == 3 ? PIANO : lead, midiHz((float)n), midiHz((float)n), lv, 0.005f, 0.04f,
-             era >= 2 ? 0.006f : 0.0f);
+    size_t i0 = (size_t)(t0 * SR), n = (size_t)(len * SR);
+    float ph = 0, lp = 0;
+    for (size_t i = 0; i < n; ++i) {
+        float k = (float)i / n;
+        float f = 180.0f * std::pow(8.0f, k);
+        ph += f / SR;
+        lp += (0.05f + 0.6f * k) * (noise() - lp);
+        b.add(i0 + i, (lp * 0.7f + osc(SAW, ph) * 0.3f) * vol * k * k);
     }
-    for (int bar = 0; bar < 8; ++bar) {
-        float t0 = bar * 8 * e;
-        if (era == 0) {   // one soft low beep per beat on the root
-            for (int beat = 0; beat < 4; beat += 2) tone(b, t0 + beat * 2 * e, e * 0.5f, SQUARE, midiHz(ROOT[bar] + 12.0f), midiHz(ROOT[bar] + 12.0f), 0.12f);
-            continue;
-        }
-        // bass
-        for (int k = 0; k < (era == 1 ? 4 : 8); ++k) {
-            float step = era == 1 ? 2 * e : e;
-            int note = ROOT[bar] + ((era >= 2 && k % 2) ? 12 : 0);
-            tone(b, t0 + k * step, step * 0.85f, era == 3 ? SINE : TRIANGLE, midiHz((float)note), midiHz((float)note),
-                 era == 3 ? 0.35f : 0.3f);
-        }
-        // drums
-        for (int beat = 0; beat < 4; ++beat) {
-            float t = t0 + beat * 2 * e;
-            float dv = era == 3 ? 0.3f : 0.35f;
-            if (beat % 2 == 0) kick(b, t, dv * 1.4f);
-            else snare(b, t, dv);
-            if (era >= 2) { hat(b, t + e, dv * 0.8f); hat(b, t, dv * 0.5f); }
-        }
-        // arpeggio (16-bit) or pad (2.5D)
-        if (era == 2) {
+}
+
+// Geometry-Dash-style loop (akshat): the shared melody over a build-up and a drop, with four-on-the-
+// floor drums, off-beat bass, 16th arpeggios and sidechain pumping. Each era is the same song on
+// the hardware of its time. `boss` makes a darker, always-on-the-drop variant with a riff instead.
+void music(Buf& out, int era, float bpm, bool boss)
+{
+    const float e = 60.0f / bpm / 2;   // one eighth note
+    const float beat = 2 * e;
+    const int bars = boss ? musicspec::BOSS_BARS : musicspec::BARS;
+    const float secs = (float)out.s.size() / SR;
+    Buf syn(secs), drm(secs);
+    Osc lead = leadWave(era);
+    const int transpose = boss ? -2 : 0;   // boss: a tone lower, heavier
+
+    for (int bar = 0; bar < bars; ++bar) {
+        const int cb = bar % 8;
+        const bool drop = boss || bar >= 8;
+        const float t0 = bar * 8 * e;
+        const int root = ROOT[cb] + transpose;
+
+        // ---- melody (main loop only): plain in the build, an octave up in the drop
+        if (!boss) {
+            for (int k = 0; k < 8; ++k) {
+                int i = cb * 8 + k, n = MELODY[i];
+                if (n <= 0) continue;
+                int len = 1;
+                while (i + len < 64 && MELODY[i + len] == -1) ++len;
+                if (era == 0 && !drop && k % 2 == 1) continue;
+                float dur = len * e * (era == 0 ? 0.6f : 0.9f);
+                float note = (float)n + (drop && era >= 1 ? 12.0f : 0.0f);
+                Osc w = era == 3 ? (drop ? SAW : PIANO) : lead;
+                float v = era == 3 && drop ? 0.16f : 0.26f;
+                tone(syn, t0 + k * e, dur, w, midiHz(note), midiHz(note), v, 0.005f, 0.04f, era >= 2 ? 0.006f : 0.0f);
+                if (era == 3 && drop) tone(syn, t0 + k * e, dur, PIANO, midiHz(note - 12), midiHz(note - 12), 0.18f);
+            }
+        } else {
+            // boss riff: 16ths jumping between root octaves and the fifth
+            const int riff[16] = {0, 12, 0, 7, 12, 0, 10, 0, 0, 12, 0, 7, 15, 12, 10, 7};
             for (int k = 0; k < 16; ++k) {
-                int note = CHORD[bar][k % 3] + 12;
-                tone(b, t0 + k * e / 2, e / 2 * 0.9f, PULSE25, midiHz((float)note), midiHz((float)note), 0.08f);
+                float note = root + 24.0f + riff[k];
+                tone(syn, t0 + k * e / 2, e / 2 * 0.8f, era == 3 ? SAW : (era == 0 ? SQUARE : PULSE25), midiHz(note),
+                     midiHz(note), era == 0 ? 0.12f : 0.14f);
             }
         }
-        if (era == 3) {
+
+        // ---- bass
+        if (era == 0) {
+            for (int b4 = 0; b4 < 4; ++b4)
+                if (drop || b4 % 2 == 0)
+                    tone(syn, t0 + b4 * beat, e * 0.5f, SQUARE, midiHz(root + 12.0f), midiHz(root + 12.0f), 0.13f);
+        } else {
+            Osc bw = era == 1 ? TRIANGLE : (era == 2 ? PULSE25 : SAW);
+            float bv = era == 2 ? 0.14f : 0.3f;
+            for (int k = 0; k < 8; ++k) {
+                bool on = drop ? (k % 2 == 1) : (k % 2 == 0);   // off-beat bass in the drop
+                if (!on) continue;
+                int note = root + (drop && k % 4 == 3 ? 12 : 0);
+                tone(syn, t0 + k * e, e * 0.9f, bw, midiHz((float)note), midiHz((float)note), bv);
+                if (era == 3) tone(syn, t0 + k * e, e * 0.9f, SINE, midiHz(note - 12.0f), midiHz(note - 12.0f), 0.35f);
+            }
+        }
+
+        // ---- 16th arpeggio in the drop (8-bit and up), a soft pad under the 2.5D build
+        if (drop && era >= 1) {
+            for (int k = 0; k < 16; ++k) {
+                int note = CHORD[cb][k % 3] + transpose + 12 + (k % 6 >= 3 ? 12 : 0);
+                tone(syn, t0 + k * e / 2, e / 2 * 0.7f, era == 3 ? TRIANGLE : PULSE25, midiHz((float)note), midiHz((float)note),
+                     era == 3 ? 0.07f : 0.06f);
+            }
+        }
+        if (era == 3 && !drop) {
             Buf pad(8 * e + 0.5f);
             for (int k = 0; k < 3; ++k)
                 for (float det : {-0.08f, 0.08f})
-                    tone(pad, 0, 8 * e + 0.3f, SAW, midiHz(CHORD[bar][k] + det), midiHz(CHORD[bar][k] + det), 0.09f, 0.4f, 0.4f);
+                    tone(pad, 0, 8 * e + 0.3f, SAW, midiHz(CHORD[cb][k] + det), midiHz(CHORD[cb][k] + det), 0.08f, 0.4f, 0.4f);
             lowpass(pad.s, 900);
-            for (size_t i = 0; i < pad.s.size(); ++i) b.add((size_t)(t0 * SR) + i, pad.s[i]);
+            for (size_t i = 0; i < pad.s.size(); ++i) syn.add((size_t)(t0 * SR) + i, pad.s[i]);
+        }
+
+        // ---- drums
+        float dv = era == 0 ? 0.25f : 0.35f;
+        for (int b4 = 0; b4 < 4; ++b4) {
+            float t = t0 + b4 * beat;
+            if (era == 0) {   // 1-bit: just a clicky square thump
+                if (drop || b4 % 2 == 0) tone(drm, t, 0.06f, SQUARE, 160, 60, dv);
+                continue;
+            }
+            if (drop || b4 % 2 == 0) kick(drm, t, dv * 1.5f);
+            if (b4 % 2 == 1) snare(drm, t, dv * (drop ? 1.0f : 0.8f));
+            hat(drm, t + e, dv * (drop ? 1.0f : 0.6f));                      // off-beat hat
+            if (drop && era >= 2) { hat(drm, t + e / 2, dv * 0.4f); hat(drm, t + e * 1.5f, dv * 0.4f); }
+        }
+        // the last bar of the build: snare roll and a riser into the drop
+        if (!boss && bar == 7) {
+            if (era >= 1)
+                for (int k = 0; k < 16; ++k) snare(drm, t0 + k * e / 2, dv * (0.25f + 0.75f * k / 16.0f));
+            riser(syn, t0, 8 * e, era == 0 ? 0.08f : 0.18f);
         }
     }
-    if (era == 2) echo(b, e * 1.5f, 0.2f);
-    if (era == 3) reverb(b, 0.4f);
-    // fold anything past the loop end back to the start, so the loop is seamless
+
+    // sidechain: the synths duck on every kick in the drop, the pump that makes it feel fast
+    for (size_t i = 0; i < syn.s.size(); ++i) {
+        float t = (float)i / SR;
+        int bar = (int)(t / (8 * e));
+        bool drop = boss || bar % bars >= 8;
+        if (!drop || era == 0) continue;
+        float since = std::fmod(t, beat);
+        syn.s[i] *= 0.35f + 0.65f * std::min(1.0f, since / (beat * 0.45f));
+    }
+    if (era == 2) echo(syn, e * 1.5f, 0.18f);
+    if (era == 3) reverb(syn, 0.3f);
+    for (size_t i = 0; i < out.s.size(); ++i) out.s[i] += syn.s[i] + drm.s[i];
 }
 
 }  // namespace
@@ -254,7 +324,7 @@ void music(Buf& b, int era, float bpm)
 int generateSounds(const std::string& dir)
 {
     int n = 0;
-    const float bpm[4] = {92, 104, 112, 96};
+
     for (int era = 0; era < 4; ++era) {
         std::string d = dir + "/audio/era" + std::to_string(era) + "/";
         for (const char* name : SFX_NAMES) {
@@ -266,12 +336,16 @@ int generateSounds(const std::string& dir)
             b.s.resize(std::max<size_t>(end, 64));
             n += save(b, d + "sfx_" + name + ".wav", 1.0f) ? 1 : 0;
         }
-        float loop = 64 * 60.0f / bpm[era] / 2;
-        Buf extra(loop + 3.0f);
-        music(extra, era, bpm[era]);
-        Buf m(loop);
-        for (size_t i = 0; i < extra.s.size(); ++i) m.s[i % m.s.size()] += extra.s[i];
-        n += save(m, d + "music.wav", 1.0f) ? 1 : 0;
+        for (int boss = 0; boss < 2; ++boss) {
+            float bpm = boss ? musicspec::BOSS_BPM[era] : musicspec::BPM[era];
+            int bars = boss ? musicspec::BOSS_BARS : musicspec::BARS;
+            float loop = bars * 4 * 60.0f / bpm;
+            Buf extra(loop + 3.0f);
+            music(extra, era, bpm, boss != 0);
+            Buf m(loop);   // fold the tail back to the start so the loop is seamless
+            for (size_t i = 0; i < extra.s.size(); ++i) m.s[i % m.s.size()] += extra.s[i];
+            n += save(m, d + (boss ? "music_boss.wav" : "music.wav"), 1.0f) ? 1 : 0;
+        }
     }
     return n;
 }

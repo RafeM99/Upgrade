@@ -64,6 +64,12 @@ boss_sub = Jump on it when it lands!
 boss_name = THE FORGETTING
 boss_hint = NOW! Jump on it!
 boss_defeated = IT REMEMBERS
+boss_appear_0 = THE ALARM CLOCK RINGS
+boss_sub_0 = Jump its shockwaves. Stomp it when it's dizzy!
+boss_name_0 = THE ALARM CLOCK
+boss_appear_1 = THE HOURGLASS TURNS
+boss_sub_1 = Dodge its swoops and charges. Stomp it when it rests!
+boss_name_1 = THE HOURGLASS
 
 powerup_0 = KEEPSAKE LOCKET
 powerup_desc_0 = Protects you from one hit.

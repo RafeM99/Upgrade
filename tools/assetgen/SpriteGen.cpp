@@ -404,8 +404,148 @@ Pose playerPose(int frame)
     return p;
 }
 
+// ---- 8-bit players (akshat): placed pixel by pixel on the 16 x 24 grid, so each one reads as a
+// clear little character: big head, solid colour blocks, two-pixel limbs, only palette colours.
+struct PixPen {
+    Canvas& c;
+    float u = 1.0f / 16.0f;
+    void px(int x, int y, Col col) { c.rect(x * u, y * u, u, u, solid(col)); }
+    void box(int x, int y, int w, int h, Col col) { for (int j = 0; j < h; ++j) for (int i = 0; i < w; ++i) px(x + i, y + j, col); }
+    void line(int x0, int y0, int x1, int y1, int t, Col col)
+    {
+        int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+        for (;;) {
+            box(x0 - (t - 1) / 2, y0 - (t - 1) / 2, t, t, col);
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+    template <class Map>
+    void grid(int ox, int oy, const char* const* rows, int n, Map map)
+    {
+        for (int j = 0; j < n; ++j)
+            for (int i = 0; rows[j][i]; ++i) {
+                Col col;
+                if (map(rows[j][i], col)) px(ox + i, oy + j, col);
+            }
+    }
+};
+
+void drawPlayer8(Canvas& c, int who, int frame)
+{
+    const bool gran = who == 0;
+    Pose p = playerPose(frame);
+    PixPen pen{c};
+    auto P = [](int i) { return hex(PALETTE16[i]); };
+    Col skin = P(15), outline = P(0);
+    Col top = gran ? P(9) : P(12), topDark = gran ? P(8) : P(1);
+    Col legs = gran ? P(2) : P(1), shoes = gran ? P(4) : P(7);
+    Col hair = gran ? P(6) : P(4), hairHi = gran ? P(7) : P(9);
+    Col cap = P(10), capDark = P(9);
+    auto X = [](float v) { return (int)std::lround(v * 16.0f); };
+    int bob = X(p.bob), lean = X(p.lean);
+
+    // special-frame extras (behind the body)
+    if (frame == PF_DASH)
+        for (int i = 0; i < 3; ++i) pen.line(0, 11 + i * 3, 2 + i, 11 + i * 3, 1, P(gran ? 10 : 7));
+    if (frame == PF_SPECIAL && gran) {
+        pen.line(X(p.handF.x), X(p.handF.y), X(p.handF.x), 3, 1, P(4));
+        static const char* U[] = {"....RRRRR.....", "..RRRWRRRRR...", ".RRRRRRRRRRRR.", "RRPRRRPRRRPRRR"};
+        pen.grid(1, 0, U, 4, [&](char ch, Col& o) {
+            if (ch == 'R') o = P(14); else if (ch == 'P') o = P(2); else if (ch == 'W') o = P(7); else return false;
+            return true;
+        });
+    }
+    if (frame == PF_SPECIAL && !gran) {
+        for (int a = 0; a < 48; ++a) {
+            float ang = a / 48.0f * 6.2831853f;
+            pen.px(8 + (int)std::lround(std::cos(ang) * 7.5f), 13 + (int)std::lround(std::sin(ang) * 9.5f), P(7));
+        }
+    }
+
+    int sx = X(0.5f + p.lean * 0.8f), sy = 12 + bob;   // shoulder
+    int hx = X(0.5f + p.lean * 0.3f), hy = 17 + bob;   // hip
+    // back arm, back leg
+    pen.line(sx - 1, sy, X(p.handB.x), X(p.handB.y), 2, topDark);
+    pen.box(X(p.handB.x) - 1, X(p.handB.y) - 1, 2, 2, skin);
+    pen.line(hx - 1, hy, X(p.footB.x), 21, 2, legs);
+    pen.box(X(p.footB.x) - 1, 21 + std::min(0, X(p.footB.y) - 23), 3, 2, shoes);
+
+    // torso
+    int tx = 4 + lean;
+    if (gran) {
+        pen.box(tx, 11 + bob, 8, 6, top);
+        pen.box(tx, 11 + bob, 2, 6, topDark);          // shaded back
+        pen.box(tx + 1, 16 + bob, 7, 3, legs);         // skirt
+        pen.px(tx + 5, 12 + bob, P(7));                // buttons
+        pen.px(tx + 5, 14 + bob, P(7));
+    } else {
+        pen.box(tx - 1, 10 + bob, 3, 3, topDark);      // hood
+        pen.box(tx, 11 + bob, 8, 7, top);
+        pen.box(tx, 11 + bob, 2, 7, topDark);
+        pen.box(tx + 3, 15 + bob, 4, 1, topDark);      // pocket
+        pen.px(tx + 5, 12 + bob, P(7));                // drawstring
+    }
+    // front leg
+    pen.line(hx + 1, hy, X(p.footF.x), 21, 2, mixc(legs, top, 0.0f));
+    pen.box(X(p.footF.x) - 1, 21 + std::min(0, X(p.footF.y) - 23), 3, 2, shoes);
+
+    // head: 10 x 10, face to the right
+    static const char* GRAN[] = {
+        "...hh.....",
+        "..hHHHH...",
+        ".hHHHHHHH.",
+        "HHHHHHHHHH",
+        "HHHSSSSSSS",
+        "HHSSGKGGKG",
+        "HHSSSSSSSS",
+        ".HSSSSSRSS",
+        "..SSSSSSS.",
+        "...SSSS...",
+    };
+    static const char* SAM[] = {
+        "..CCCCC...",
+        ".CcCCCCCC.",
+        ".CCCCCCCdd",
+        "HHHSSSSSS.",
+        "HHSSSSKSK.",
+        "HHSSSSKSK.",
+        ".HSSSSSSS.",
+        ".HSSSSSRS.",
+        "..SSSSSS..",
+        "...SSSS...",
+    };
+    pen.grid(3 + lean, 1 + bob, gran ? GRAN : SAM, 10, [&](char ch, Col& o) {
+        switch (ch) {
+        case 'H': o = hair; break;
+        case 'h': o = hairHi; break;
+        case 'S': o = skin; break;
+        case 'K': o = outline; break;
+        case 'G': o = P(5); break;
+        case 'R': o = P(14); break;
+        case 'C': o = cap; break;
+        case 'c': o = P(7); break;
+        case 'd': o = capDark; break;
+        default: return false;
+        }
+        return true;
+    });
+
+    // front arm
+    pen.line(sx + 1, sy, X(p.handF.x), X(p.handF.y), 2, top);
+    pen.box(X(p.handF.x) - 1, X(p.handF.y) - 1, 2, 2, skin);
+    if (frame == PF_ATTACK) {
+        pen.line(14, 10, 15, 16, 1, P(10));
+        pen.px(15, 13, P(7));
+        pen.px(13, 9, P(10));
+    }
+}
+
 void drawPlayer(Canvas& c, int who, int frame)
 {
+    if (g_era == 1) { drawPlayer8(c, who, frame); return; }
     // who 0 = Player 1 (Gran, warm orange). who 1 = Player 2 (Sam, cool blue).
     const bool gran = who == 0;
     Pose p = playerPose(frame);
@@ -523,7 +663,8 @@ void drawBlob(Canvas& c, int frame)
     c.ellipse(0.3f + step, 0.93f, 0.1f, 0.06f, shade(mul(body, 0.7f)));
     c.ellipse(0.7f - step, 0.93f, 0.1f, 0.06f, shade(mul(body, 0.7f)));
     float ry = 0.36f * (1 - sq), rx = 0.42f * (1 + sq);
-    c.ellipse(0.5f, 0.92f - ry, rx, ry, staticFill(body, speck, 10 + frame, 0.3f));
+    c.ellipse(0.5f, 0.92f - ry, rx, ry, staticFill(body, speck, 10 + frame, g_era == 1 ? 0.1f : 0.3f));
+    if (g_era == 1) c.ellipse(0.4f, 0.92f - ry * 1.5f, rx * 0.35f, ry * 0.25f, solid(eraCol(0xb8b6c8, 1)));   // shine
     float ey = 0.92f - ry * 1.15f;
     c.ellipse(0.62f, ey, 0.1f, 0.12f, solid(eye));
     c.ellipse(0.82f, ey, 0.08f, 0.1f, solid(eye));
@@ -612,6 +753,126 @@ void drawBoss(Canvas& c, int frame)
         c.capsule(1.1f, 1.55f, 1.9f, 1.1f, 0.05f, solid(eraCol(0x0f0d1a, 0.0f)));
     }
     if (frame == XF_FLOAT1) c.glitchRows(90, 0.2f);
+}
+
+// ---- akshat: two more bosses. Drawn facing right; the game mirrors them to face left.
+void dizzyStars(Canvas& c, float cx, float cy, int frame)
+{
+    for (int i = 0; i < 3; ++i) {
+        float a = i * 2.094f + frame;
+        float x = cx + std::cos(a) * 0.55f, y = cy + std::sin(a) * 0.18f;
+        Col st = eraCol(0xf7d73a, 1.0f);
+        c.poly({{x, y - 0.14f}, {x + 0.05f, y - 0.04f}, {x + 0.14f, y}, {x + 0.05f, y + 0.04f}, {x, y + 0.14f},
+                {x - 0.05f, y + 0.04f}, {x - 0.14f, y}, {x - 0.05f, y - 0.04f}}, solid(st));
+    }
+}
+
+// The Alarm Clock: a big twin-bell alarm clock on little legs. Hops; every landing rings a shockwave.
+void drawAlarm(Canvas& c, int frame)
+{
+    Col body = eraCol(0xe8364f, 0.6f), bodyDk = eraCol(0x6a2c6e, 0.2f), bell = eraCol(0xf7d73a, 1.0f);
+    Col face = eraCol(0xfaf3e6, 1.0f), ink = eraCol(0x0f0d1a, 0.0f), leg = eraCol(0x26305e, 0.1f);
+    bool hurt = frame == XF_HURT, dizzy = frame == XF_SLAM, crouch = frame == XF_FLOAT1;
+    if (hurt) { body = eraCol(0xffffff, 1.0f); bodyDk = eraCol(0xb8b6c8, 0.8f); bell = face; }
+    float cr = crouch ? 0.22f : (dizzy ? 0.3f : 0.0f);
+    float cx = 1.5f, cy = 1.55f + cr * 0.6f, r = 0.95f - cr * 0.15f;
+    // legs and feet
+    c.capsule(1.05f, cy + r * 0.7f, 0.9f, 2.7f, 0.1f, shade(leg));
+    c.capsule(1.95f, cy + r * 0.7f, 2.1f, 2.7f, 0.1f, shade(leg));
+    c.ellipse(0.85f, 2.75f, 0.22f, 0.1f, shade(leg));
+    c.ellipse(2.15f, 2.75f, 0.22f, 0.1f, shade(leg));
+    // the bells and the hammer between them (it shakes when it rings)
+    float shake = (frame == XF_FLOAT0 || frame == XF_FLOAT1) ? 0.0f : 0.06f;
+    float by = cy - r - 0.05f;
+    c.capsule(0.95f, by + 0.2f, 1.2f, by + 0.05f, 0.05f, solid(bodyDk));
+    c.capsule(2.05f, by + 0.2f, 1.8f, by + 0.05f, 0.05f, solid(bodyDk));
+    c.ellipse(0.85f - shake, by, 0.36f, 0.28f, shade(bell));
+    c.ellipse(2.15f + shake, by, 0.36f, 0.28f, shade(bell));
+    c.capsule(1.5f, by + 0.15f, 1.5f + (crouch ? 0.25f : -0.2f), by - 0.3f, 0.05f, solid(bodyDk));
+    c.circle(1.5f + (crouch ? 0.25f : -0.2f), by - 0.32f, 0.09f, shade(bell));
+    // the case and the face
+    c.circle(cx, cy, r, shade(body));
+    c.circle(cx, cy, r * 0.78f, shade(face, 0.4f));
+    for (int h = 0; h < 12; ++h) {   // hour marks
+        float a = h * 0.5236f;
+        c.dot(cx + std::cos(a) * r * 0.66f, cy + std::sin(a) * r * 0.66f, h % 3 == 0 ? ink : bodyDk, g_era >= 2 && h % 3 == 0 ? 2 : 1);
+    }
+    if (dizzy) {   // the hands spin; the eyes are crosses
+        for (int k = 0; k < 2; ++k) {
+            float x = cx - 0.28f + k * 0.56f, y = cy - 0.12f;
+            c.capsule(x - 0.1f, y - 0.1f, x + 0.1f, y + 0.1f, 0.035f, solid(ink));
+            c.capsule(x - 0.1f, y + 0.1f, x + 0.1f, y - 0.1f, 0.035f, solid(ink));
+        }
+        c.capsule(cx, cy + 0.15f, cx + 0.35f, cy + 0.3f, 0.03f, solid(bodyDk));
+        dizzyStars(c, cx, by - 0.45f, frame);
+    } else if (!hurt) {
+        // angry eyes sit on the face, the hands make a frown: ten to two, upside down
+        for (int k = 0; k < 2; ++k) {
+            float x = cx - 0.28f + k * 0.56f, y = cy - 0.15f;
+            c.ellipse(x, y, 0.11f, 0.13f, solid(ink));
+            c.dot(x + 0.03f, y - 0.05f, face);
+        }
+        c.capsule(cx - 0.45f, cy - 0.42f, cx - 0.12f, cy - 0.3f, 0.04f, solid(ink));   // brows
+        c.capsule(cx + 0.12f, cy - 0.3f, cx + 0.45f, cy - 0.42f, 0.04f, solid(ink));
+        c.capsule(cx, cy + 0.1f, cx - 0.32f, cy + 0.38f, 0.035f, solid(ink));         // hands
+        c.capsule(cx, cy + 0.1f, cx + 0.42f, cy + 0.3f, 0.025f, solid(ink));
+        c.circle(cx, cy + 0.1f, 0.05f, solid(body));
+    }
+    // ring lines when it shouts
+    if (frame == XF_FLOAT1)
+        for (int k = 0; k < 3; ++k) c.capsule(0.15f + k * 0.04f, by - 0.5f + k * 0.25f, 0.35f, by - 0.4f + k * 0.25f, 0.025f, solid(bell));
+}
+
+// The Hourglass: the last of the memory's time, running out. A carved wooden frame, glass, gold
+// sand and one eye glaring from the sand. Charges sideways like a falling pendulum.
+void drawHourglass(Canvas& c, int frame)
+{
+    Col wood = eraCol(0x8c4a2f, 0.3f), woodHi = eraCol(0xc87a4a, 0.7f), glass = eraCol(0xd8f0ff, 0.85f);
+    Col sand = eraCol(0xf7d73a, 1.0f), sandDk = eraCol(0xf28a1e, 0.6f), eye = eraCol(0xfaf3e6, 1.0f), ink = eraCol(0x0f0d1a, 0.0f);
+    Col glow = eraCol(0x8a7fb4, 0.5f);
+    bool hurt = frame == XF_HURT, dizzy = frame == XF_SLAM, charge = frame == XF_FLOAT1;
+    if (hurt) { wood = eraCol(0xffffff, 1.0f); woodHi = wood; sand = eraCol(0xfaf3e6, 1.0f); sandDk = sand; }
+    float lean = charge ? 0.35f : 0.0f;   // tips forward into the charge
+    float tilt = dizzy ? 0.25f : 0.0f;
+    auto P = [&](float x, float y) {      // lean the whole shape
+        float yy = y - 1.5f;
+        return Vector2{x + yy * -lean + tilt * (y - 1.5f) * 0.3f, y + tilt * (x - 1.5f) * 0.4f};
+    };
+    // halo of lost time behind it
+    if (!hurt && g_era >= 2) c.circle(1.5f, 1.5f, 1.35f, [&](const Frag& f) {
+        float d = std::sqrt(f.nx * f.nx + f.ny * f.ny);
+        return withA(glow, clamp01(1 - d) * 0.35f);
+    });
+    // glass bulbs
+    float a = g_era == 3 ? 0.75f : 1.0f;
+    c.poly({P(0.75f, 0.45f), P(2.25f, 0.45f), P(1.65f, 1.45f), P(1.65f, 1.55f), P(2.25f, 2.55f), P(0.75f, 2.55f), P(1.35f, 1.55f), P(1.35f, 1.45f)},
+           shade(withA(glass, a), 0.6f));
+    // sand: a little left on top, a heap below, a stream between
+    c.poly({P(0.98f, 0.75f), P(2.02f, 0.75f), P(1.55f, 1.4f), P(1.45f, 1.4f)}, shade(sand));
+    c.poly({P(0.85f, 2.5f), P(2.15f, 2.5f), P(1.85f, 2.05f), P(1.5f, 1.85f), P(1.15f, 2.05f)}, shade(sandDk));
+    if (!dizzy) c.capsule(P(1.5f, 1.45f).x, P(1.5f, 1.45f).y, P(1.5f, 1.9f).x, P(1.5f, 1.9f).y, 0.035f, solid(sand));
+    // the eye in the top sand
+    Vector2 e = P(1.5f, 1.0f);
+    if (dizzy) {
+        c.capsule(e.x - 0.12f, e.y - 0.1f, e.x + 0.12f, e.y + 0.1f, 0.04f, solid(ink));
+        c.capsule(e.x - 0.12f, e.y + 0.1f, e.x + 0.12f, e.y - 0.1f, 0.04f, solid(ink));
+        dizzyStars(c, 1.5f, 0.15f, frame);
+    } else if (!hurt) {
+        c.ellipse(e.x, e.y, 0.24f, 0.15f, solid(eye));
+        c.circle(e.x + 0.06f, e.y, 0.09f, solid(eraCol(0xe8364f, 0.0f)));
+        c.dot(e.x + 0.08f, e.y - 0.02f, ink, g_era >= 2 ? 2 : 1);
+        c.capsule(e.x - 0.26f, e.y - 0.26f, e.x + 0.24f, e.y - 0.16f, 0.035f, solid(ink));   // brow
+    }
+    // the frame: top and bottom plates, three posts
+    c.poly({P(0.45f, 0.25f), P(2.55f, 0.25f), P(2.55f, 0.48f), P(0.45f, 0.48f)}, shade(woodHi));
+    c.poly({P(0.45f, 2.52f), P(2.55f, 2.52f), P(2.55f, 2.78f), P(0.45f, 2.78f)}, shade(woodHi));
+    for (float px : {0.6f, 2.4f}) {
+        Vector2 t0 = P(px, 0.45f), t1 = P(px, 2.55f);
+        c.capsule(t0.x, t0.y, t1.x, t1.y, 0.07f, shade(wood));
+    }
+    if (charge)   // falling-pendulum streaks behind it
+        for (int i = 0; i < 4; ++i)
+            c.capsule(2.65f, 0.7f + i * 0.45f, 2.95f, 0.7f + i * 0.45f, 0.035f, solid(withA(eye, 0.8f)));
 }
 
 // ------------------------------------------------------------------ tiles
@@ -810,7 +1071,13 @@ void bgLayer(Px& p, int era, int layer)
                 if (era == 0) {
                     c = ONEBIT_DARK;
                     if (rnd(x, y, 3) < 0.0025f && y < H * 0.5f) c = ONEBIT_LIGHT;   // a few stars
-                } else if (era == 1) c = t < 0.55f ? hex(0x3c9cf0) : hex(0x8ccff0);
+                } else if (era == 1) {
+                    // 8-bit dusk: dark sky so the bright characters and ground pop out in front of it
+                    float band = (t - 0.45f) / 0.25f;
+                    bool plum = band >= 1 || (band > 0 && ((y / 2) % 4) < (int)(band * 4));   // NES-style stripes
+                    c = plum ? hex(0x6a2c6e) : hex(0x26305e);
+                    if (t < 0.4f && rnd(x, y, 3) < 0.004f) c = rnd(x, y, 8) < 0.3f ? hex(0xf7d73a) : hex(0xb8b6c8);
+                }
                 else if (era == 2) c = mixc(mixc(hex(0x4a3a8a), hex(0xd06a8a), clamp01(t * 1.5f)), hex(0xf7b06a), clamp01(t * 2 - 1));
                 else {
                     c = mixc(mixc(hex(0x2a2a6a), hex(0xe86a6a), clamp01(t * 1.6f)), hex(0xffc070), clamp01(t * 2.2f - 1.1f));
@@ -831,7 +1098,7 @@ void bgLayer(Px& p, int era, int layer)
                     for (int y = (int)(oy - r); y <= oy + r; ++y)
                         for (int x = (int)(ox - r); x <= ox + r; ++x)
                             if ((x - ox) * (x - ox) + (y - oy) * (y - oy) * 2.2f < r * r)
-                                p.set(x, y, q(era == 1 ? hex(0xfaf3e6) : mixc(hex(0xfff0f0), hex(0xd8a0c0), (y - oy + r) / (2 * r)), x, y));
+                                p.set(x, y, q(era == 1 ? hex(0x5a5468) : mixc(hex(0xfff0f0), hex(0xd8a0c0), (y - oy + r) / (2 * r)), x, y));
                 }
             }
         return;
@@ -857,9 +1124,10 @@ void bgLayer(Px& p, int era, int layer)
                 c = on ? ONEBIT_LIGHT : ONEBIT_DARK;
                 if (!on && layer == 1) continue;
             } else if (era == 1) {
-                const uint32_t cols[4] = {0, 0x8a7fb4, 0x1e8a4c, 0x26305e};
+                const uint32_t cols[4] = {0, 0x5a5468, 0x1e8a4c, 0x0f0d1a};
                 c = hex(cols[layer]);
-                if (y - (int)top < 1 * s) c = layer == 2 ? hex(0x6fdc4a) : hex(0xb8b6c8);
+                if (layer == 2 && ((x / 2 + y / 2) & 1) && d > 0.3f) c = hex(0x26305e);   // dithered shade
+                if (y - (int)top < 1 * s) c = layer == 1 ? hex(0x8a7fb4) : (layer == 2 ? hex(0x1e8a4c) : hex(0x26305e));
             } else if (era == 2) {
                 const uint32_t cols[4] = {0, 0x6a5aa0, 0x2a5a5a, 0x1a3a3a};
                 c = mixc(hex(cols[layer]), hex(0x10102a), d * 0.6f);
@@ -921,11 +1189,16 @@ void bgLayer(Px& p, int era, int layer)
                     p.set((int)(x + std::cos(ang) * 7 * s), (int)(baseY - 22 * s + std::sin(ang) * 6 * s), ONEBIT_LIGHT);
                 }
             } else if (era == 1) {   // round park trees and a fence
-                rectAt(x - 2 * s, baseY - 16 * s, 4 * s, 18 * s, hex(0x8c4a2f));
-                blobAt(x, baseY - 22 * s, 10 * s, 9 * s, hex(0x1e8a4c), false);
-                blobAt(x - 3 * s, baseY - 25 * s, 4 * s, 3 * s, hex(0x6fdc4a), false);
-                for (int f = 0; f < 4; ++f) rectAt(x + 14 * s + f * 4 * s, baseY - 6 * s, 2 * s, 7 * s, hex(0xfaf3e6));
-                rectAt(x + 13 * s, baseY - 4 * s, 16 * s, 1 * s, hex(0xfaf3e6));
+                // silhouettes: dark trees, a fence and the odd lit window, kept low-contrast
+                rectAt(x - 2 * s, baseY - 16 * s, 4 * s, 18 * s, hex(0x0f0d1a));
+                blobAt(x, baseY - 22 * s, 10 * s, 9 * s, hex(0x26305e), false);
+                blobAt(x - 3 * s, baseY - 25 * s, 4 * s, 3 * s, hex(0x1e8a4c), false);
+                for (int f = 0; f < 4; ++f) rectAt(x + 14 * s + f * 4 * s, baseY - 6 * s, 2 * s, 7 * s, hex(0x5a5468));
+                rectAt(x + 13 * s, baseY - 4 * s, 16 * s, 1 * s, hex(0x5a5468));
+                if (i % 4 == 1) {   // a lamp post
+                    rectAt(x + 34 * s, baseY - 24 * s, 1 * s, 25 * s, hex(0x5a5468));
+                    rectAt(x + 33 * s, baseY - 26 * s, 3 * s, 2 * s, hex(0xf7d73a));
+                }
             } else if (era == 2) {   // bushes, and one treehouse
                 blobAt(x, baseY - 4 * s, 9 * s, 6 * s, hex(0x2a6a3a), true);
                 blobAt(x + 6 * s, baseY - 6 * s, 6 * s, 5 * s, hex(0x3a8a4a), true);
@@ -1112,6 +1385,8 @@ int generateSprites(const std::string& dir)
         save(makeSheet(FF_COUNT, FLYER_FS, FLYER_FS, true, drawFlyer), d + "enemy_flyer.png");
         save(makeSheet(RF_COUNT, BRUTE_FS, BRUTE_FS, true, drawBrute), d + "enemy_brute.png");
         save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawBoss), d + "enemy_boss.png");
+        save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawAlarm), d + "enemy_boss_alarm.png");
+        save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawHourglass), d + "enemy_boss_hourglass.png");
         // tiles: the solid ones get no outline so they join seamlessly; pickups get one
         {
             int tp = TILE_PX[era];

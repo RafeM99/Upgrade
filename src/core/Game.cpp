@@ -90,6 +90,7 @@ void Game::startRun()
     powerups.clear();
     particles.clear();
     boss = Boss();
+    audio.setBoss(false);
     bossBeatenThisEra = false;
     transActive = false;
     lostTimer = 0;
@@ -154,7 +155,7 @@ void Game::run()
         else if (screen != Screen::Ending) {
             renderer.drawWorld(*this);
             // a short white pop right at the switch; the sweep does the rest
-            if (transActive) flash = 0.7f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.15f);
+            if (transActive) flash = 0.12f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.12f);
             if (lostTimer > 0) desat = std::min(1.0f, (1.5f - lostTimer) * 2);
             for (int p = 0; p < 2 && !solo(); ++p) (void)p;
         }
@@ -280,15 +281,16 @@ void Game::updatePlaying(float dt)
     // hit-pause: a tiny freeze on big hits for punch
     if (hitPause > 0) { hitPause -= dt; return; }
 
-    // ---- era transition: gameplay is frozen while the world upgrades
+    // ---- era transition (akshat): seamless. The run never stops: the world upgrades around the
+    // players while they keep moving. They can't be hurt during it and the Wall eases back.
     if (transActive) {
         transT += dt;
         if (!transSwitched && transT >= Renderer::kSwitchAt) switchEra(transFromEra + 1);
-        if (!transSwitched) cam.addShake(0.4f * transT / Renderer::kSwitchAt);   // the old world shudders
-        if (transSwitched && era == 3) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
-        cam.update(cam.x, 0, wallX - 3, dt);
+        if (!transSwitched) cam.addShake(0.08f * transT / Renderer::kSwitchAt);   // a light shudder
+        if (transSwitched && era == 3) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.6f) / 2.6f));
+        for (auto& pl : players) if (pl.joined) pl.invuln = std::max(pl.invuln, 0.3f);
+        wallX -= dt * 2.0f;
         if (transT >= transLen) { transActive = false; cam.swing = era == 3 ? 1.0f : 0.0f; }
-        return;
     }
 
     // ---- memory lost: the world goes grey, then both respawn together
@@ -415,6 +417,20 @@ void Game::updatePlaying(float dt)
     // ---- boss
     if (boss.active) {
         boss.update(dt, cam.left(), cam.right(), level, players, era, slowK);
+        if (boss.landed) {   // Alarm Clock: the landing rings a shockwave along the ground (akshat)
+            cam.addShake(0.9f);
+            audio.play("pound", 1.0f, 0.7f);
+            float gy = boss.y + boss.h / 2;
+            for (int side = -1; side <= 1; side += 2)
+                particles.burst(boss.x + side * 1.2f, gy, 18, Color{247, 215, 58, 255}, 9, 0.5f, 0.2f);
+            const float reach = config().f("boss.shockwave_reach", 4.5f);
+            for (int p = 0; p < 2; ++p) {
+                Player& pl = players[p];
+                if (pl.alive() && pl.onGround && pl.invuln <= 0 && std::fabs(pl.cx() - boss.x) < reach &&
+                    std::fabs(pl.bottom() - gy) < 1.5f)
+                    hurtPlayer(p, false);
+            }
+        }
         if (boss.wantsSpawn) {
             Enemy e = makeEnemy(era >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB),
                                 boss.x, boss.y, era, etune);
@@ -433,6 +449,7 @@ void Game::updatePlaying(float dt)
             particles.burst(boss.x, boss.y, 80, Color{220, 180, 255, 255}, 12, 1.4f, 0.25f);
             score += 500;
             events().bossDefeated.emit();
+            audio.setBoss(false);
         }
         if (boss.defeated) {
             boss.active = false;
@@ -603,11 +620,16 @@ void Game::updatePlaying(float dt)
 
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
-        if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
+        // Only two bosses (akshat): config [boss] eras, default the end of 8-bit and the end of 2.5D.
+        std::string bossEras = config().s("boss.eras", "1,3");
+        bool bossHere = bossEras.find(std::to_string(era)) != std::string::npos;
+        if (config().b("boss.enabled", true) && bossHere && !bossBeatenThisEra) {
             boss.start(cam.x, era, config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
             audio.play("boss_appear");
             cam.addShake(0.6f);
-            showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
+            std::string k = std::to_string(boss.kind);
+            showBanner(T("boss_appear_" + k), T("boss_sub_" + k), 2.5f);
+            audio.setBoss(true);
             events().bossAppeared.emit();
         } else if (era < 3) beginEraTransition();
         else startEnding();
@@ -807,7 +829,7 @@ void Game::beginEraTransition()
     transT = 0;
     transSwitched = false;
     transFromEra = era;
-    transLen = era + 1 == 3 ? 4.4f : 3.4f;
+    transLen = era + 1 == 3 ? 3.6f : 2.2f;
     audio.play("era_up");
     TraceLog(LOG_INFO, "UPGRADE: era transition %d -> %d at frame %d", era, era + 1, frameNo_);
 }
@@ -906,7 +928,11 @@ PlayerInput Game::botInput(int p)
     if (pl.has[AB_GROUND_POUND] && !pl.onGround && level.tile((int)std::floor(pl.cx()), feet + 1) == '=') { in.abilityPressed = true; in.down = true; }
     if (pl.has[AB_TIME_SLOW] && pl.slowCooldown <= 0 && boss.active) { in.abilityPressed = true; in.down = true; }
     // dodge the swoop marker, then jump on the boss when it rests
-    if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
+    // Golem: jump the shockwave just before it lands. Eraser: jump out of the charge lane.
+    if (boss.active && boss.kind == BK_ALARM && boss.state == 2 && boss.stateTime > 0.6f && pl.onGround) { in.jumpPressed = true; hold[p] = 20; }
+    if (boss.active && boss.chargeAttack() && boss.state == 2 && std::fabs(boss.y - pl.cy()) < 2.0f &&
+        boss.x - pl.cx() > 0 && boss.x - pl.cx() < 5.5f && pl.onGround) { in.jumpPressed = true; hold[p] = 25; }
+    if (boss.active && !boss.chargeAttack() && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
         in.right = pl.cx() > boss.toX;
         in.left = !in.right;
     }
