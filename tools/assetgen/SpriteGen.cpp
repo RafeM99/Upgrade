@@ -1334,51 +1334,68 @@ void drawBossTrain(Canvas& c, int frame)
 {
     const bool hurt = frame == XF_HURT;
     Rig r = storyRig(c, frame);
-    Col green = pc(0x2f6b4f, 1), black = pc(0x2a2a36, 0), red = pc(0xc8382e, 1), brass = pc(0xe8b84a, 2);
-    Col steel = pc(0xb8bcc8, 2), smoke = pc(0xd8d6e2, 3), glass = pc(0xf5c96a, 3);
+    Col green = pc(0x3f8a5e, 2), cab = pc(0x24523e, 1), black = pc(0x2a2a36, 0), door = pc(0x3c3c4c, 0);
+    Col red = pc(0xc8382e, 1), brass = pc(0xe8b84a, 2), copper = pc(0xc87a3a, 2), steel = pc(0xb8bcc8, 2);
+    Col smoke = pc(0xd8d6e2, 3), glass = pc(0xf5c96a, 3), lining = pc(0xe8c860, 2);
     if (hurt) {
-        green = pc(0xb8b6c8, 2); black = pc(0x8a88a0, 1); red = pc(0xd8d4e8, 2); brass = pc(0xfaf3e6, 3);
-        steel = pc(0xd8d4e8, 2); glass = pc(0xfaf3e6, 3);
+        green = pc(0xc8c6d8, 2); cab = pc(0xb8b6c8, 2); black = pc(0x8a88a0, 1); door = pc(0x9a98b0, 1);
+        red = pc(0xd8d4e8, 2); brass = pc(0xfaf3e6, 3); copper = brass; steel = pc(0xd8d4e8, 2);
+        glass = pc(0xfaf3e6, 3); lining = glass;
     }
-    // smoke puffs from the funnel
-    float drift = frame == XF_FLOAT1 ? 0.1f : 0.0f;
+    // smoke from the funnel, drifting back
+    float drift = frame == XF_FLOAT1 ? 0.12f : 0.0f;
     if (frame != XF_SLAM) {
-        r.circle(1.38f - drift, 0.34f, 0.2f, lit(smoke));
-        r.circle(1.04f - drift, 0.24f, 0.17f, lit(smoke));
-        r.circle(0.76f - drift * 1.5f, 0.2f, 0.12f, lit(smoke));
-    } else {
-        r.circle(1.12f, 0.36f, 0.2f, lit(smoke));
-        r.circle(1.88f, 0.36f, 0.2f, lit(smoke));
+        r.circle(1.36f - drift, 0.26f, 0.19f, lit(smoke));
+        r.circle(1.04f - drift, 0.2f, 0.15f, lit(smoke));
+        r.circle(0.78f - drift * 1.4f, 0.17f, 0.11f, lit(smoke));
+    } else {   // squashed flat out of the top
+        r.circle(1.14f, 0.36f, 0.18f, lit(smoke));
+        r.circle(1.86f, 0.36f, 0.18f, lit(smoke));
+    }
+    // steam venting low at both sides
+    float puff = frame == XF_FLOAT1 ? 0.03f : 0.0f;
+    for (int s = -1; s <= 1; s += 2) {
+        r.circle(1.5f + s * 1.12f, 2.66f - puff, 0.15f + puff, lit(smoke));
+        r.circle(1.5f + s * 1.3f, 2.56f, 0.11f, lit(smoke));
     }
     // wheels just showing under the beam
-    r.rect(0.62f, 2.4f, 0.16f, 0.46f, lit(black), 0.05f);
-    r.rect(2.22f, 2.4f, 0.16f, 0.46f, lit(black), 0.05f);
-    // cab behind the boiler: roof, spectacle windows
-    r.rect(0.3f, 0.78f, 2.4f, 1.5f, lit(green), 0.2f);
-    r.rect(0.24f, 0.72f, 2.52f, 0.14f, solid(black), 0.07f);
-    r.rect(0.46f, 0.98f, 0.36f, 0.34f, solid(glass), 0.1f);
-    r.rect(2.18f, 0.98f, 0.36f, 0.34f, solid(glass), 0.1f);
-    // funnel
-    r.rect(1.32f, 0.46f, 0.36f, 0.5f, lit(black), 0.03f);
-    r.rect(1.24f, 0.42f, 0.52f, 0.1f, lit(brass), 0.03f);
-    // the smokebox: a round dark face ringed with rivets
-    r.circle(1.5f, 1.52f, 0.74f, lit(green));
-    r.circle(1.5f, 1.52f, 0.64f, lit(black));
-    for (int i = 0; i < 12; ++i) {
-        float a = i * 0.5236f;
-        r.dot(1.5f + std::cos(a) * 0.69f, 1.52f + std::sin(a) * 0.69f, steel, 2);
+    r.rect(0.66f, 2.4f, 0.16f, 0.36f, lit(black), 0.06f);
+    r.rect(2.18f, 2.4f, 0.16f, 0.36f, lit(black), 0.06f);
+    // the cab behind the boiler: curved roof, lined panels, round spectacle windows
+    r.rect(0.3f, 0.78f, 2.4f, 1.42f, lit(cab), 0.08f);
+    r.ellipse(1.5f, 0.8f, 1.3f, 0.12f, lit(black));
+    r.rect(0.4f, 0.98f, 2.2f, 1.14f, solid(lining), 0.06f);
+    r.rect(0.43f, 1.01f, 2.14f, 1.08f, lit(cab), 0.05f);
+    for (int s = -1; s <= 1; s += 2) {
+        r.circle(1.5f + s * 0.92f, 1.18f, 0.16f, solid(brass));
+        r.circle(1.5f + s * 0.92f, 1.18f, 0.12f, solid(glass));
     }
-    r.capsule(1.0f, 1.86f, 2.0f, 1.86f, 0.03f, solid(steel));   // door strap
-    // buffer beam, buffers, coupling
-    r.rect(0.26f, 2.14f, 2.48f, 0.3f, lit(red), 0.04f);
-    for (float bx : {0.5f, 2.5f}) {
-        r.rect(bx - 0.08f, 2.18f, 0.16f, 0.22f, solid(farSide(steel)));
-        r.circle(bx, 2.29f, 0.17f, lit(steel));
+    // funnel with a copper cap
+    r.rect(1.31f, 0.4f, 0.38f, 0.52f, lit(black), 0.03f);
+    r.rect(1.22f, 0.34f, 0.56f, 0.12f, lit(copper), 0.04f);
+    // the boiler front: a green band round the dark round smokebox door, rivets, a strap
+    r.circle(1.5f, 1.48f, 0.82f, solid(black));
+    r.circle(1.5f, 1.48f, 0.78f, lit(green));
+    r.circle(1.5f, 1.48f, 0.68f, lit(black));
+    r.circle(1.5f, 1.5f, 0.58f, lit(door));
+    for (int i = 0; i < 14; ++i) {
+        float a = i * 0.4488f;
+        r.dot(1.5f + std::cos(a) * 0.63f, 1.48f + std::sin(a) * 0.63f, steel, 2);
     }
-    r.rect(1.42f, 2.32f, 0.16f, 0.2f, solid(black));
-    r.capsule(1.5f, 2.5f, 1.5f, 2.64f, 0.05f, solid(steel));
-    // the headlamp is the eye, in a brass bezel
-    storyEye(r, 1.5f, 1.44f, 0.72f, hurt, brass, 0.08f);
+    r.capsule(1.06f, 1.86f, 1.94f, 1.86f, 0.035f, solid(steel));
+    r.capsule(1.5f, 1.86f, 1.5f, 2.0f, 0.035f, solid(steel));
+    // buffer beam, buffers and the coupling
+    r.rect(0.22f, 2.12f, 2.56f, 0.3f, lit(red), 0.04f);
+    for (int s = -1; s <= 1; s += 2) {
+        float bx = 1.5f + s * 1.04f;
+        r.circle(bx, 2.27f, 0.18f, lit(steel));
+        r.circle(bx, 2.27f, 0.08f, solid(farSide(steel)));
+    }
+    r.rect(1.42f, 2.3f, 0.16f, 0.2f, solid(black));
+    r.capsule(1.5f, 2.48f, 1.5f, 2.64f, 0.05f, solid(steel));
+    // the headlamp is the eye: a brass bezel with a little hood
+    r.rect(1.32f, 1.04f, 0.36f, 0.1f, solid(brass), 0.03f);
+    storyEye(r, 1.5f, 1.42f, 0.68f, hurt, brass, 0.08f);
 }
 
 // Stage 5, THE SCARECROW: straw hat, sack face, an old coat on a crossed stick, one pole leg.
@@ -1436,18 +1453,26 @@ void drawBossScarecrow(Canvas& c, int frame)
         float x = 1.3f + i * 0.08f;
         r.capsule(x, 0.96f, x + (i - 2.5f) * 0.05f, 1.1f, 0.025f, solid(i % 2 ? strawD : straw));
     }
-    // the sack head, tied with rope
-    r.ellipse(1.5f, 0.72f, 0.38f, 0.34f, lit(sack));
-    r.poly({{1.36f, 0.98f}, {1.64f, 0.98f}, {1.7f, 1.06f}, {1.3f, 1.06f}}, lit(sack));
-    r.capsule(1.33f, 1.0f, 1.67f, 1.0f, 0.03f, solid(rope));
-    // stitched mouth
-    r.capsule(1.34f, 0.92f, 1.66f, 0.9f, 0.012f, solid(stitch));
-    for (int i = 0; i < 5; ++i) {
-        float x = 1.37f + i * 0.065f;
-        r.capsule(x, 0.87f, x, 0.95f, 0.012f, solid(stitch));
+    // the sack head, tied with rope, a little weave showing
+    r.ellipse(1.5f, 0.74f, 0.42f, 0.36f, lit(sack));
+    r.poly({{1.36f, 1.0f}, {1.64f, 1.0f}, {1.72f, 1.08f}, {1.28f, 1.08f}}, lit(sack));
+    r.capsule(1.32f, 1.02f, 1.68f, 1.02f, 0.03f, solid(rope));
+    Col weave = farSide(sack);
+    for (int i = 0; i < 9; ++i) {
+        float wx = 1.2f + rnd(i, 3, 41) * 0.6f, wy = 0.56f + rnd(i, 4, 41) * 0.38f;
+        float ex = (wx - 1.5f) / 0.4f, ey = (wy - 0.74f) / 0.34f;
+        if (ex * ex + ey * ey < 0.8f && (std::fabs(wx - 1.5f) > 0.26f || wy > 0.88f))
+            r.capsule(wx, wy, wx + 0.04f, wy, 0.008f, solid(weave));
+    }
+    // stitched mouth, a crooked line of cross stitches
+    r.capsule(1.3f, 0.92f, 1.5f, 0.95f, 0.012f, solid(stitch));
+    r.capsule(1.5f, 0.95f, 1.7f, 0.91f, 0.012f, solid(stitch));
+    for (int i = 0; i < 6; ++i) {
+        float x = 1.33f + i * 0.068f, y = 0.93f + (i > 0 && i < 5 ? 0.015f : 0.0f);
+        r.capsule(x, y - 0.045f, x, y + 0.045f, 0.012f, solid(stitch));
     }
     // the eye on the face
-    storyEye(r, 1.5f, 0.7f, 0.46f, hurt, ringc, 0.035f);
+    storyEye(r, 1.5f, 0.69f, 0.42f, hurt, ringc, 0.035f);
     // straw hat
     r.ellipse(1.5f, 0.42f, 0.74f, 0.12f, lit(straw));
     r.rect(1.16f, 0.08f, 0.68f, 0.36f, lit(straw), 0.12f);
