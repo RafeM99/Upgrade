@@ -7,7 +7,13 @@
 #include <sstream>
 #include <string>
 
+// raylib reports any joystick as "available", even one GLFW has no button mapping for; such a
+// pad reads every button as up. GLFW (built into raylib) can tell the two apart.
+extern "C" int glfwJoystickIsGamepad(int jid);
+
 namespace {
+
+bool usablePad(int i) { return IsGamepadAvailable(i) && glfwJoystickIsGamepad(i); }
 
 struct KeyName { const char* name; int key; };
 const KeyName KEYS[] = {
@@ -62,7 +68,11 @@ void InputMap::load()
     std::string db = assetPath("gamecontrollerdb.txt");
     if (FileExists(db.c_str())) {
         char* text = LoadFileText(db.c_str());
-        if (text) { SetGamepadMappings(text); UnloadFileText(text); }
+        if (text) {
+            int ok = SetGamepadMappings(text);
+            TraceLog(ok ? LOG_INFO : LOG_WARNING, "UPGRADE: controller mappings from gamecontrollerdb.txt %s", ok ? "loaded" : "failed");
+            UnloadFileText(text);
+        }
     }
 }
 
@@ -77,8 +87,21 @@ void InputMap::beginFrame()
 int InputMap::padCount() const
 {
     int n = 0;
-    for (int i = 0; i < 4; ++i) if (IsGamepadAvailable(i)) ++n;
+    for (int i = 0; i < 4; ++i) if (usablePad(i)) ++n;
     return n;
+}
+
+std::vector<InputMap::PadInfo> InputMap::pads() const
+{
+    std::vector<PadInfo> out;
+    for (int i = 0; i < 4; ++i) {
+        if (!IsGamepadAvailable(i)) continue;
+        const char* n = GetGamepadName(i);
+        PadInfo info{i, n ? n : "controller", usablePad(i), -1};
+        for (int p = 0; p < 2; ++p) if (padFor(p) == i) info.player = p;
+        out.push_back(info);
+    }
+    return out;
 }
 
 // Pads are handed out in slot order, whatever slots they sit in: the first one found plays
@@ -86,7 +109,7 @@ int InputMap::padCount() const
 int InputMap::padFor(int player) const
 {
     int found[4], n = 0;
-    for (int i = 0; i < 4; ++i) if (IsGamepadAvailable(i)) found[n++] = i;
+    for (int i = 0; i < 4; ++i) if (usablePad(i)) found[n++] = i;   // unrecognised pads never take a player
     int order = player;
     if (firstPadPlayer_ == 2) order = n == 1 ? (player == 1 ? 0 : -1) : (player == 0 ? 1 : 0);
     return order >= 0 && order < n ? found[order] : -1;

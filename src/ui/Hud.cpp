@@ -791,6 +791,21 @@ void Hud::drawTitle(Game& g)
     text(T("title_controls_p1"), 640, 560, 15, fade(P_COL[0], 0.95f), true);
     text(T("title_controls_p2"), 640, 586, 15, fade(P_COL[1], 0.95f), true);
     text(T("title_controls_pad"), 640, 612, 15, fade(WHITE, 0.7f), true);
+    // which controllers the game can see, so a player can tell at once if theirs works
+    {
+        auto pads = g.input.pads();
+        std::string line;
+        Color c = fade(WHITE, 0.7f);
+        if (pads.empty()) line = T("pads_none");
+        for (auto& pd : pads) {
+            std::string one = pd.name + ": ";
+            if (!pd.usable) { one += T("pads_unknown"); c = hexc(0xffb070); }
+            else if (pd.player >= 0) { one += T(pd.player == 0 ? "p1_name" : "p2_name"); c = hexc(0x9fe8a8); }
+            else one += T("pads_spare");
+            line += (line.empty() ? "" : "   ") + one;
+        }
+        text(line, 640, 640, 15, c, true);
+    }
     text(T("title_credit"), 640, 680, 15, fade(WHITE, 0.5f), true);
 }
 

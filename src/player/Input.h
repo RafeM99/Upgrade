@@ -12,6 +12,7 @@
 // Menus take the d-pad or the left stick. An optional assets/gamecontrollerdb.txt (SDL format)
 // adds mappings for pads raylib does not know.
 #pragma once
+#include <string>
 #include <vector>
 
 struct PlayerInput {
@@ -27,7 +28,11 @@ public:
     void beginFrame();                 // once per frame, before any read: stick edges for menus
     PlayerInput read(int player) const;
     int padFor(int player) const;      // the gamepad slot this player uses, or -1
-    int padCount() const;              // gamepads connected right now
+    int padCount() const;              // usable gamepads connected right now
+    // For the title screen: every controller plugged in, its name, and whether its buttons are
+    // known (a controller with no mapping is seen but every button reads as up).
+    struct PadInfo { int slot; std::string name; bool usable; int player; };
+    std::vector<PadInfo> pads() const;
     bool menuBack() const;             // B / Escape
     bool pausePressed() const;
     bool menuUp() const;

@@ -29,8 +29,14 @@ Gamepads: plug in at any time, in any USB slot. The first pad found plays Gran a
 player keeps their keyboard keys too, and a notice says who each pad plays as. To give a single pad to Sam
 (Gran on the keyboard), set `first_pad_player = 2` under `[input]`. Menus, the difficulty selector, story cards
 and the ending all work with the d-pad or left stick, A to pick and B to go back. Xbox, PlayStation and Switch
-Pro pads are recognised; for anything else, put an SDL `gamecontrollerdb.txt` in `assets/`. Rumble is not
-available: raylib does not support it on desktop.
+Pro pads are recognised, and `assets/gamecontrollerdb.txt` (SDL_GameControllerDB, zlib licence in
+`assets/gamecontrollerdb_LICENSE.txt`) adds about 2,000 more. The title screen says which controllers the game
+can see and who each one plays as. Rumble is not available: raylib does not support it on desktop.
+
+8BitDo Ultimate 2C (wired) on a Mac: out of the box it starts in XInput mode, which macOS does not see as a
+controller. Unplug it, hold B, plug it back in, then let go of B: it starts in DirectInput mode, which macOS
+and the game recognise. If the title screen still says "No controller found", check that the Mac sees it at
+all: Apple menu > About This Mac > More Info > System Report > USB should list an 8BitDo device.
 
 Abilities: P1 gets double jump (8-bit), ground pound (16-bit, Ability in the air) and glide (2.5D, hold jump).
 P2 gets dash (8-bit, Ability), wall jump (16-bit, jump against a wall) and the time-slow pulse (2.5D, Down + Ability).
