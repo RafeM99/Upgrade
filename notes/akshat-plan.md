@@ -1,5 +1,9 @@
 # Upgrade: the plan forward (Akshat)
 
+> 2026-11-07 late: this branch now sits on main's 7-stage game. Older notes below talk about the
+> 4-era version; the current state is in notes/akshat-claude.md. Next up: a hand playtest of all
+> 7 stages, then decide with Sohan whether "The Four Minutes" replaces Gran's story, then a PR to main.
+
 Updated: 2026-11-07. Branch: claude-akshat (built on Sohan's claude-sohan-upgrade).
 
 ## What the game is

@@ -1,5 +1,20 @@
 # Akshat's Claude: status
 
+## 2026-11-07 late: merged main, ported my work onto it
+- claude-akshat now = main (7 stages, Gran's story, boss powers, difficulty, 3D camera) plus:
+  - Only 3 bosses ([boss] stages = 2,4,6): School Bell, Last Train, and THE HOURGLASS as the final
+    boss (3D model in Models3D::drawBoss; power renamed SANDS RUN BACK). Other stages upgrade
+    as soon as the bar fills. Stages 0,1,3,5 keep their boss code and strings, just unused.
+  - Pokemon-style boss cutscenes (src/ui/Cutscene.*, assets/cutscenes.txt): VS intro + dialogue
+    before each boss, a short scene after. Main's memory cards still do intro / upgrades / ending.
+  - Upgrades don't freeze the game; the memory card opens after the sweep.
+  - Settings screen (src/core/Settings.*): pause menu, or O / Tab on the title. Retro effects and
+    bloom are off by default so main's clean look stays the default.
+  - New music engine (tools/assetgen/MusicGen.cpp, QOA): 4 sound sets, boss tracks for the 3 bosses.
+- My earlier 8-bit art and Alarm Clock boss were dropped in favour of main's art.
+- Not merged: Camilla's 2 newest HUD commits on claude-camilla; Sohan's "The Four Minutes" story.
+- Not done: played by hand; Train/Hourglass defeat scenes not seen in a test run.
+
 ## 2026-11-07: 8-bit art, seamless upgrades, two new bosses, new music
 Branch claude-akshat, made from claude-sohan-upgrade at c349652 (Sohan's latest build).
 Full plan and what's next: notes/akshat-plan.md.
