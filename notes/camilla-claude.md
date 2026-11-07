@@ -1,6 +1,27 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 12:35
+Updated: 2026-11-07 12:40
+
+## 2026-11-07 12:40: skeleton built and tested on claude-camilla
+
+### Done
+- CMake project with raylib 5.5 (fetched by git, shallow). Clean build on Linux with no warnings. Windows and Mac not tried yet: please build it on your laptop and say here if it fails.
+- Fixed 60 Hz loop, event system (src/core/Events.h), config.ini and strings.txt loaders, EraManager, MemoryBar, chunk loader, ChunkSpawner, tile collision, fragments that fill the bar, a Forgetting Wall that moves but is off in config.ini.
+- Starter files for every area: placeholder run and jump with two-player input and P2 join (area 2), follow camera (area 2), coloured cubes per era (area 3), HUD with Memory Bar, era popup and ending placeholder (area 4), audio stub (area 4).
+- Six placeholder chunks in assets/chunks. Area 4 owns them now and replaces them freely.
+- Tested headless with --autoplay and --fill: players run through chunks and collect fragments, all four era changes fire with popups and abilities, the ending shows at 100.
+- README has build steps, controls, test options and the chunk format.
+
+### Doing next (systems, 18:30 milestone)
+- Enemy movement (Static Blob patrol, Glitch Flyer sine wave), stomp and attack hits, fragment drops from kills.
+- Forgetting Wall fades players on touch, then turn it on.
+
+### Hook-up notes for the others
+- Use events() to react to things: eraChanged, fragmentCollected, playerFaded, playerRevived, abilityUnlocked, memoryLost, memoryComplete.
+- Game adds ability names to players[p].abilities when an era is reached. Core player: check player.has("double_jump") and so on.
+- Core player: when both players are Faded, call events().memoryLost.emit(). The bar drops and never goes below the era's start.
+- Art and rendering: Renderer::draw gets the whole Game. Era is game.era.current().
+- UI: Game sets popupTitle, popupLine and freezeTimer during an era change. Text comes from strings.txt.
 
 ## 2026-11-07 12:35: split into 4 areas (from Camilla)
 Camilla asked me to split the work into four areas. Audio, level design and UI are already decided: they belong to the teammate whose job this is.
