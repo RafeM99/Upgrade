@@ -71,9 +71,9 @@ void Models3D::init()
     ready_ = sh_.id > 0;
 
     static const char* const granNames[G_COUNT] = {"gran_body", "gran_head", "gran_upperarm", "gran_forearm", "gran_thigh", "gran_shin"};
-    static const char* const batNames[B_COUNT] = {"bat_body", "bat_wing_in_L", "bat_wing_out_L", "bat_wing_in_R", "bat_wing_out_R"};
+    static const char* const forgetNames[F_COUNT] = {"forget_body", "forget_seg", "forget_tip"};
     loadParts(gran_, granNames, G_COUNT, granReady_);
-    loadParts(bat_, batNames, B_COUNT, batReady_);
+    loadParts(forget_, forgetNames, F_COUNT, forgetReady_);
 }
 
 void Models3D::loadParts(Model* out, const char* const* names, int n, bool& ready)
@@ -134,7 +134,7 @@ void Models3D::shutdown()
         UnloadModel(*m);
     }
     unloadParts(gran_, granReady_ ? G_COUNT : 0, granReady_);
-    unloadParts(bat_, batReady_ ? B_COUNT : 0, batReady_);
+    unloadParts(forget_, forgetReady_ ? F_COUNT : 0, forgetReady_);
     UnloadShader(sh_);
 }
 
@@ -583,7 +583,7 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
 
 void Models3D::drawBoss(Game& g)
 {
-    if (batReady_) { drawBatBoss(g); return; }
+    if (forgetReady_) { drawForgetting(g); return; }
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
     bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
@@ -684,37 +684,44 @@ void Models3D::drawGranModel(Game& g)
     }
 }
 
-// ------------------------------------------------------------------ the bat boss, modelled in Blender
-// Flies with slow heavy wing beats, faces the players, dives when it slams.
-void Models3D::drawBatBoss(Game& g)
+// ------------------------------------------------------------------ the Forgetting, modelled in Blender
+// A big tentacle alien that floats and bobs, eye on the players, its eight tentacles curling
+// in slow waves; they splay out when it slams down.
+void Models3D::drawForgetting(Game& g)
 {
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
     bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
-    Color tint = withA(flash ? hexc(0xfff0e0) : WHITE, a);
-    if (flash) tint = withA(Color{255, 200, 190, 255}, a);
+    Color tint = withA(flash ? Color{255, 210, 220, 255} : WHITE, a);
 
     float t = b.t;
-    float beat = std::sin(t * 6.0f);                 // -1..1
-    float hover = std::sin(t * 6.0f - 1.2f) * 0.18f; // the body rises a beat after the wings push down
-    float dive = b.state == 3 ? 0.45f : 0.0f;
-    const float k = 1.8f;                             // the bat's size in the level
-    // face the nearest player: the boss mostly sits right of them
+    float bob = std::sin(t * 2.2f) * 0.15f;
+    float slam = b.state == 3 ? 1.0f : 0.0f;
+    const float k = 1.8f;    // size in the level
+    // turned toward the camera and a little toward the nearest player
     float px = g.players[0].cx();
     if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) px = g.players[1].cx();
-    // turned mostly toward the camera so the spread wings read, and a little toward the players
-    float yaw = px < b.x ? -PI / 2 - 0.6f : -PI / 2 + 0.6f;
-    Matrix root = then(then(then(S(k, k, k), MatrixRotateZ(-dive)), MatrixRotateY(yaw)), T(b.x, Y3(b.y) + 0.3f + hover, 0.4f));
+    float yaw = px < b.x ? -PI / 2 - 0.7f : -PI / 2 + 0.7f;
+    float tilt = std::sin(t * 1.3f) * 0.06f;
+    Matrix root = then(then(then(S(k, k, k), MatrixRotateX(tilt)), MatrixRotateY(yaw)), T(b.x, Y3(b.y) + 0.4f + bob, 0.4f));
 
-    modelPart(bat_[B_BODY], then(MatrixRotateZ(0.15f * beat), root), tint);
-    // wings: the inner part rolls about the body's long axis, the hand folds on the up-stroke
-    for (int side = 0; side < 2; ++side) {
-        float sgn = side == 0 ? 1.0f : -1.0f;   // L wing lies toward -Z in game space
-        float roll = (0.05f + 0.6f * beat) * sgn;
-        float fold = (0.35f - 0.45f * beat) * sgn;
-        Matrix shoulder = then(then(S(1.5f, 1.5f, 1.5f), MatrixRotateX(roll)), then(T(0.05f, 0.18f, -0.28f * sgn), root));
-        modelPart(bat_[side == 0 ? B_WING_IN_L : B_WING_IN_R], shoulder, tint);
-        Matrix wrist = then(MatrixRotateX(fold), then(T(-0.05f, 0.25f, -0.75f * sgn), shoulder));
-        modelPart(bat_[side == 0 ? B_WING_OUT_L : B_WING_OUT_R], wrist, tint);
+    modelPart(forget_[F_BODY], root, tint);
+    // tentacles hang from a ring under the dome; each is 5 segments and a curled tip
+    const int N = 8, SEGS = 5;
+    for (int i = 0; i < N; ++i) {
+        float ang = (i + 0.5f) * 2 * PI / N;
+        // ring position (game space, before root): x forward, z sideways
+        float rx = std::cos(ang) * 0.55f, rz = std::sin(ang) * 0.52f;
+        // turn the chain so its "forward" bend axis points out from the centre
+        Matrix m = then(then(MatrixRotateZ(0.35f + 0.6f * slam), MatrixRotateY(-ang)), then(T(rx, -0.5f, rz), root));
+        float sc = 1.0f;
+        for (int j = 0; j < SEGS; ++j) {
+            modelPart(forget_[F_SEG], then(S(sc, sc, sc), m), tint);
+            float wave = std::sin(t * 2.6f + i * 0.9f - j * 0.8f) * (0.32f - 0.2f * slam) + 0.06f * j * (1 - slam);
+            float sway = std::cos(t * 1.9f + i * 1.7f - j * 0.6f) * 0.15f;
+            m = then(then(MatrixRotateZ(wave), MatrixRotateX(sway)), then(T(0, -0.38f * sc, 0), m));
+            sc *= 0.86f;
+        }
+        modelPart(forget_[F_TIP], then(S(sc, sc, sc), m), tint);
     }
 }

@@ -8,6 +8,8 @@ Thread: "Add graphics evolution stages". Branch: `claude/project-thread-70pj0g`,
 - raf asked for Blender-made 3D models for the last stage only. tools/blender/make_models.py builds
   Gran (coat, scarf, glasses, bun, jointed arms and legs) and a bat boss (furry body, tall ears,
   two-part wings) and exports one .glb per moving part into assets/models/.
+  Later the same night the bat was replaced by the Forgetting itself: a big floating tentacle
+  alien (one huge eye, eye stalks, glowing antennae, eight waving tentacles)..
 - Rebuild them: pip install bpy (Blender as a Python module, ~400 MB), then
   python tools/blender/make_models.py assets/models. The .glb files are committed, so playing
   needs nothing extra.

@@ -1,6 +1,6 @@
-# make_models.py: builds the full 3D stage's Gran and the bat boss in Blender and exports
+# make_models.py: builds the full 3D stage's Gran and the Forgetting (the boss) in Blender and exports
 # each moving part as its own .glb into assets/models/. The game (src/render/Models3D.cpp)
-# puts the parts together and animates them in code (run cycle, wing beats).
+# puts the parts together and animates them in code (run cycle, waving tentacles).
 #
 # Run with Blender:   blender --background --python tools/blender/make_models.py -- assets/models
 # or with the bpy module:  python tools/blender/make_models.py assets/models
@@ -220,126 +220,82 @@ def gran():
     ])
 
 
-# ------------------------------------------------------------------ the bat (boss)
-# About 2.6 units from wing tip to wing tip at rest. Faces +X. Pivot at the body centre.
-def membrane(name, pts, material, thick=0.03):
-    """A flat wing membrane through the given outline points (in the XZ plane at y=0)."""
-    me = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    vs = [bm.verts.new(Vector(p)) for p in pts]
-    bm.faces.new(vs)
-    bmesh.ops.triangulate(bm, faces=bm.faces[:])
-    bm.to_mesh(me)
-    bm.free()
-    o = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(o)
-    bpy.context.view_layer.objects.active = o
-    o.select_set(True)
-    sol = o.modifiers.new("solid", "SOLIDIFY")
-    sol.thickness = thick
-    sol.offset = 0
-    return finish(o, material, smooth=False)
+# ------------------------------------------------------------------ the Forgetting (boss)
+# A big floating tentacle alien: a bulbous dome with one huge eye, two small ones and a mouth,
+# and eight long tentacles that hang and curl below it. Faces +X. Pivot at the dome's centre.
+# Each tentacle is a chain of the same segment (pivot at its top), bent and waved in code.
+def forgetting():
+    skin = mat("fSkin", 0x3a2a6e)
+    skinL = mat("fSkinLight", 0x6a4ab0)
+    skinD = mat("fSkinDark", 0x221a46)
+    under = mat("fUnder", 0xb08ac8)
+    sclera = mat("fSclera", 0xf4eedc)
+    iris = mat("fIris", 0xf7d73a)
+    pupil = mat("fPupil", 0x0f0d1a)
+    lid = mat("fLid", 0x2a1f58)
+    mouthM = mat("fMouth", 0x1a0f22)
+    tooth = mat("fTooth", 0xf4eedc)
+    glow = mat("fGlow", 0x7fe8ff)
+    sucker = mat("fSucker", 0xd8b4e8)
 
-
-def bat():
-    fur = mat("fur", 0xc07a3a)
-    furL = mat("furLight", 0xe0a060)
-    furD = mat("furDark", 0x5a3426)
-    ear = mat("ear", 0x3a2420)
-    earIn = mat("earInner", 0x9a5a5a)
-    nose = mat("nose", 0x2a1a1a)
-    eye = mat("eye", 0x101018)
-    glint = mat("glint", 0xffffff)
-    claw = mat("claw", 0x2a1e1e)
-    skinM = mat("wingSkin", 0x7a4a44)
-    bone = mat("wingBone", 0x8a3a36)
-
-    # body: a round furry body, a dark ruff, a fox-like face with tall ears
     parts = [
-        sphere("body", (0, 0, 0), (0.55, 0.45, 0.5), fur, 24, 16),
-        sphere("belly", (0.18, 0, -0.12), (0.38, 0.36, 0.36), furL, 20, 12),
-        sphere("ruff", (0.2, 0, 0.22), (0.36, 0.42, 0.3), furD, 20, 12),
-        sphere("rump", (-0.45, 0, -0.15), (0.3, 0.3, 0.25), fur, 16, 10),
-        sphere("head", (0.5, 0, 0.32), (0.3, 0.3, 0.27), fur, 24, 16),
-        sphere("mask", (0.62, 0, 0.3), (0.2, 0.24, 0.17), furD, 20, 12),
-        sphere("snout", (0.8, 0, 0.26), (0.13, 0.1, 0.09), furL, 14, 10),
-        sphere("nose", (0.92, 0, 0.28), (0.04, 0.05, 0.035), nose, 10, 8),
-        cone("earL", (0.42, 0.17, 0.66), 0.11, 0.38, ear, rot=(-0.3, -0.15, 0)),
-        cone("earR", (0.42, -0.17, 0.66), 0.11, 0.38, ear, rot=(0.3, -0.15, 0)),
-        cone("earInL", (0.45, 0.17, 0.64), 0.07, 0.3, earIn, rot=(-0.3, -0.15, 0)),
-        cone("earInR", (0.45, -0.17, 0.64), 0.07, 0.3, earIn, rot=(0.3, -0.15, 0)),
-        sphere("eyeL", (0.74, 0.12, 0.36), (0.05, 0.045, 0.055), eye, 12, 8),
-        sphere("eyeR", (0.74, -0.12, 0.36), (0.05, 0.045, 0.055), eye, 12, 8),
-        sphere("glintL", (0.78, 0.13, 0.38), (0.015, 0.015, 0.015), glint, 6, 4),
-        sphere("glintR", (0.78, -0.11, 0.38), (0.015, 0.015, 0.015), glint, 6, 4),
+        sphere("dome", (0, 0, 0.1), (0.95, 0.9, 0.8), skin, 32, 20),
+        sphere("brow", (0.35, 0, 0.45), (0.55, 0.7, 0.35), skinD, 24, 14),
+        sphere("skirt", (0, 0, -0.42), (0.92, 0.88, 0.22), skinD, 32, 12),
+        sphere("underside", (0, 0, -0.5), (0.7, 0.68, 0.16), under, 28, 10),
+        # the huge eye with heavy lids
+        sphere("eyeWhite", (0.68, 0, 0.12), (0.34, 0.38, 0.36), sclera, 24, 16),
+        sphere("iris", (0.93, 0, 0.12), (0.12, 0.24, 0.24), iris, 20, 14),
+        sphere("pupil", (1.02, 0, 0.12), (0.06, 0.06, 0.18), pupil, 12, 10),
+        sphere("glintBig", (1.03, 0.08, 0.24), (0.03, 0.04, 0.04), sclera, 8, 6),
+        sphere("lidTop", (0.66, 0, 0.36), (0.36, 0.44, 0.14), lid, 20, 10, rot=(0, -0.25, 0)),
+        sphere("lidBottom", (0.68, 0, -0.14), (0.32, 0.4, 0.1), lid, 20, 10, rot=(0, 0.25, 0)),
+        # mouth: a wide dark slit below the eye with little teeth
+        sphere("mouth", (0.72, 0, -0.32), (0.18, 0.42, 0.07), mouthM, 20, 8),
     ]
-    # little legs and hooked feet hanging under the body
+    for k in range(5):
+        y = -0.28 + k * 0.14
+        parts.append(cone("tooth%d" % k, (0.84, y, -0.27), 0.03, 0.08, tooth, rot=(math.pi, 0, 0)))
+    # two small eyes on stalks, one each side, looking about
     for side in (1, -1):
-        parts.append(cyl("leg", (-0.05, side * 0.18, -0.35), (0.0, side * 0.2, -0.62), 0.05, 0.035, furD, 8))
-        for k in range(3):
-            parts.append(cone("toe", (0.03 + k * 0.03, side * (0.16 + k * 0.03), -0.66), 0.02, 0.1, claw,
-                              rot=(0, 2.4, 0)))
-    export("bat_body", parts)
+        parts.append(cyl("stalk", (0.3, side * 0.55, 0.55), (0.45, side * 0.75, 0.95), 0.05, 0.04, skin, 10))
+        parts.append(sphere("smallEye", (0.47, side * 0.78, 1.0), (0.1, 0.1, 0.1), sclera, 14, 10))
+        parts.append(sphere("smallPupil", (0.56, side * 0.8, 1.0), (0.03, 0.045, 0.045), pupil, 8, 6))
+    # glowing antennae on top
+    for side in (1, -1):
+        parts.append(cyl("antenna", (-0.2, side * 0.25, 0.75), (-0.35, side * 0.4, 1.25), 0.035, 0.02, skinD, 8))
+        parts.append(sphere("antennaTip", (-0.36, side * 0.41, 1.29), (0.07, 0.07, 0.07), glow, 12, 8))
+    # light spots and bumps over the dome
+    import random
+    rng = random.Random(7)
+    for k in range(16):
+        th = rng.uniform(0, 2 * math.pi)
+        ph = rng.uniform(0.25, 1.2)
+        if math.cos(th) > 0.55 and ph > 0.6:
+            continue   # keep the face clear
+        x, y, z = 0.95 * math.cos(th) * math.sin(ph), 0.9 * math.sin(th) * math.sin(ph), 0.1 + 0.8 * math.cos(ph)
+        r = rng.uniform(0.06, 0.13)
+        parts.append(sphere("spot%d" % k, (x, y, z), (r, r, r * 0.6), skinL if k % 3 else skinD, 10, 8))
+    export("forget_body", parts)
 
-    # wings: an inner part (shoulder to wrist) and an outer hand with fingers.
-    # Each is drawn for the left side (+Y); the right side is exported mirrored.
-    for side, tag in ((1, "L"), (-1, "R")):
-        y = side
-        # inner wing: pivot at the shoulder; the arm bone runs out along +Y and back
-        arm = cyl("arm", (0, 0, 0), (-0.05, 0.75 * y, 0.25), 0.05, 0.035, bone, 8)
-        me = bpy.data.meshes.new("innerWeb")
-        bm = bmesh.new()
-        pts = [(0.02, 0, 0.02), (-0.05, 0.75 * y, 0.25), (-0.3, 0.72 * y, -0.05), (-0.55, 0.45 * y, -0.12),
-               (-0.6, 0.15 * y, -0.18), (-0.35, 0.0, -0.1)]
-        vs = [bm.verts.new(Vector(p)) for p in pts]
-        bm.faces.new(vs if y > 0 else list(reversed(vs)))
-        bmesh.ops.triangulate(bm, faces=bm.faces[:])
-        bm.to_mesh(me)
-        bm.free()
-        web = bpy.data.objects.new("innerWeb", me)
-        bpy.context.collection.objects.link(web)
-        web.modifiers.new("solid", "SOLIDIFY").thickness = 0.03
-        finish(web, skinM, smooth=False)
-        export("bat_wing_in_" + tag, [arm, web])
-
-        # outer wing (the hand): pivot at the wrist; three long fingers fan out with the web
-        # between them, scalloped at the trailing edge; a hooked thumb claw at the wrist
-        fingers = [((-0.1, 0.95 * y, 0.35), (-0.55, 0.9 * y, -0.05)),
-                   ((-0.35, 0.95 * y, 0.05), (-0.75, 0.55 * y, -0.25)),
-                   ((-0.35, 0.55 * y, -0.15), (-0.55, 0.15 * y, -0.4))]
-        objs = []
-        tips = []
-        for i, (mid, tip) in enumerate(fingers):
-            objs.append(cyl("f%da" % i, (0, 0, 0), mid, 0.03, 0.022, bone, 6))
-            objs.append(cyl("f%db" % i, mid, tip, 0.022, 0.012, bone, 6))
-            tips.append((mid, tip))
-        objs.append(cone("thumb", (0.05, 0.05 * y, 0.08), 0.03, 0.14, claw, rot=(0, 0.6, 0)))
-        objs.append(sphere("wrist", (0, 0, 0), (0.06, 0.06, 0.06), bone, 8, 6))
-        # web: leading edge along finger 0, then each fingertip, with a scallop between
-        outline = [(0.0, 0.0, 0.0), tips[0][0], tips[0][1]]
-        for i in range(1, 3):
-            a, b = Vector(tips[i - 1][1]), Vector(tips[i][1])
-            dip = (a + b) / 2 + Vector((0.12, 0, 0.1))   # the scallop curves in toward the wrist
-            outline += [tuple(dip), tips[i][1]]
-        # back to the wrist past the inner wing's trailing edge
-        outline += [(-0.2, 0.05 * y, -0.2)]
-        me = bpy.data.meshes.new("outerWeb")
-        bm = bmesh.new()
-        vs = [bm.verts.new(Vector(p)) for p in outline]
-        bm.faces.new(vs if y > 0 else list(reversed(vs)))
-        bmesh.ops.triangulate(bm, faces=bm.faces[:])
-        bm.to_mesh(me)
-        bm.free()
-        web = bpy.data.objects.new("outerWeb", me)
-        bpy.context.collection.objects.link(web)
-        web.modifiers.new("solid", "SOLIDIFY").thickness = 0.025
-        finish(web, skinM, smooth=False)
-        objs.append(web)
-        export("bat_wing_out_" + tag, objs)
+    # one tentacle segment: pivot at the top, hanging down -Z, 0.38 long, suckers on the front
+    seg = [cyl("seg", (0, 0, 0.02), (0, 0, -0.4), 0.13, 0.11, skin, 14),
+           sphere("joint", (0, 0, 0), (0.13, 0.13, 0.1), skin, 14, 8)]
+    for k in range(2):
+        seg.append(sphere("sucker%d" % k, (0.11, 0, -0.1 - k * 0.17), (0.03, 0.06, 0.06), sucker, 10, 8))
+    seg.append(cyl("stripe", (0, 0, -0.18), (0, 0, -0.22), 0.125, 0.12, skinL, 14))
+    export("forget_seg", seg)
+    # the tentacle tip: a tapering curl
+    export("forget_tip", [
+        sphere("joint", (0, 0, 0), (0.11, 0.11, 0.08), skin, 12, 8),
+        cyl("tipA", (0, 0, 0), (0.0, 0, -0.25), 0.11, 0.07, skin, 12),
+        cyl("tipB", (0.0, 0, -0.25), (0.12, 0, -0.42), 0.07, 0.025, skin, 10),
+        sphere("tipSucker", (0.08, 0, -0.18), (0.025, 0.05, 0.05), sucker, 8, 6),
+    ])
 
 
 reset()
 gran()
 reset()
-bat()
+forgetting()
 print("done")
