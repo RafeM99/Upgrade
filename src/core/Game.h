@@ -102,6 +102,11 @@ public:
     Story story;
     float hitPause = 0;
 
+    // power-ups: the last one each player picked up, for the corner pop-up (seconds left, type)
+    float puPopT[2] = {0, 0};
+    int puPopType[2] = {0, 0};
+    int hourglassBy = 0;          // who picked up the hourglass (its icon sits in their corner)
+
     // the bosses' powers over time (enemies/BossPowers.h, core/GamePowers.cpp)
     int difficulty = DIFF_GENTLE;   // chosen on the title screen
     BossPowerState powers;
