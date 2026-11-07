@@ -1,11 +1,15 @@
-// Renderer.h: draws the world into a low-resolution render texture per era
-// (true pixel art for eras 0-2), then upscales it through the era's palette shader:
-//   era 0 = 2 colours with dither and an LCD grid, era 1 = 16-colour palette with CRT
-//   scanlines, era 2 = wider palette with soft scanlines, era 3 = full resolution with bloom.
+// Renderer.h: draws the world into a render texture per graphics stage (low resolution,
+// true pixel art for stages 0-4), then upscales it through the stage's post shader:
+//   0 1-bit: 2 colours, dither, LCD grid      1 4-shade: four greys, dot-matrix LCD with pixel shadows
+//   2 8-bit: 16-colour palette, CRT lines     3 16-bit: 4096 colours, soft scanlines
+//   4 32-bit: rich colour, backlit screen glow 5 2.5D: full resolution, the camera swings
+//   6 3D: modelled, toon-outlined characters and props (Models3D), a gentle 3/4 perspective
 // During an era upgrade both eras are drawn: the old one glitches and goes blocky, then a
 // bright scanline sweeps across the screen and the new era appears behind it.
 #pragma once
 #include "raylib.h"
+#include "render/ArtSpec.h"
+#include "render/Models3D.h"
 
 class Game;
 
@@ -25,9 +29,12 @@ public:
     static float sweepProgress(const Game& g);  // 0..1, or -1 when no sweep is on screen
 
 private:
-    RenderTexture2D rt_[4]{};
-    int rtW_[4] = {}, rtH_[4] = {};
-    Shader post_{}, world_{};
+    RenderTexture2D rt_[art::ERA_COUNT]{};
+    int rtW_[art::ERA_COUNT] = {}, rtH_[art::ERA_COUNT] = {};
+    Models3D models_;
+    int locShades_ = -1;
+    Shader post_{}, world_{}, haze_{};
+    int locHazeCol_ = -1, locHazeAmt_ = -1;
     int locEra_ = -1, locTime_ = -1, locSize_ = -1, locOut_ = -1, locFlash_ = -1, locDesat_ = -1, locPal_ = -1;
     int locMosaic_ = -1, locGlitch_ = -1, locBeat_ = -1;
     int locRetro_ = -1, locBloom_ = -1, locBright_ = -1;
@@ -38,5 +45,8 @@ private:
     void drawEra(Game& g, int era, float swing);
     void blitEra(Game& g, int era, Rectangle dst, float flash, float desat, float mosaic, float glitch);
     void drawSweep(Game& g, Rectangle dst, float p);
-    void drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha);
+    void drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha, int layers = art::BG_LAYERS);
+    // 2.5D and 3D: the far backdrop layers as cut-outs standing in the scene, and the lawns
+    void drawBackdrop3D(Game& g, int era, const Camera3D& cam);
+    void drawLawns25D(Game& g);
 };

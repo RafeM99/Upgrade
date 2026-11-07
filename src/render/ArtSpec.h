@@ -5,18 +5,47 @@
 
 namespace art {
 
-constexpr int ERA_COUNT = 4;
+// The graphics stages ("eras" in the code), oldest to newest. Each one has its own sprites,
+// tiles, palette, post shader look and level chunks:
+//   0 1-bit        two colours, 8 px tiles
+//   1 4-shade      a handheld LCD: exactly four greys, 16 px tiles
+//   2 8-bit        first colour: a 16-colour palette, 3 colours per sprite part, 16 px tiles
+//   3 16-bit       shaded sprites, a 32-colour palette, 20 px tiles
+//   4 32-bit       late, detailed 2D pixel art: hue-shifted shading, coloured outlines, 32 px tiles
+//   5 2.5D         flat sprites in a lit 3D world, the camera swings (64 px textures)
+//   6 3D           full 3D: modelled characters and props, deep perspective, bloom
+constexpr int ERA_COUNT = 7;
+constexpr int LAST_ERA = ERA_COUNT - 1;
 
-// Pixels per tile in each era: 1-bit, 8-bit, 16-bit, 2.5D.
-constexpr int TILE_PX[ERA_COUNT] = {8, 16, 32, 64};
+// Pixels per tile in each stage.
+// The pixel-art stages render into a native buffer TILE_PX * VIEW_TILES_H pixels tall
+// (88, 176, 176, 220, 352) that is scaled up by a whole number (8x, 4x, 4x, 3x, 2x at 720p).
+constexpr int TILE_PX[ERA_COUNT] = {8, 16, 16, 20, 32, 64, 64};
 
-// The world view is VIEW_TILES_H tiles tall. The low-res render target for
-// eras 0-2 is TILE_PX * VIEW_TILES_H pixels tall, so one sprite pixel is one
-// screen pixel of the render target (true pixel art). Era 3 renders at window size.
-constexpr float VIEW_TILES_H = 14.0f;
+// Which older drawing style the sprite generator starts from for each stage
+// (0 = 1-bit, 1 = 8-bit, 2 = 16-bit, 3 = smooth), before the stage's own rules.
+constexpr int STYLE[ERA_COUNT] = {0, 1, 1, 2, 2, 3, 3};
+
+// Pixel-art stages render into a small target (one sprite pixel = one target pixel);
+// the 2.5D and 3D stages render at window size.
+constexpr bool lowRes(int era) { return era <= 4; }
+constexpr bool smooth(int era) { return era >= 5; }
+
+// Camera swing at each stage: 0 = flat side view, 1 = 2.5D, 2 = full 3D.
+constexpr float SWING[ERA_COUNT] = {0, 0, 0, 0, 0, 1, 2};
+
+// Sound set (assets/audio/eraN) used by each stage.
+constexpr int AUDIO_SET[ERA_COUNT] = {0, 0, 1, 2, 2, 3, 3};
+
+// Difficulty tier (the old four-era scale) that enemies and the boss use at each stage.
+constexpr int TIER[ERA_COUNT] = {0, 1, 1, 2, 2, 3, 3};
+
+// The world view is VIEW_TILES_H tiles tall. The low-res render target is
+// TILE_PX * VIEW_TILES_H pixels tall, so one sprite pixel is one target pixel.
+constexpr float VIEW_TILES_H = 11.0f;   // Gran and Sam (1.5 tiles) are about 1/7 of the screen
 
 // Background layers: each is two screens wide and tiles horizontally.
-constexpr int BG_H[ERA_COUNT] = {112, 224, 448, 360};
+constexpr int BG_H[ERA_COUNT] = {88, 176, 176, 220, 352, 360, 360};   // = the native buffer height
 inline int bgW(int era) { return BG_H[era] * 32 / 9; }
 constexpr int BG_LAYERS = 4;   // 0 sky (opaque), 1 far, 2 mid, 3 near
 
@@ -51,6 +80,9 @@ enum TileFrame {
 
 // ---- Forgetting Wall texture: wall.png, 2 x 4 tiles, tiles vertically.
 constexpr float WALL_TEX_W = 2.0f, WALL_TEX_H = 4.0f;
+
+// ---- Four warm greys of the 4-shade stage (dark to light). Our own; the shader uses them too.
+constexpr unsigned SHADES4[4] = {0x1f1d24, 0x5b5662, 0xa8a297, 0xe8e2d2};
 
 // ---- Ending scene pictures: ending_0..3.png (in assets/art/), 640 x 360.
 constexpr int ENDING_W = 640, ENDING_H = 360, ENDING_COUNT = 4;

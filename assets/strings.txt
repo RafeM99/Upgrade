@@ -1,8 +1,10 @@
 # Upgrade: every line the players read. key = text. "\n" makes a new line.
-# The writer owns this file. The two characters: Player 1 is Gran, Player 2 is Sam, her grandson.
+# The writer owns this file. The two characters: Player 1 is Gran (Edie, 80, who has Alzheimer's),
+# Player 2 is Sam, her grandson. The run goes back through her memories, newest first, oldest last.
+# Lines that start with GRAN: or SAM: are spoken; any other story line is narration.
 
 title = UPGRADE
-title_sub = Two of you. One memory. Get it back before it fades.
+title_sub = Gran is forgetting. Walk back through her memories and bring them home.
 title_start = Press any button to start
 title_join = Player 2: press any of your buttons to join
 title_p2_ready = Player 2 is here!
@@ -15,23 +17,21 @@ p1_name = GRAN
 p2_name = SAM
 p2_join_1 = Player 2?
 p2_join_2 = Press any of your buttons to join
-p2_joined = SAM REMEMBERS
+p2_joined = SAM IS HERE
 p2_joined_sub = Two of you now. Stay close.
 
 bar_label = MEMORY
 score = SCORE
-era_name_0 = 1-BIT . EARLY CHILDHOOD
-era_name_1 = 8-BIT . SCHOOL YEARS
-era_name_2 = 16-BIT . TEENAGE YEARS
-era_name_3 = 2.5D . GROWN UP
+era_name_0 = 1-BIT . LAST WINTER
+era_name_1 = 4-SHADE . 2014
+era_name_2 = 8-BIT . 2006
+era_name_3 = 16-BIT . 1979
+era_name_4 = 32-BIT . 1964
+era_name_5 = 2.5D . 1958
+era_name_6 = FULL 3D . 1951
 start_hint = Run right. Jump on the Forgetting. Collect what it drops.
 controls_hint = Jump on enemies to break them. Their fragments fill the Memory Bar. Stay ahead of the Wall.
 
-memory_restored = MEMORY RESTORED:
-memory_1 = The first bike ride
-memory_2 = The treehouse
-memory_3 = The phone call
-memory_4 = Home
 new_ability = NEW ABILITIES
 
 ability_double_jump = Double jump
@@ -40,6 +40,7 @@ ability_ground_pound = Ground pound
 ability_wall_jump = Wall jump
 ability_glide = Glide
 ability_time_slow = Time-slow pulse
+ability_attack = Attack button
 ability_short_double_jump = 2xJUMP
 ability_short_dash = DASH
 ability_short_ground_pound = POUND
@@ -59,17 +60,44 @@ memory_lost = THE MEMORY SLIPS
 memory_lost_sub = Both of you faded. Hold on to each other.
 memory_lost_sub_solo = You faded. The memory slips a little further away.
 
-boss_appear = THE FORGETTING GATHERS
-boss_sub = Jump on it when it lands!
-boss_name = THE FORGETTING
 boss_hint = NOW! Jump on it!
-boss_defeated = IT REMEMBERS
-boss_appear_0 = THE ALARM CLOCK RINGS
-boss_sub_0 = Jump its shockwaves. Stomp it when it's dizzy!
-boss_name_0 = THE ALARM CLOCK
-boss_appear_1 = THE HOURGLASS TURNS
-boss_sub_1 = Dodge its swoops and charges. Stomp it when it rests!
-boss_name_1 = THE HOURGLASS
+boss_hint_short = Jump on it when it lands!
+# Each boss's power over time: the warning shown first, then the name when it lands.
+power_warn_0 = TICK... TOCK... it is winding up!
+power_name_0 = TIME STOP! You are frozen!
+power_name_1 = IT REWINDS! Hit it again quickly!
+power_warn_2 = The bell is about to ring...
+power_name_2 = HURRY! Time runs fast!
+power_warn_3 = The rain is coming...
+power_name_3 = HEAVY RAIN! Time drags!
+power_name_4 = ECHOES of the last train!
+power_warn_5 = The sun is sinking fast...
+power_name_5 = HARVEST RUSH! The crows fly fast!
+power_warn_6 = It is pulling you back...
+power_name_6 = PULLED BACK! It took your last few seconds!
+
+difficulty_label = DIFFICULTY
+difficulty_0 = GENTLE
+difficulty_1 = MEDIUM
+difficulty_2 = HARD
+difficulty_desc_0 = Boss powers are short and clearly announced. Up / Down to change
+difficulty_desc_1 = Boss powers can hurt you if you ignore them. Up / Down to change
+difficulty_desc_2 = Strong, frequent powers, and every boss takes one more hit. Up / Down to change
+# One boss for each memory: the Forgetting takes the shape of something in it.
+boss_name_0 = THE 3 A.M. CLOCK
+boss_name_1 = THE EMPTY SHIRT
+boss_name_2 = THE SCHOOL BELL
+boss_name_3 = THE STORM
+boss_name_4 = THE LAST TRAIN
+boss_name_5 = THE SCARECROW
+boss_name_6 = THE FORGETTING
+boss_says_0 = "Up you get, Edie. You're late for work. Late, late, late."
+boss_says_1 = "He isn't coming in, Edie. Let the wind have him."
+boss_says_2 = "Whose little boy is this? Nobody's. Ring him away."
+boss_says_3 = "Blow the tent down. Blow the whole night away."
+boss_says_4 = "Miss me, Edie, and you never meet him."
+boss_says_5 = "Stay in the field. Stay twelve. Stay nobody's."
+boss_says_6 = "Let go of the first one, and all the rest will follow."
 
 powerup_0 = KEEPSAKE LOCKET
 powerup_desc_0 = Protects you from one hit.
@@ -88,67 +116,98 @@ restart = Restart
 quit = Quit to title
 pause_hint = Up/Down to choose, Enter or Space to pick
 
-ending_caption_0 = The first bike ride
-ending_sub_0 = "Don't let go!"  "I let go ages ago. You're doing it yourself."
-ending_caption_1 = The treehouse
-ending_sub_1 = We built it together, one summer. It's still there.
-ending_caption_2 = The phone call
-ending_sub_2 = Every Sunday, even when he moved far away.
-ending_caption_3 = Home
-ending_sub_3 = And then one day, she forgot his name.
-ending_reveal_1 = Player 1 was Gran.
-ending_reveal_2 = Player 2 was Sam, her grandson.
-ending_reveal_3 = The memories were hers. He came back to find them with her.
-ending_reveal_4 = "There you are, Sam. I remember."
 credits_title = UPGRADE
 credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
-thanks = Thank you for remembering.
+thanks = Thank you for remembering with her.
 ending_continue = Press any button
 
-# ---- settings menu (akshat)
-title_settings = O / Tab / Select: Settings
-settings_item = Settings
-settings = SETTINGS
-settings_display = DISPLAY
-settings_graphics = GRAPHICS
-settings_audio = AUDIO
-settings_back = Back
-settings_back_desc = Save your settings and go back.
-settings_hint = Up/Down choose   Left/Right change   Enter toggle   Esc back
-set_fullscreen = Fullscreen
-set_fullscreen_desc = Fill the whole screen (borderless). Off returns to your window.
-set_vsync = VSync
-set_vsync_desc = Sync frames to the monitor to stop tearing.
-set_fps_cap = Frame cap
-set_fps_cap_desc = Most frames drawn per second. The game itself always runs at 60.
-set_show_fps = Show FPS
-set_show_fps_desc = Frames per second in the bottom-left corner.
-set_retro = Retro screen effects
-set_retro_desc = LCD grid, CRT scanlines and vignette. Off keeps each era's colours.
-set_bloom = Bloom
-set_bloom_desc = Glow around bright lights in the 2.5D era.
-set_beat_pulse = Beat pulse
-set_beat_pulse_desc = The screen brightens on each beat of the music.
-set_shake = Screen shake
-set_shake_desc = How hard the camera shakes on big hits.
-set_particles = Particles
-set_particles_desc = Sparks, dust and bursts. Low is easier on slow machines.
-set_pixel_scale = Pixel scaling
-set_pixel_scale_desc = Sharp fills the window. Integer only: whole-pixel scale, black borders.
-set_brightness = Brightness
-set_brightness_desc = Make the whole picture darker or brighter.
-set_volume = Master volume
-set_volume_desc = Volume of music and sound effects together.
-opt_on = On
-opt_off = Off
-opt_light = Light
-opt_full = Full
-opt_low = Low
-opt_normal = Normal
-opt_high = High
-opt_unlimited = Unlimited
-opt_sharp = Sharp
-opt_integer = Integer only
+# ------------------------------------------------------------------ the story (ui/Story.cpp)
+story_memory_of = MEMORY %d OF %d
+story_further_back = <  FURTHER BACK
+story_now = NOW
+story_continue = Press any button
+story_boss_label = THE FORGETTING TAKES A SHAPE
+story_she_remembers = SHE REMEMBERS
 
-# cutscenes (akshat): the dialogue lines themselves live in assets/cutscenes.txt
-cutscene_skip = Hold JUMP to skip  .  ESC skips all
+story_prologue_label = THE PRESENT DAY
+story_prologue_title = Gran is forgetting
+story_prologue_when = EDIE . 80 YEARS OLD
+story_prologue_1 = Edie is eighty. She has Alzheimer's disease.
+story_prologue_2 = It takes the newest memories first. The oldest ones hold on the longest.
+story_prologue_3 = This morning she called her grandson Arthur. Arthur was her husband.
+story_prologue_4 = SAM: It's Sam, Gran. Come on. We'll go and find them. All of them, one at a time.
+story_prologue_5 = Every memory she gets back, she sees a little more clearly.
+
+# Memory titles, years for the timeline, and the line under each title. 0 is the newest memory, 6 the oldest.
+memory_title_0 = The night she got lost
+memory_title_1 = Arthur's shirts
+memory_title_2 = Sam's first day at school
+memory_title_3 = The camping trip
+memory_title_4 = The train to the city
+memory_title_5 = The hay meadow
+memory_title_6 = Home
+memory_year_0 = 2025
+memory_year_1 = 2014
+memory_year_2 = 2006
+memory_year_3 = 1979
+memory_year_4 = 1964
+memory_year_5 = 1958
+memory_year_6 = 1951
+memory_when_0 = LAST WINTER
+memory_when_1 = 2014 . TWELVE YEARS AGO
+memory_when_2 = 2006 . TWENTY YEARS AGO
+memory_when_3 = 1979 . EDIE IS 33
+memory_when_4 = 1964 . EDIE IS 18
+memory_when_5 = 1958 . EDIE IS 12
+memory_when_6 = 1951 . EDIE IS 5
+
+story_0_1 = Last winter Gran woke at three in the morning, sure it was time for work. She put on her coat over her nightie and walked out into the dark.
+story_0_2 = GRAN: Who are you? Sam is five. You're far too tall to be Sam.
+story_0_3 = SAM: I found you at the bus stop that night, Gran. In your slippers.
+story_0_4 = GRAN: I was only going to the shop.
+
+story_1_1 = The spring after Grandpa Arthur died, Gran kept washing his shirts and pegging them out on the line.
+story_1_2 = GRAN: He likes them dried in the wind. He says they smell of outside.
+story_1_3 = SAM: I helped you peg them. I was thirteen. You let me keep the blue one.
+
+story_2_1 = Mum had to work, so Gran walked Sam to school on his first day. At the gate he would not let go of her hand.
+story_2_2 = GRAN: Off you go, little man. I'll be right here at three o'clock.
+story_2_3 = SAM: And you were. Every single day.
+
+story_3_1 = Edie, Arthur and little Rose, six years old, in a borrowed tent under the pines. The storm came in the night.
+story_3_2 = GRAN: Arthur held the tent pole till morning. Rose slept through the lot.
+story_3_3 = SAM: Mum still tells that one at Christmas.
+
+story_4_1 = Edie was eighteen, leaving home for a job in the city. The train was packed. A boy in a borrowed suit stood up and gave her his seat.
+story_4_2 = GRAN: He said, "I'm Arthur. I'll get off wherever you do."
+story_4_3 = SAM: You never told me that, Gran.
+
+story_5_1 = Every summer the whole village brought in the hay. Edie was twelve, and faster than any of the boys.
+story_5_2 = GRAN: I raced the swallows down the long field. I won, too.
+story_5_3 = SAM: I believe you.
+
+story_6_1 = The cottage at the end of the lane. Edie is five. Her mother is at the gate, calling her in for tea.
+story_6_2 = GRAN: This is the oldest one, Sam. The clearest one. If this goes, they all go.
+story_6_3 = SAM: Gran, look. It's your cottage. You still live here.
+
+# What Gran says as each memory comes back (on the cinematic bars).
+remembered_0 = "I was looking for the shop. You walked me home."
+remembered_1 = "His blue shirt. I wore it to bed for a whole year."
+remembered_2 = "You let go of my hand first. You were braver than me."
+remembered_3 = "The sun came up and we fried eggs on the little stove."
+remembered_4 = "I got off at his stop. Sixty years, Sam."
+remembered_5 = "The swallows. I'd forgotten the swallows."
+
+# ------------------------------------------------------------------ the ending
+end_album_title = SHE REMEMBERS
+end_album_sub = Seven memories, in the order she lived them.
+end_label = THE PRESENT DAY
+end_title = The cottage at the end of the lane
+end_when = NOW
+end_1 = Sam makes the tea. Gran watches him from her chair by the window, the way she always did.
+end_2 = GRAN: Sam?
+end_3 = SAM: Hi, Gran.
+end_4 = GRAN: Look at you. When did you get so tall?
+end_5 = SAM: A while ago. Sit down, I'll tell you all about it.
+end_close_1 = Alzheimer's takes the newest memories first. The oldest ones stay the longest.
+end_close_2 = Ask about the old days. Sit, and listen. They are still in there.

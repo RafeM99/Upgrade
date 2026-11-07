@@ -3,6 +3,10 @@
 //
 // Chunk file format (brief section 10): first line is a tag header, then the grid.
 //   # abilities=double_jump min_era=1 difficulty=2 coop=false weight=1
+//   # abilities=none stages=1,2 difficulty=1 weight=2        (a chunk made for those graphics stages)
+// min_era uses the old four-era scale (0 1-bit, 1 8-bit, 2 16-bit, 3 2.5D) and is mapped to the
+// matching graphics stage; min_stage gives a stage (0..6) directly. A chunk with stages= is only
+// placed in those stages, and is preferred there (level.stage_chunk_share).
 // Legend: . empty  # solid  = cracked floor (ground pound)  1 / 2 platform only solid for P1 / P2
 //         | wall (wall jump)  S Static Blob  G Glitch Flyer  B Fog Brute  F fragment
 //         a / b Static Blob only P1 / P2 can see and hurt   P random power-up
@@ -21,7 +25,8 @@ struct Chunk {
     int w = 0;
     std::vector<std::string> rows;   // LEVEL_H rows of w chars
     unsigned requires = 0;           // bit mask of Ability
-    int minEra = 0;
+    int minEra = 0;                  // first graphics stage (0..6) it may appear in
+    unsigned stages = 0;             // bit mask of the stages it was made for, 0 = any
     int difficulty = 1;
     bool coop = false;
     int weight = 1;

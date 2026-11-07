@@ -1,6 +1,7 @@
 #include "audio/Audio.h"
 #include "core/Config.h"
 #include "core/Paths.h"
+#include "render/ArtSpec.h"
 #include "audio/MusicSpec.h"
 
 #include <algorithm>
@@ -68,6 +69,7 @@ void Audio::shutdown()
 
 void Audio::setEra(int era)
 {
+    era = art::AUDIO_SET[std::max(0, std::min(art::LAST_ERA, era))];   // stages share the four sound sets
     if (!ready_ || era == era_) return;
     era_ = era;
     if (hasMusic_[era] && !IsMusicStreamPlaying(music_[era])) PlayMusicStream(music_[era]);

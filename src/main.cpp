@@ -1,19 +1,16 @@
 // Upgrade - GameJam 2026 (theme: Time)
 // Two players fight off the Forgetting to recover a memory they share, watching
-// the world grow from 1-bit to 2.5D as it comes back.
+// the world grow from 1-bit through seven graphics stages to full 3D as it comes back.
 //
 // Test options:
 //   --autoplay        bots play (P1 only, add --two for both players)
 //   --two             start with Player 2 joined
-//   --era N           start in era N (0..3)
+//   --era N           start in graphics stage N (0 1-bit, 1 4-shade, 2 8-bit, 3 16-bit, 4 32-bit, 5 2.5D, 6 3D)
 //   --fill            the Memory Bar fills fast (to see every era quickly)
 //   --frames N        quit after N frames      --shot FILE   save the last frame
 //   --shot-every N PREFIX  save a frame every N frames as PREFIX_00000.png
 //   --seed N          fixed level seed         --ending      jump to the ending
 //   --size W H        window size
-//   --cutscenes       play story scenes even with --autoplay (they auto-advance)
-//   --settings        open the Settings screen at start
-//   --set KEY=VALUE   override a setting (keys as in settings.ini, e.g. retro=0)
 #include "core/Game.h"
 
 #include <cstdlib>
@@ -35,10 +32,9 @@ int main(int argc, char** argv)
         else if (is("--seed")) o.seed = (unsigned)std::atoi(next());
         else if (is("--ending")) o.ending = true;
         else if (is("--play")) o.startOnTitle = false;
-        else if (is("--cutscenes")) o.cutscenes = true;
+        else if (is("--no-story")) o.story = false;
+        else if (is("--difficulty")) o.difficulty = difficultyFromString(next(), 0);
         else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
-        else if (is("--settings")) o.openSettings = true;
-        else if (is("--set")) o.setOverrides.push_back(next());
     }
     Game game;
     game.init(o);

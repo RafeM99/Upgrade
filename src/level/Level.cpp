@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "level/Level.h"
 #include "player/Abilities.h"
+#include "render/ArtSpec.h"
 
 #include <algorithm>
 
@@ -95,7 +96,8 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
             if ((c.requires & abilities) != c.requires) return false;
             if (c.minEra > era) return false;
             if (c.coop && !two) return false;
-            if (c.difficulty > era + 2) return false;
+            if (c.difficulty > art::TIER[std::min(era, art::LAST_ERA)] + 2) return false;
+            if (c.stages && !(c.stages >> era & 1u)) return false;
             return c.weight > 0;
         };
         const Chunk* pick = nullptr;
@@ -117,8 +119,23 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
         }
         Chunk gen;
         if (!pick) {
-            bool useGen = std::uniform_real_distribution<float>(0, 1)(rng_) < generatedChance;
-            if (!useGen) {
+            float roll = std::uniform_real_distribution<float>(0, 1)(rng_);
+            // most of the time, a chunk built for this stage's look and abilities
+            if (roll < stageShare) {
+                int total = 0;
+                for (auto& ch : pool_)
+                    if (ch.stages && allowed(ch) && ch.name != last_) total += ch.weight;
+                if (total > 0) {
+                    int r = std::uniform_int_distribution<int>(0, total - 1)(rng_);
+                    for (auto& ch : pool_) {
+                        if (!ch.stages || !allowed(ch) || ch.name == last_) continue;
+                        r -= ch.weight;
+                        if (r < 0) { pick = &ch; break; }
+                    }
+                }
+            }
+            bool useGen = !pick && std::uniform_real_distribution<float>(0, 1)(rng_) < generatedChance;
+            if (!pick && !useGen) {
                 int total = 0;
                 for (auto& ch : pool_)
                     if (allowed(ch) && ch.name != last_) total += ch.weight;
@@ -132,7 +149,7 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
                 }
             }
             if (!pick) {
-                gen = generateChunk(rng_, era, abilities, std::min(3, 1 + era));
+                gen = generateChunk(rng_, art::TIER[std::min(era, art::LAST_ERA)], abilities, std::min(3, 1 + art::TIER[std::min(era, art::LAST_ERA)]));
                 pick = &gen;
             }
         }

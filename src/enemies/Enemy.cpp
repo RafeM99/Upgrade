@@ -123,9 +123,11 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
 }
 
 // ------------------------------------------------------------------ Boss
-void Boss::start(float camX, int era, int hpBase, int hpPerEra)
+void Boss::start(float camX, int era, int hpBase, int hpPerEra, int kind_)
 {
     active = true;
+    kind = kind_;
+    landed = false;
     defeated = false;
     maxHp = hp = hpBase + era * hpPerEra;
     state = 0;
@@ -133,14 +135,8 @@ void Boss::start(float camX, int era, int hpBase, int hpPerEra)
     t = 0;
     hurt = 0;
     spawnTimer = 3;
-    attacks = 0;
-    charging = false;
-    landed = false;
-    vy = 0;
-    kind = era <= 1 ? BK_ALARM : BK_HOURGLASS;
     x = camX + 16;
     y = -3;
-    if (kind == BK_ALARM) { x = camX + 5; y = -4; }
     fromX = x; fromY = y;
     toX = camX + 6;
     toY = 4;
@@ -157,96 +153,9 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
     landed = false;
     auto ease = [](float k) { k = std::min(1.0f, std::max(0.0f, k)); return k * k * (3 - 2 * k); };
     float hoverX = camLeft + (camRight - camLeft) * 0.7f;
-    // The floor under gx: the first solid tile at or below row `from` with open air above it,
-    // so bosses land on the ground and not on a ledge high up the screen.
-    auto groundY = [&](float gx, float from = 6.0f) {
-        int tx = (int)std::floor(gx);
-        for (int ty = std::max(1, (int)from); ty < LEVEL_H; ++ty)
-            if (level.isSolidChar(level.tile(tx, ty)) && !level.isSolidChar(level.tile(tx, ty - 1))) return ty - h / 2;
-        int gt = level.groundTop(tx);
-        return (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
-    };
-    auto target = [&](bool wantY) {   // x (or y) of a living player, alternating between the two
-        float tx = x, ty = y;
-        for (int i = 0; i < 2; ++i)
-            if (players[i].alive()) {
-                tx = players[i].cx(); ty = players[i].cy();
-                if (attacks % 2 == i) break;
-            }
-        return wantY ? ty : std::max(camLeft + 2.0f, std::min(camRight - 2.0f, tx));
-    };
-    auto minions = [&]() {
-        spawnTimer -= dt;
-        if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = 4.5f - era * 0.5f; }
-    };
-    if (state == 5) {   // dying, every kind
-        y += dt * 0.5f;
-        if (stateTime > 1.6f) { active = false; defeated = true; }
-        return;
-    }
-
-    // ---------------------------------------------------------------- Alarm Clock
-    if (kind == BK_ALARM) {
-        switch (state) {
-        case 0:   // drops in from above
-            x += (hoverX - x) * 1.5f * dt;
-            vy += 40 * dt;
-            y += vy * dt;
-            if (y >= groundY(x)) { y = groundY(x); vy = 0; state = 1; stateTime = 0; }   // entry: no shockwave
-            break;
-        case 1:   // stands, then picks a hop
-            y = std::min(groundY(x), y + 20 * dt);
-            minions();
-            if (stateTime > (attacks % 3 == 0 ? 0.9f : 0.35f) - era * 0.03f) {
-                float tx = target(false);
-                tx = std::max(x - 9.0f, std::min(x + 9.0f, tx));
-                fromX = x; fromY = y; toX = tx; toY = groundY(tx);
-                state = 6; stateTime = 0;
-            }
-            break;
-        case 6:   // crouch: the marker shows where it lands
-            if (stateTime > 0.55f) { state = 2; stateTime = 0; }
-            break;
-        case 2: { // hop
-            float k = std::min(1.0f, stateTime / 0.85f);
-            x = fromX + (toX - fromX) * k;
-            y = fromY + (toY - fromY) * k - 20.0f * k * (1 - k);
-            if (k >= 1) {
-                y = toY; landed = true; ++attacks;
-                state = attacks % 3 == 0 ? 3 : 1; stateTime = 0;
-            }
-            break;
-        }
-        case 3:   // dizzy: stomp it now
-            if (stateTime > 2.2f) { state = 1; stateTime = 0; }
-            break;
-        default: state = 1; stateTime = 0; break;
-        }
-        return;
-    }
-
-    // ---------------------------------------------------------------- Hourglass charges
-    if (charging && (state == 6 || state == 2 || state == 3)) {
-        switch (state) {
-        case 6:   // line up with the target: the band shows the charge lane
-            y += (toY - y) * 6 * dt;
-            x = fromX + std::sin(t * 50) * 0.06f;
-            if (stateTime > 0.8f - era * 0.04f) { state = 2; stateTime = 0; }
-            break;
-        case 2:   // charge left across the screen
-            x -= (16.0f + era) * dt;
-            if (x < camLeft + 1.8f) { state = 3; stateTime = 0; fromY = y; toY = groundY(x); }
-            break;
-        case 3:   // dizzy on the ground
-            y = fromY + (toY - fromY) * ease(stateTime / 0.3f);
-            if (stateTime > 2.2f) { state = 4; stateTime = 0; fromX = x; fromY = y; }
-            break;
-        }
-        return;
-    }
 
     switch (state) {
-    case 0: {   // enter
+    case 0: {   // enter from the top right
         float k = ease(stateTime / 1.6f);
         x = fromX + (hoverX - fromX) * k;
         y = fromY + (4.0f - fromY) * k;
@@ -254,47 +163,80 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         break;
     }
     case 1: {   // hover, follow the camera, spit minions
-        x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 2.0f * dt;
-        y = 4.0f + std::sin(t * 2.0f) * 0.6f;
-        minions();
+        if (kind == 0) {
+            // the clock ticks: it jumps from place to place twice a second
+            if (std::fmod(t, 0.5f) < dt) x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 0.6f;
+            y = 4.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
+        } else if (kind == 1) {
+            // the shirt flutters wide and slow, like washing in the wind
+            x += (hoverX + std::sin(t * 0.6f) * 5 - x) * 1.5f * dt;
+            y = 4.0f + std::sin(t * 1.3f) * 1.0f;
+        } else {
+            x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 2.0f * dt;
+            y = 4.0f + std::sin(t * 2.0f) * 0.6f;
+        }
+        spawnTimer -= dt;
+        if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = (4.5f - era * 0.5f) * (kind == 5 ? 0.7f : 1.0f); }
         if (stateTime > 2.6f - era * 0.25f) {
-            ++attacks;
-            charging = attacks % 2 == 0;   // swoop, charge, swoop, charge...
+            // pick a target player and swoop
+            float tx = x;
+            for (int i = 0; i < 2; ++i)
+                if (players[i].alive()) { tx = players[i].cx(); if ((int)(t * 10) % 2 == i) break; }
+            tx = std::max(camLeft + 2.0f, std::min(camRight - 2.0f, tx));
+            int gt = level.groundTop((int)std::floor(tx));
             fromX = x; fromY = y;
-            stateTime = 0;
-            state = 6;
-            if (charging) {
-                toY = std::max(2.5f, std::min(groundY(x), target(true)));
-                toX = camLeft;
-            } else {
-                float tx = target(false);
-                toX = tx;
-                toY = groundY(tx);
+            toX = tx;
+            toY = (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
+            // The train charges along the ground only where the line is flat all the way from
+            // where it drops to the target; anywhere else it swoops like the others.
+            charge = false;
+            if (kind == 4 && gt >= 0) {
+                int a = (int)std::floor(std::min(x, tx)), b = (int)std::floor(std::max(x, tx));
+                charge = true;
+                for (int c = a; c <= b && charge; ++c) charge = level.groundTop(c) == gt;
             }
+            state = 6;
+            stateTime = 0;
         }
         break;
     }
     case 6:     // aim: a warning marker shows where it will land
         x += (fromX - x) * 0.5f * dt;
         y = fromY + std::sin(t * 30) * 0.05f;
-        if (stateTime > 0.85f - era * 0.08f) { state = 2; stateTime = 0; fromX = x; fromY = y; }
+        // the storm takes longer to aim, then strikes much faster
+        if (stateTime > 0.85f - era * 0.08f + (kind == 3 ? 0.35f : 0.0f)) { state = 2; stateTime = 0; fromX = x; fromY = y; }
         break;
     case 2: {   // swoop down
-        float k = ease(stateTime / 0.75f);
-        x = fromX + (toX - fromX) * k;
-        y = fromY + (toY - fromY) * k * k;
-        if (stateTime > 0.75f) { state = 3; stateTime = 0; }
+        float k = std::min(1.0f, stateTime / swoopLen());
+        if (kind == 4 && charge) {
+            // the train drops onto the line where it is, then charges along the ground
+            if (k < 0.3f) { float d = ease(k / 0.3f); x = fromX; y = fromY + (toY - fromY) * d; }
+            else { x = fromX + (toX - fromX) * ease((k - 0.3f) / 0.7f); y = toY; }
+        } else if (kind == 1) {
+            // the shirt glides in on the wind
+            x = fromX + (toX - fromX) * std::sin(k * 1.5707963f);
+            y = fromY + (toY - fromY) * k * k * k;
+        } else {
+            float e = ease(k);
+            x = fromX + (toX - fromX) * e;
+            y = fromY + (toY - fromY) * e * e;
+        }
+        if (stateTime > swoopLen()) { state = 3; stateTime = 0; landed = true; }
         break;
     }
-    case 3:     // resting on the ground: stomp it now
-        if (stateTime > 2.0f - era * 0.2f) { state = 4; stateTime = 0; fromX = x; fromY = y; }
+    case 3:     // resting on the ground: stomp it now (the bell rests a little longer after it rings)
+        if (stateTime > 2.0f - era * 0.2f + (kind == 2 ? 0.4f : 0.0f)) { state = 4; stateTime = 0; fromX = x; fromY = y; }
         break;
     case 4: {   // rise again
-        float k = ease(stateTime / 0.9f);
+        float k = ease(stateTime / 0.8f);
         y = fromY + (4.0f - fromY) * k;
-        x += (hoverX - x) * 2.5f * dt;
-        if (stateTime > 0.9f) { state = 1; stateTime = 0; charging = false; }
+        x += (hoverX - x) * 1.5f * dt;
+        if (stateTime > 0.8f) { state = 1; stateTime = 0; }
         break;
     }
+    case 5:     // dying
+        y += dt * 0.5f;
+        if (stateTime > 1.6f) { active = false; defeated = true; }
+        break;
     }
 }

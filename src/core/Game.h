@@ -1,7 +1,8 @@
 // Game.h: game state and the main loop at a fixed 60 updates per second.
-// Screens: title -> playing (with era transitions and pause) -> ending.
+// Screens: title -> story card -> playing (with era transitions and pause) -> story card -> ... -> ending.
 #pragma once
 #include "audio/Audio.h"
+#include "enemies/BossPowers.h"
 #include "enemies/Enemy.h"
 #include "level/Level.h"
 #include "player/Input.h"
@@ -10,14 +11,14 @@
 #include "render/GameCamera.h"
 #include "render/Particles.h"
 #include "render/Renderer.h"
-#include "ui/Cutscene.h"
 #include "ui/Hud.h"
+#include "ui/Story.h"
 
 #include <random>
 #include <string>
 #include <vector>
 
-enum class Screen { Title, Playing, Paused, Ending, Settings };
+enum class Screen { Title, Playing, Paused, Story, Ending };
 
 enum PowerType { PU_SHIELD, PU_SLOW, PU_MAGNET, PU_PHOTO, PU_SPEED, PU_COUNT };
 
@@ -35,14 +36,12 @@ struct PowerUp {
 };
 
 struct Options {
-    bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false;
-    bool cutscenes = false;   // --cutscenes: play them even with --autoplay (auto-advance, for screenshots)
+    bool autoplay = false, twoPlayers = false, fill = false, startOnTitle = true, ending = false, story = true;
     int startEra = 0, maxFrames = 0, shotEvery = 0;
+    int difficulty = -1;   // --difficulty; -1: use [boss] difficulty in config.ini
     unsigned seed = 0;
     std::string shot, shotPrefix;
     int width = 1280, height = 720;
-    bool openSettings = false;                  // --settings: start on the Settings screen
-    std::vector<std::string> setOverrides;      // --set key=value (settings), applied after load
 };
 
 class Game {
@@ -87,12 +86,6 @@ public:
     // pause menu
     int pauseItem = 0;
 
-    // settings menu (akshat): reachable from the title and the pause menu
-    int settingsItem = 0;                // row, 0..SET_COUNT (the last row is Back)
-    Screen settingsFrom = Screen::Title; // where Back returns to
-    void openSettings();
-    void applySettings(bool window);     // push settings into raylib (window = fullscreen/vsync/fps too)
-
     // messages: a short banner in the middle of the screen
     std::string banner, bannerSub;
     float bannerT = 0, bannerLen = 0;
@@ -106,11 +99,24 @@ public:
     Particles particles;
     Renderer renderer;
     Hud hud;
-    Cutscene cutscene;   // akshat: story scenes (assets/cutscenes.txt)
+    Story story;
     float hitPause = 0;
+
+    // the bosses' powers over time (enemies/BossPowers.h, core/GamePowers.cpp)
+    int difficulty = DIFF_GENTLE;   // chosen on the title screen
+    BossPowerState powers;
+    const PowerTuning& powerTuning() const;
 
     void startRun();
     void showBanner(const std::string& title, const std::string& sub, float seconds);
+    bool storyOn() const;
+
+    // story: the memory card to open once the next frame is drawn (its photograph is taken then)
+    std::vector<int> pendingCards;
+    // the level banner (stage name, new abilities) waits until the story card is closed
+    std::string heldBanner, heldBannerSub;
+    float heldBannerLen = 0;
+    void levelBanner(const std::string& title, const std::string& sub, float seconds);
 
 private:
     std::mt19937 rng_;
@@ -118,13 +124,26 @@ private:
     int frameNo_ = 0;
     PlayerInput inputs_[2];
     bool firstTick_ = true;
+    bool prologueSeen_ = false;
+    struct Trace { float x, y; bool grounded; };
+    std::vector<Trace> history_[2];      // where the players have been (for the pull back)
+    std::vector<Vector2> pullPath_[2];
+    float historyClock_ = 0;
+    static constexpr float kPullTime = 0.7f;
+    void startBossPowers();
+    bool bossHeldByPower() const;
+    void recordHistory(float dt);
+    void clearHistory();
+    void applyBossPower();
+    void updateBossPowers(float dt);
 
     void update(float dt);
     void updateTitle();
     void updatePlaying(float dt);
     void updatePause();
-    void updateSettings();
     void updateEnding(float dt);
+    void updateStory(float dt);
+    bool storyPressed();
     PlayerInput botInput(int p);
 
     void spawnMarkers();
@@ -142,5 +161,8 @@ private:
     void unlockAbilitiesFor(int newEra);
     void startEnding();
     void joinPlayer2();
+    float fillSpeed_ = 1.0f;   // memory.fill_speed: multiplies every way the bar fills
+    int tier() const { return art::TIER[era]; }   // difficulty on the old four-era scale
+    static std::string introChunk(int era) { return "intro_stage" + std::to_string(era); }
     float randf(float a, float b) { return std::uniform_real_distribution<float>(a, b)(rng_); }
 };

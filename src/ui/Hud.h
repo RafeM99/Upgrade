@@ -1,5 +1,5 @@
 // Hud.h: Memory Bar, player indicators, banners, title, pause and ending screens.
-// The bar and panels restyle for each era (pixel bar -> glossy bar).
+// Each graphics stage draws its own flat HUD, in that era's style (see Hud.cpp).
 #pragma once
 
 class Game;

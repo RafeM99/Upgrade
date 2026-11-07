@@ -14,12 +14,8 @@ Texture2D loadTex(const std::string& rel, int era)
         t = LoadTextureFromImage(img);
         UnloadImage(img);
     }
-    if (era == 3) {
-        GenTextureMipmaps(&t);
-        SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
-    } else {
-        SetTextureFilter(t, TEXTURE_FILTER_POINT);
-    }
+    // every stage is pixel art, so every texture keeps hard pixels (no smoothing)
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
     SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
     return t;
 }
@@ -36,14 +32,13 @@ void Art::load()
         a.flyer = loadTex(d + "enemy_flyer.png", e);
         a.brute = loadTex(d + "enemy_brute.png", e);
         a.boss = loadTex(d + "enemy_boss.png", e);
-        a.bossKind[0] = loadTex(d + "enemy_boss_alarm.png", e);
-        a.bossKind[1] = loadTex(d + "enemy_boss_hourglass.png", e);
+        if (FileExists(assetPath(d + "boss_story.png").c_str())) a.storyBoss = loadTex(d + "boss_story.png", e);
         a.tiles = loadTex(d + "tiles.png", e);
         a.wall = loadTex(d + "wall.png", e);
         for (int l = 0; l < art::BG_LAYERS; ++l) a.bg[l] = loadTex(d + "bg_" + std::to_string(l) + ".png", e);
     }
     for (int i = 0; i < art::ENDING_COUNT; ++i) {
-        ending[i] = loadTex("art/ending_" + std::to_string(i) + ".png", 3);
+        ending[i] = loadTex("art/ending_" + std::to_string(i) + ".png", art::LAST_ERA);
         SetTextureWrap(ending[i], TEXTURE_WRAP_CLAMP);
     }
 }
@@ -52,7 +47,8 @@ void Art::unload()
 {
     for (auto& a : era) {
         UnloadTexture(a.player[0]); UnloadTexture(a.player[1]);
-        UnloadTexture(a.blob); UnloadTexture(a.flyer); UnloadTexture(a.brute); UnloadTexture(a.boss); UnloadTexture(a.bossKind[0]); UnloadTexture(a.bossKind[1]);
+        UnloadTexture(a.blob); UnloadTexture(a.flyer); UnloadTexture(a.brute); UnloadTexture(a.boss);
+        if (a.storyBoss.id) UnloadTexture(a.storyBoss);
         UnloadTexture(a.tiles); UnloadTexture(a.wall);
         for (auto& b : a.bg) UnloadTexture(b);
     }
