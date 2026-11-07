@@ -386,13 +386,6 @@ void Renderer::drawEra(Game& g, int era, float swing)
         float tp = (float)TILE_PX[era];
         c3.target.x = std::round(c3.target.x * tp) / tp;
         c3.target.y = std::round(c3.target.y * tp) / tp;
-        // The ortho view is centred on the target. When the buffer is an odd number of pixels
-        // across (313 wide in 4-shade and 8-bit, 391 in 16-bit) that centre falls in the middle
-        // of a pixel, so every pixel centre sits exactly on a texel edge, and float error makes
-        // some tiles read the neighbouring atlas frame for their first column (the light seams).
-        // Move half a pixel so pixel centres land on texel centres; on-grid art stays put.
-        // (Every buffer height is even, 88..352, so only x needs this.)
-        if (rtW_[era] % 2) c3.target.x += 0.5f / tp;
         c3.position.x = c3.target.x;
         c3.position.y = c3.target.y;
     }
@@ -410,6 +403,18 @@ void Renderer::drawEra(Game& g, int era, float swing)
     }
 
     // ---- tiles
+    // The ortho view is centred on the snapped camera. When the buffer is an odd number of
+    // pixels across (313 in 4-shade and 8-bit, 391 in 16-bit) that centre is mid-pixel, so every
+    // tile edge lands exactly on a pixel centre and every texel lookup sits on a texel edge.
+    // Float error then tips some tiles one texel left: their first column reads the previous
+    // atlas frame (or, by wrap, the sheet's transparent last column), the light seams through
+    // the terrain. Draw the tile grid half a native pixel to the left: its edges fall between
+    // pixels and each pixel reads a texel centre. The tiles cover the same pixels as before.
+    const bool tileHalfPx = lowRes(era) && rtW_[era] % 2 == 1;   // every buffer height is even
+    if (tileHalfPx) {
+        rlPushMatrix();
+        rlTranslatef(-0.5f / TILE_PX[era], 0, 0);
+    }
     auto tileAt = [&](int x, int y) {
         if (x < g.level.firstCol() && smooth(era)) return y >= LEVEL_H - 2 && y < LEVEL_H ? '#' : '.';
         return g.level.tile(x, y);
@@ -453,6 +458,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             }
         }
     }
+    if (tileHalfPx) rlPopMatrix();
 
     // ---- the modelled street of the 3D stage
     if (full3D) {
