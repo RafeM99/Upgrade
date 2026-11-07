@@ -826,7 +826,7 @@ void lump(Canvas& c, float cx, float cy, float rx, float ry, float amp, float ph
         float dx = (f.x - cx) / rx, dy = (f.y - cy) / ry;
         float a = std::atan2(dy, dx);
         float k = 1 + amp * (0.9f * std::sin(2 * a + 0.7f + ph) + 0.6f * std::sin(3 * a + 2.1f - 2 * ph) +
-                             0.35f * std::sin(5 * a + 1.3f + 3 * ph));
+                             0.25f * std::sin(5 * a + 1.3f + 3 * ph));
         f.nx = dx / k;
         f.ny = dy / k;
         return f.nx * f.nx + f.ny * f.ny <= 1.0f;
@@ -852,16 +852,20 @@ void drawBlob(Canvas& c, int frame)
     const int e = g_era;
     const int tp = TILE_PX[e];
     const int dotPx = tp >= 64 ? 3 : (tp >= 32 ? 2 : 1);
-    Col body = pc(0x9a92ac, 2), smear = pc(0x7c7590, 1), faint = pc(0x5a536c, 1);
+    Col body = pc(0x9a90b2, 2), smear = pc(0x7c7590, 1), faint = pc(0x5a536c, 1);
     Col sheen = pc(0xb8b2c6, 3);
     if (e == 2) { body = hex(0x8a7fb4); smear = hex(0x5a5468); faint = hex(0x5a5468); sheen = hex(0xb8b6c8); }
+    if (e == 3) { faint = hex(0x463a66); smear = hex(0x6e6a9e); }
+    if (e >= 4) faint = hex(0x4a4462);
     const float ph = frame * 1.5707963f;
 
     if (frame == BF_SQUASH) {
         // gone flat: a puddle with a couple of flecks thrown off, the two dots shut
         lump(c, 0.5f, 0.93f, 0.44f, 0.1f, 0.12f, 0.6f, 0.99f, lit(body));
-        c.circle(0.14f, 0.74f, 0.045f, solid(body));
-        c.circle(0.86f, 0.7f, 0.035f, solid(smear));
+        if (e >= 4) {
+            c.circle(0.14f, 0.76f, 0.04f, solid(body));
+            c.circle(0.86f, 0.72f, 0.03f, solid(smear));
+        }
         c.rect(0.52f, 0.9f, 0.1f, 1.2f / tp, solid(faint));
         c.rect(0.72f, 0.91f, 0.08f, 1.2f / tp, solid(faint));
         return;
@@ -878,26 +882,37 @@ void drawBlob(Canvas& c, int frame)
         float x0 = cx - rx * (i == 1 ? 0.75f : 0.85f);
         c.capsule(x0 - smearLen[frame][i], smearY[i] + squish * 0.3f, x0 + 0.1f, smearY[i], smearR[i], solid(smear));
     }
-    // a sag pulling off the back, and half-formed bumps that come and go on top
-    lump(c, cx - 0.2f, 0.82f, 0.19f, 0.14f, 0.1f, ph + 1.0f, 0.98f, lit(body));
-    const float bumpX[4] = {0.62f, 0.58f, 0.66f, 0.6f}, bumpR[4] = {0.13f, 0.1f, 0.12f, 0.14f};
-    lump(c, bumpX[frame] + sway, cy - ry * 0.85f, bumpR[frame], bumpR[frame] * 0.85f, 0.12f, ph * 2, 1.0f, lit(body));
-    if (frame % 2 == 0) c.circle(cx - 0.18f, cy - ry * 0.8f, 0.07f, lit(body));
+    // one mass: the sag pulling off its back and the half-formed bumps on top are lit as part
+    // of the same lump, so they swell out of it rather than sit on it
+    auto mass = [&, body](float scx, float scy, float srx, float sry) -> Fill {
+        Fill base = lit(body);
+        return [=](const Frag& f) {
+            Frag g = f;
+            g.nx = (f.x - scx) / srx;
+            g.ny = (f.y - scy) / sry;
+            return base(g);
+        };
+    };
+    const Fill one = mass(cx, cy, rx * 1.1f, ry * 1.15f);
+    // it doesn't sit on the ground like a stone: it slumps, spreading out into a soft skirt
+    lump(c, cx + 0.02f, 0.93f, rx * 1.12f, 0.07f, 0.1f, ph + 2.0f, 0.985f, one);
+    lump(c, cx - 0.2f, 0.82f, 0.19f, 0.14f, 0.08f, ph + 1.0f, 0.98f, one);
+    const float bumpX[4] = {0.64f, 0.4f, 0.58f, 0.36f}, bumpR[4] = {0.12f, 0.11f, 0.1f, 0.13f};
+    lump(c, bumpX[frame] + sway, cy - ry * 0.8f, bumpR[frame], bumpR[frame] * 0.85f, 0.1f, ph * 2, 1.0f, one);
+    if (frame % 2 == 0) c.circle(cx - 0.19f, cy - ry * 0.7f, 0.07f, one);
+    else c.circle(cx + 0.24f, cy - ry * 0.55f, 0.06f, one);
     // the mass itself, never quite the same shape twice
-    lump(c, cx, cy, rx, ry, 0.075f, ph, 0.98f, lit(body));
-    if (e >= 3) {
-        // a smudge of light dragged across it, and bumps half pushed out of the surface
-        c.capsule(cx - 0.24f, cy - ry * 0.45f, cx - 0.04f, cy - ry * 0.55f, 0.035f, solid(sheen));
-        lump(c, cx - 0.06f, cy + ry * 0.35f, 0.1f, 0.07f, 0.15f, ph, 1.0f, lit(body));
-    }
+    lump(c, cx, cy, rx, ry, 0.06f, ph, 0.98f, one);
+    if (e >= 4)   // a smudge of light dragged across it, as if rubbed with a thumb
+        c.capsule(cx - 0.24f, cy - ry * 0.5f, cx - 0.06f, cy - ry * 0.6f, 0.03f, solid(sheen));
     if (e >= 4) {   // loose specks drifting off the back
         c.dot(cx - rx - 0.22f, 0.66f + 0.02f * (frame % 2), smear, dotPx - 1 > 0 ? dotPx - 1 : 1);
         c.dot(cx - rx - 0.3f, 0.79f - 0.02f * (frame % 2), smear, 1);
     }
     // two dim dots that might be eyes, never quite level
     const float dy0[4] = {0.0f, 0.015f, 0.0f, -0.015f};
-    c.dot(cx + 0.1f, cy - 0.05f + dy0[frame], faint, dotPx);
-    c.dot(cx + 0.24f, cy - 0.0f - dy0[frame], faint, dotPx);
+    c.dot(cx + 0.0f, cy - 0.07f + dy0[frame], faint, dotPx);
+    c.dot(cx + 0.15f, cy - 0.04f - dy0[frame], faint, dotPx);
 }
 
 // The flyer: a memory book, a little worn hardback with its covers folded right back so the
@@ -926,11 +941,12 @@ void drawFlyer(Canvas& c, int frame)
     Col page = pc(0xf4eedc, 3), pageD = pc(0xd2c6a8, 2), pageE = pc(0xa89a80, 1);
     Col label = pc(0xead8a8, 3), ink = pc(0x2a1a1e, 0), ribbon = pc(0xd8a848, 2), white = pc(0xfaf3e6, 3);
     if (e == 2) { cover = hex(0xe8364f); coverD = hex(0x6a2c6e); worn = hex(0xf28cb4); pageD = hex(0xf5c9a0); ribbon = hex(0xf7d73a); }
-    if (e == 3) { cover = hex(0xa02a3a); coverD = hex(0x5a1a2a); worn = hex(0xc06a8a); }
+    if (e == 3) { cover = hex(0xa02a3a); coverD = hex(0x5a1a2a); worn = hex(0xc06a8a); pageD = page; pageE = hex(0xc89a7a); }
+    if (e <= 2) pageE = pageD;   // low res: every page the same, split by a line of shade
     if (hurt) { cover = pc(0xf0c8c8, 2); coverD = pc(0xc89aa0, 1); }
 
     const float flap = hurt ? 0.0f : std::sin(frame * 1.5707963f);
-    const float a0 = hurt ? 0.95f : -0.8f * flap;   // wing angle: negative is up
+    const float a0 = hurt ? 0.95f : -(e <= 2 ? 0.9f : 0.8f) * flap;   // wing angle: negative is up
     const int pages = e <= 2 ? 3 : 4;
     const float spread = e <= 2 ? 0.34f : (hurt ? 0.36f : 0.26f);
     const float bx = 0.5f, by = 0.5f + (hurt ? 0.04f : 0.03f * flap);
@@ -939,20 +955,22 @@ void drawFlyer(Canvas& c, int frame)
     // each wing: a fan of pages from behind the cover, back to front, alternating light and shade
     auto wing = [&](float side) {
         float wx = bx + side * (cw * 0.5f - 0.05f), wy = by - 0.03f;
-        for (int i = pages - 1; i >= 0; --i) {
-            float k = i - (pages - 1) * 0.5f;
-            float a = a0 + k * spread;
-            float len = 0.42f - std::fabs(k) * 0.05f;
-            float dx = std::cos(a) * side, dy = std::sin(a);
-            float nx = -dy, ny = dx;   // across the page
-            float w0 = 0.05f, w1 = e <= 2 ? 0.1f : 0.085f;
-            Vector2 tip{wx + dx * len, wy + dy * len};
-            c.poly({{wx + nx * w0, wy + ny * w0}, {tip.x + nx * w1, tip.y + ny * w1}, {tip.x + dx * 0.03f, tip.y + dy * 0.03f},
-                    {tip.x - nx * w1, tip.y - ny * w1}, {wx - nx * w0, wy - ny * w0}}, solid(i % 2 == 0 ? page : pageD));
-            if (e >= 3)   // the page's edge: a thin line down one side
-                c.capsule(wx - nx * w0 * 0.7f, wy - ny * w0 * 0.7f, tip.x - nx * w1 * 0.8f, tip.y - ny * w1 * 0.8f, 0.6f * px,
-                          solid(pageE));
-        }
+        for (int pass = 0; pass < 2; ++pass)
+            for (int i = pages - 1; i >= 0; --i) {
+                float k = i - (pages - 1) * 0.5f;
+                float a = a0 + k * spread;
+                float len = 0.42f - std::fabs(k) * 0.05f;
+                float dx = std::cos(a) * side, dy = std::sin(a);
+                float nx = -dy, ny = dx;   // across the page
+                float w0 = 0.05f, w1 = e <= 2 ? 0.1f : 0.085f;
+                Vector2 tip{wx + dx * len, wy + dy * len};
+                if (pass == 0)
+                    c.poly({{wx + nx * w0, wy + ny * w0}, {tip.x + nx * w1, tip.y + ny * w1}, {tip.x + dx * 0.03f, tip.y + dy * 0.03f},
+                            {tip.x - nx * w1, tip.y - ny * w1}, {wx - nx * w0, wy - ny * w0}}, solid(e <= 2 || i % 2 == 0 ? page : pageD));
+                else if (i > 0)   // where one page lies over the next: a thin line of shade
+                    c.capsule(wx + dx * 0.04f, wy + dy * 0.04f, tip.x - nx * w1 * 0.3f, tip.y - ny * w1 * 0.3f,
+                              (e <= 2 ? 0.55f : 0.5f) * px, solid(pageE));
+            }
     };
     wing(-1.0f);
     wing(1.0f);
@@ -981,7 +999,7 @@ void drawFlyer(Canvas& c, int frame)
         c.dot(x0 + 0.25f, y0 + ch - 0.12f, worn, 1);
     }
     // a paper label on the cover, with a line of faded writing
-    if (e <= 2) c.rect(x0 + sw + px, y0 + px, cw - sw - 2 * px, 2 * px, solid(label));
+    if (e <= 2) c.rect(x0 + sw + px, y0 + px, cw - sw - 2 * px, px, solid(label));
     else {
         c.rect(x0 + 0.1f, y0 + 0.06f, cw - 0.16f, 0.11f, solid(label), 0.01f);
         c.rect(x0 + 0.13f, y0 + 0.1f, cw - 0.22f, px, solid(pageE));
@@ -1133,36 +1151,54 @@ void drawBrute(Canvas& c, int frame)
     circ(1.0f, 0.06f, 0.055f, lit(brass));
     // the clock face is its face
     const float fx = 1.03f, fy = 0.54f;
-    circ(fx, fy, 0.31f, solid(brass));
-    circ(fx, fy, 0.27f, lit(dial, false));
-    if (e >= 3)   // hour marks
-        for (int i = 0; i < 12; ++i) {
+    if (e <= 3) {
+        // low res: the face placed pixel by pixel (8 x 8 inside a one-pixel brass ring):
+        // 'o' the brows and the hands (twenty past eight, a scowl), 'e' the eyes
+        const float dr = 4.4f / tp;
+        circ(fx, fy, dr + 1.1f / tp, solid(e == 1 ? tone(1) : brass));
+        circ(fx, fy, dr, solid(dial));
+        Rows face = {"........", "oo....oo", "..o..o..", ".ee..ee.", "........", "...oo...", "..o..o..", "........"};
+        if (charge) { face[1] = "........"; face[2] = "oo....oo"; face[3] = ".ee..ee."; face[4] = ".ee..ee."; }
+        if (hurt) { face[3] = ".oo..oo."; }
+        Col eyeLo = e == 1 ? tone(1) : eye;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 8; ++x) {
+                char ch = face[y][x];
+                if (ch == '.') continue;
+                Vector2 p = P(fx + (x - 3.5f) / tp, fy + (y - 3.5f) / tp);
+                c.dot(p.x, p.y, ch == 'e' ? eyeLo : ink);
+            }
+    } else {
+        circ(fx, fy, 0.31f, solid(brass));
+        circ(fx, fy, 0.27f, litFace(dial));
+        for (int i = 0; i < 12; ++i)   // hour marks
             if (i == 0 || i == 6 || (i >= 2 && i <= 4) || (i >= 8 && i <= 10)) {
                 float a = i * 0.5235988f;
-                Vector2 p = P(fx + std::sin(a) * 0.22f, fy - std::cos(a) * 0.22f);
+                Vector2 p = P(fx + std::sin(a) * 0.225f, fy - std::cos(a) * 0.225f);
                 c.dot(p.x, p.y, woodD, e >= 5 ? 2 : 1);
             }
+        // brows: heavy, slanting down to the middle (lower still when it charges)
+        float bl = charge ? 0.04f : 0.0f;
+        float bw = std::max(0.03f, 1.6f / tp);
+        line(fx - 0.19f, fy - 0.19f + bl * 0.4f, fx - 0.04f, fy - 0.11f + bl, bw, solid(ink));
+        line(fx + 0.19f, fy - 0.19f + bl * 0.4f, fx + 0.04f, fy - 0.11f + bl, bw, solid(ink));
+        // eyes under them
+        if (hurt) {
+            line(fx - 0.15f, fy - 0.04f, fx - 0.06f, fy - 0.05f, bw * 0.7f, solid(ink));
+            line(fx + 0.06f, fy - 0.05f, fx + 0.15f, fy - 0.04f, bw * 0.7f, solid(ink));
+        } else {
+            float er = charge ? 0.055f : 0.045f;
+            ell(fx - 0.1f, fy - 0.03f, er, er * 0.9f, solid(eye));
+            ell(fx + 0.1f, fy - 0.03f, er, er * 0.9f, solid(eye));
+            c.dot(P(fx - 0.11f, fy - 0.05f).x, P(fx - 0.11f, fy - 0.05f).y, dial, 1);
+            c.dot(P(fx + 0.09f, fy - 0.05f).x, P(fx + 0.09f, fy - 0.05f).y, dial, 1);
         }
-    // brows: heavy, slanting down to the middle (lower still when it charges)
-    float bl = charge ? 0.05f : 0.0f;
-    float bw = std::max(0.035f, 1.4f / tp);
-    if (e <= 2) bw = 1.5f / tp;
-    line(fx - 0.2f, fy - 0.2f + bl * 0.4f, fx - 0.04f, fy - 0.1f + bl, bw, solid(ink));
-    line(fx + 0.2f, fy - 0.2f + bl * 0.4f, fx + 0.04f, fy - 0.1f + bl, bw, solid(ink));
-    // eyes under them
-    if (hurt) {
-        line(fx - 0.15f, fy - 0.06f, fx - 0.07f, fy - 0.06f, bw * 0.8f, solid(ink));
-        line(fx + 0.07f, fy - 0.06f, fx + 0.15f, fy - 0.06f, bw * 0.8f, solid(ink));
-    } else {
-        float er = charge ? 0.06f : 0.05f;
-        if (e <= 2) er = 1.1f / tp + 0.01f;
-        ell(fx - 0.1f, fy - 0.04f, er, er * 0.9f, solid(eye));
-        ell(fx + 0.11f, fy - 0.04f, er, er * 0.9f, solid(eye));
+        // the hands make the scowl: twenty past eight, an upside-down V
+        float hw = std::max(0.02f, 1.0f / tp);
+        line(fx, fy + 0.07f, fx - 0.13f, fy + 0.17f, hw, solid(ink));
+        line(fx, fy + 0.07f, fx + 0.16f, fy + 0.19f, hw, solid(ink));
+        circ(fx, fy + 0.07f, std::max(0.025f, 1.2f / tp), solid(brass));
     }
-    // the hands make the scowl: twenty past eight, an upside-down V
-    line(fx, fy + 0.06f, fx - 0.15f, fy + 0.17f, bw * 0.8f, solid(ink));
-    line(fx, fy + 0.06f, fx + 0.18f, fy + 0.19f, bw * 0.8f, solid(ink));
-    if (e >= 3) circ(fx, fy + 0.06f, std::max(0.025f, 1.0f / tp), solid(brass));
     // a charge: dust kicked up behind
     if (charge && e >= 2) {
         c.circle(0.3f, 1.9f, 0.08f, solid(woodL));
