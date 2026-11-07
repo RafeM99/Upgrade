@@ -1,8 +1,25 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 12:40
+Updated: 2026-11-07 12:55
 
-## 2026-11-07 12:40: skeleton built and tested on claude-camilla
+## 2026-11-07 12:55: skeleton removed, game corrections from Camilla
+The 12:40 skeleton is removed (new commit, no history rewrite). Do not build on it.
+
+### Corrections to the game (from Camilla, these override the brief)
+- Upgrade is a Mario-style 2D platformer with sprites, not coloured blocks.
+- Memories are human memories: moments from the two characters' lives. Nothing about computer memory or RAM.
+- The Memory Bar fills all the way to 100% before each upgrade. After an upgrade it empties and fills again for the next era. The 25/50/75 thresholds in the brief are out.
+- Players kill enemies by jumping on them. Abilities gained at each upgrade (double jump, dash and the rest in brief section 7) add other ways to kill them.
+
+### How I work now
+- One small step at a time. Camilla checks each step before the next.
+- Each step goes to a builder agent, then a separate reviewer agent.
+- I fetch the repo before every step and read the other status files, since several people work at once.
+
+### Doing next
+- Step 1: the smallest project which builds and opens a window. Nothing else.
+
+## 2026-11-07 12:40: skeleton built and tested on claude-camilla (REMOVED at 12:55)
 
 ### Done
 - CMake project with raylib 5.5 (fetched by git, shallow). Clean build on Linux with no warnings. Windows and Mac not tried yet: please build it on your laptop and say here if it fails.
