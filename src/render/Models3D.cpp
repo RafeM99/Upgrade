@@ -33,8 +33,6 @@ unsigned hashi(int x, int s)
 }
 float rndf(int x, int s) { return (hashi(x, s) & 0xffff) / 65535.0f; }
 
-const Color kInk = {30, 22, 34, 255};   // outline colour
-const float kOutline = 0.0028f;         // outline width per unit of camera distance: about 2 px at 720p
 
 // Gran's cottage stands just behind the start and comes back every COTTAGE_EVERY tiles.
 constexpr float COTTAGE_X0 = 10.0f, COTTAGE_EVERY = 72.0f;
@@ -49,8 +47,7 @@ void Models3D::init()
     sh_.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(sh_, "matNormal");
     locView_ = GetShaderLocation(sh_, "viewPos");
     locEmissive_ = GetShaderLocation(sh_, "emissive");
-    locOutline_ = GetShaderLocation(sh_, "outlineW");
-    locHull_ = GetShaderLocation(sh_, "hullMode");
+    locRim_ = GetShaderLocation(sh_, "rim");
     locLightPos_ = GetShaderLocation(sh_, "lightPos");
     locLightCol_ = GetShaderLocation(sh_, "lightCol");
     locLightRad_ = GetShaderLocation(sh_, "lightRad");
@@ -116,31 +113,15 @@ void Models3D::unloadParts(Model* parts, int n, bool& ready)
     ready = false;
 }
 
-// A Blender part: its own material colours, times the tint (for fading and hit flashes), then
-// the dark inverted hull for the toon outline, pushed out along the smooth normals.
-void Models3D::modelPart(Model& m, Matrix t, Color tint, bool outline)
+// A Blender part: its own material colours, times the tint (for fading and hit flashes), with
+// the lighter rim along its silhouette.
+void Models3D::modelPart(Model& m, Matrix t, Color tint, bool rim)
 {
-    float zero = 0.0f, one = 1.0f;
+    float zero = 0.0f, r = rim && rims_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, tint);
-    if (!outline || tint.a < 250) return;
-    int hull = 0;
-    float w = kOutline;
-    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
-    rlEnableBackfaceCulling();
-    rlSetCullFace(RL_CULL_FACE_FRONT);
-    // every material drawn in the ink colour
-    Color saved[16];
-    int nm = std::min(m.materialCount, 16);
-    for (int k = 0; k < nm; ++k) { saved[k] = m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color; m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = kInk; }
-    DrawModel(m, {0, 0, 0}, 1.0f, WHITE);
-    for (int k = 0; k < nm; ++k) m.materials[k].maps[MATERIAL_MAP_DIFFUSE].color = saved[k];
-    rlSetCullFace(RL_CULL_FACE_BACK);
-    rlDisableBackfaceCulling();
-    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::shutdown()
@@ -154,27 +135,15 @@ void Models3D::shutdown()
     UnloadShader(sh_);
 }
 
-void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool outline)
+void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool rim)
 {
+    // boxes get no rim: their flat faces would light up whole, and the face bands already
+    // separate them. Rounded parts get the thin lighter rim.
+    float r = rim && rims_ && &m != &cube_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &emissive, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, c);
-    if (!outline || !outlines_ || c.a < 250) return;
-    // tiny parts (eyes, buttons, glasses) stay as they are: an outline would swallow them
-    float sx = Vector3Length({t.m0, t.m1, t.m2}), sy = Vector3Length({t.m4, t.m5, t.m6}), sz = Vector3Length({t.m8, t.m9, t.m10});
-    if (std::max(sx, std::max(sy, sz)) < 0.075f) return;
-    int hull = &m == &cube_ ? 1 : ((&m == &cyl_ || &m == &cone_) ? 2 : 0);
-    float one = 1.0f, w = kOutline;
-    SetShaderValue(sh_, locEmissive_, &one, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locOutline_, &w, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(sh_, locHull_, &hull, SHADER_UNIFORM_INT);
-    rlEnableBackfaceCulling();
-    rlSetCullFace(RL_CULL_FACE_FRONT);
-    DrawModel(m, {0, 0, 0}, 1.0f, kInk);
-    rlSetCullFace(RL_CULL_FACE_BACK);
-    rlDisableBackfaceCulling();
-    float zero = 0.0f;
-    SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::begin(Game& g, const Camera3D& cam)
@@ -502,13 +471,13 @@ bool Models3D::clearAbove(Game& g, float x0, float x1)
 
 // ------------------------------------------------------------------ the 2.5D hay meadow
 // The 2.5D stage's field between the path and the painted backdrop, and the strip of lawn in
-// front of the path: modelled props in the golden light, no outlines (this stage is the paper
+// front of the path: modelled props in the golden light, no rim light (this stage is the paper
 // theatre before the full 3D one). Further props step towards the dusk colour in the same flat
 // bands as the lawn under them.
 void Models3D::drawMeadow(Game& g)
 {
     setLight(true);
-    outlines_ = false;
+    rims_ = false;
     const float l = g.cam.left() - 8, r = g.cam.right() + 14;
     const Color dusk = hexc(0xf0b48a);
     auto hz = [&](Color c, float z) { return mixc(c, dusk, z > -1.5f ? 0.0f : (z > -8 ? 0.1f : (z > -20 ? 0.24f : 0.36f))); };
@@ -610,7 +579,7 @@ void Models3D::drawMeadow(Game& g)
             part(sphere_, then(S(0.28f, 0.14f, 0.22f), T(x, 0.03f, z)), mixc(hexc(0x8a8478), hexc(0xb0a898), rndf(k, 157)), 0, false);
     }
     setLight(false);
-    outlines_ = true;
+    rims_ = true;
 }
 
 // ------------------------------------------------------------------ the garden in front
