@@ -29,6 +29,7 @@
 //             floor, or falling out of the level; walkers with no room to walk; brutes (B) too big.
 //   crawl     a single empty row between the floor and a solid tile above, longer than one tile
 //             (cells under a "#.#" desk count together): enemies fit, the 1.3-tall player does not.
+//             A '=' lid does not count: a ground pound opens it.
 //   pit       a 1-wide hole straight out of the bottom of the level between two floors.
 //   ends      bottom row at the first and last column is ground, so chunks join up.
 // A soft-lock is only reported where no state on the same spot (within 0.1 tile, at any speed)
@@ -770,6 +771,7 @@ Report checkChunk(const Chunk& c, int gridRows, int stage, unsigned ab, const Ch
             if (solid(x, y) || !solid(x, y + 1)) return 0;
             int h = 0;
             for (int yy = y; yy >= 0 && !solid(x, yy); --yy) ++h;
+            if (T.level.tile(x, y - h) == '=') return 3;   // a cracked lid: a ground pound opens it
             return std::min(h, 3);
         };
         int first = -1, lastLow = -1;
