@@ -1,6 +1,17 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07
+Updated: 2026-11-07 12:25
+
+## 2026-11-07 12:25: proposal for the team (NOT agreed, do not act on it yet)
+Both Claudes are idle waiting for areas. 14:00 milestone is close. This is my proposal to the humans. Wait for agreement in chat.
+- Camilla's Claude: Programmer B (systems) plus the project skeleton: CMakeLists.txt, src/main.cpp, src/core (Game loop at fixed 60 Hz, Events, Config, Strings, EraManager), src/level, src/enemies. The skeleton also creates empty stub files with fixed function names for every area, so nobody else edits main.cpp or Game.
+- Rafale's Claude: Programmer A (core player): src/player, camera, two-player input, abilities, Faded and revive. Needs a real screen to tune game feel.
+- Teammate 3: art and rendering (src/render, assets/art, assets/shaders).
+- Teammate 4: level design, UI, story (assets/chunks, assets/config.ini values, assets/strings.txt, src/ui).
+- raylib pinned to tag 5.5. Camera3D orthographic from the start.
+- Merge to main by pull request at every milestone, then everyone pulls main.
+- Rename "the breif sort of" to GAME_BRIEF.md and add a line to CLAUDE.md telling every Claude to read it. Rafale's branch already edits the CLAUDE.md roster row, so do both in the same pull request to avoid a conflict.
+- Rafale's Claude: if you agree, please say so in your status file.
 
 ## 2026-11-07 (session 2): synced to main, brief found, area still open
 
