@@ -1,4 +1,3 @@
-#include <cctype>
 #include "ui/Hud.h"
 #include "core/Config.h"
 #include "core/Events.h"
@@ -567,9 +566,7 @@ void hintBox(Game& g, int top)
     const int t = th.ts;
     const int w = snap(std::min(W * 62 / 100, std::max(W / 2, 64 * t * 6)));
     const int x = snap((W - w) / 2);
-    std::string who = T("p1_name");   // player 1 speaks the hint, in title case
-    for (size_t i = 1; i < who.size(); ++i) who[i] = (char)std::tolower((unsigned char)who[i]);
-    who += ":";
+    std::string who = "Gran:";
     std::string msg = T("controls_hint");
     int lh = capH(t) + 4 * t;
     std::vector<std::string> lines = wrap(msg, t, w - 2 * pad);
@@ -631,12 +628,7 @@ void banner(Game& g)
     for (auto& l : sub) w = std::max(w, textW(l, st));
     w = snap(std::min(W - 8 * U, w + 2 * pad));
     int lh = capH(st) + 4 * st;
-    // the story line (one per stage): warm, a beat later than the rest
-    std::vector<std::string> story = wrap(g.bannerStory, st, W - 16 * U - 2 * pad);
-    for (auto& l : story) w = std::max(w, textW(l, st));
-    w = snap(std::min(W - 8 * U, w + 2 * pad));
-    int h = snap(pad + capH(bt) + (sub.empty() ? 0 : 5 * U + (int)sub.size() * lh - 4 * st)
-                 + (story.empty() ? 0 : 5 * U + (int)story.size() * lh - 4 * st) + pad + U);
+    int h = snap(pad + capH(bt) + (sub.empty() ? 0 : 5 * U + (int)sub.size() * lh - 4 * st) + pad + U);
     int x = snap((W - w) / 2), y = snap(H * 36 / 100);
     if (a < 1) {   // modern stages fade the whole box in
         // draw at reduced alpha by fading the panel colour: keep it simple and flat
@@ -648,13 +640,6 @@ void banner(Game& g)
     txt(g.banner, (W - textW(g.banner, bt)) / 2, y + pad, bt, fade(tc, a));
     int ly = y + pad + capH(bt) + 5 * U;
     for (auto& l : sub) { txt(l, (W - textW(l, st)) / 2, ly, st, fade(th.era <= 1 ? th.fg : th.dim, a)); ly += lh; }
-    if (!story.empty()) {
-        float sa = th.pixel ? (g.bannerLen - g.bannerT > 0.6f ? 1.0f : 0.0f)
-                            : std::min(a, std::max(0.0f, (g.bannerLen - g.bannerT - 0.6f) * 2.0f));
-        Color sc = th.era <= 1 ? th.fg : (th.era == 6 ? hexc(0x8a5a20) : hexc(0xf2d9a8));
-        ly += 5 * U - 4 * st;
-        for (auto& l : story) { txt(l, (W - textW(l, st)) / 2, ly, st, fade(sc, sa)); ly += lh; }
-    }
 }
 
 // ------------------------------------------------------------------ legacy text for the title, pause and ending screens

@@ -2,33 +2,6 @@
 
 Updated: 2026-11-07
 
-## 2026-11-07 (later): claude-sohan-story, a new story, "The Four Minutes"
-
-Branch claude-sohan-story starts from claude/project-thread-70pj0g (the seven graphics stages).
-Sohan asked for a brand new story with real character development.
-
-### The story
-Dementia takes the newest memories first, so the run travels backwards through a life while the
-graphics travel forwards: the clearest memory (full 3D) is the oldest one.
-- Player 1 is Maren Ashby, 81, a retired clockmaker in the seaside town of Saltmarch. Family words:
-  "We keep the hour." Every clock she set ran four minutes slow.
-- Player 2 is Wren, ten, in a blue cap. He is in every memory at every age and never grows up.
-  The reveal: he is her little brother, who went through the millpond ice when she was fourteen.
-  She was meant to walk him home at four and was four minutes late.
-- The Forgetting (boss) is her own mind being merciful; it speaks a different plea in each stage.
-- Stages: Larkfield House, The Shop, The Harbour, The Wedding, The Apprentice, The Long Winter, The Millpond.
-
-### Done
-- assets/strings.txt rewritten (all player-facing text), new keys story_0..6 and boss_says_0..6.
-- Banners can carry a story line (Game::showBanner(..., story), drawn by Hud under the sub line):
-  shown at the start of a run and at every stage upgrade. The boss banner shows boss_says_<stage>.
-- The four ending pictures redrawn in tools/assetgen (endingPicture): Four o'clock at the millpond,
-  the watch in the reeds at 4:04, the clock shop at 3:56, the millpond again in gold light.
-
-### Files I touched that another Claude made
-- src/core/Game.h/.cpp (showBanner signature, three banner calls), src/ui/Hud.cpp (banner drawing),
-  tools/assetgen/SpriteGen.cpp (endingPicture only), assets/strings.txt, assets/art/ending_0..3.png.
-
 ## 2026-11-07: claude-sohan-upgrade (built on Rafale's cloud Claude's full game)
 
 Branch claude-sohan-upgrade starts from claude/project-thread-y8u0w2 at 36a0307. Sohan asked for better

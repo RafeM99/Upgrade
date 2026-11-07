@@ -1781,395 +1781,83 @@ void figure(Canvas& c, float x, float y, float sc, bool gran, bool child)
     if (gran) c.circle(x - 4 * s, y - 104 * s, 7 * s, shade(hair));
 }
 
-// A clock face: rim, cream dial, 12 hour marks and two hands. Angles run clockwise from 12,
-// so a hand at angle a ends at (cx + sin(a) * len, cy - cos(a) * len).
-void clockFace(Canvas& c, float cx, float cy, float r, int hour, int minute,
-               Col rim = hex(0x6a4a2a), Col dial = hex(0xf4ecd8), Col ink = hex(0x2a2018))
-{
-    const float TAU = 6.2831853f;
-    c.circle(cx, cy, r, solid(rim));
-    c.circle(cx, cy, r * 0.84f, solid(dial));
-    for (int i = 0; i < 12; ++i) {
-        bool major = i % 3 == 0;
-        if (r < 14 && !major) continue;   // tiny clocks keep only 12, 3, 6 and 9
-        float a = i / 12.0f * TAU, sa = std::sin(a), ca = -std::cos(a);
-        float r1 = r * 0.76f, r0 = r * (major ? 0.6f : 0.67f);
-        float th = std::max(0.55f, r * (major ? 0.045f : 0.025f));
-        c.capsule(cx + sa * r0, cy + ca * r0, cx + sa * r1, cy + ca * r1, th, solid(ink));
-    }
-    float ha = ((hour % 12) + minute / 60.0f) / 12.0f * TAU, ma = minute / 60.0f * TAU;
-    c.capsule(cx, cy, cx + std::sin(ha) * r * 0.42f, cy - std::cos(ha) * r * 0.42f, std::max(0.95f, r * 0.065f), solid(ink));
-    c.capsule(cx, cy, cx + std::sin(ma) * r * 0.68f, cy - std::cos(ma) * r * 0.68f, std::max(0.7f, r * 0.04f), solid(ink));
-    c.circle(cx, cy, std::max(1.1f, r * 0.08f), solid(ink));
-}
-
-// How a person in the ending pictures looks. Feet at (x, y); an adult is about 112 * s tall.
-struct Look {
-    Col top, legs, hair;
-    int hairStyle = 0;           // 0 short, 1 long (falls behind the shoulders), 2 grey with a bun
-    bool coat = false;           // flared coat instead of a straight top
-    bool cap = false;  Col capCol{};
-    bool scarf = false; Col scarfCol{};
-    float face = 0;              // -1 looks left, 0 front, 1 looks right
-    bool reachL = false, reachR = false;   // arm reaches to an absolute point (holding hands, working)
-    Vector2 handL{}, handR{};
-};
-
-void person(Canvas& c, float x, float y, float s, const Look& k)
-{
-    Col skin = hex(0xf2c29b), skinD = hex(0xd8a07a), eye = hex(0x2a1a14);
-    float hx = x + k.face * 2 * s, hy = y - 84 * s;
-    if (k.hairStyle == 1) c.rect(hx - 16 * s - k.face * 2 * s, y - 98 * s, 32 * s, 50 * s, solid(k.hair), 10 * s);   // long hair, behind
-    // legs and shoes
-    c.capsule(x - 5 * s, y - 30 * s, x - 5.5f * s, y - 3 * s, 4.5f * s, solid(k.legs));
-    c.capsule(x + 5 * s, y - 30 * s, x + 5.5f * s, y - 3 * s, 4.5f * s, solid(k.legs));
-    c.ellipse(x - 6 * s + k.face * 2 * s, y - 1.5f * s, 6 * s, 3 * s, solid(hex(0x2a1e1a)));
-    c.ellipse(x + 6 * s + k.face * 2 * s, y - 1.5f * s, 6 * s, 3 * s, solid(hex(0x2a1e1a)));
-    // body
-    Col topD = mixc(mul(k.top, 0.8f), hex(0x3a2a6a), 0.2f);
-    if (k.coat) {
-        c.poly({{x - 12 * s, y - 70 * s}, {x + 12 * s, y - 70 * s}, {x + 18 * s, y - 24 * s}, {x - 18 * s, y - 24 * s}}, solid(k.top));
-        c.circle(x - 10 * s, y - 66 * s, 5 * s, solid(k.top));
-        c.circle(x + 10 * s, y - 66 * s, 5 * s, solid(k.top));
-        c.rect(x - 0.8f * s, y - 66 * s, 1.6f * s, 40 * s, solid(topD));   // coat opening
-    } else {
-        c.rect(x - 14 * s, y - 72 * s, 28 * s, 46 * s, solid(k.top), 9 * s);
-    }
-    // arms (sleeves) and hands
-    Vector2 shL{x - 12 * s, y - 64 * s}, shR{x + 12 * s, y - 64 * s};
-    Vector2 hL = k.reachL ? k.handL : Vector2{x - 16 * s, y - 34 * s};
-    Vector2 hR = k.reachR ? k.handR : Vector2{x + 16 * s, y - 34 * s};
-    c.capsule(shL.x, shL.y, hL.x, hL.y, 4.2f * s, solid(topD));
-    c.capsule(shR.x, shR.y, hR.x, hR.y, 4.2f * s, solid(topD));
-    c.circle(hL.x, hL.y, 3.6f * s, solid(skin));
-    c.circle(hR.x, hR.y, 3.6f * s, solid(skin));
-    if (k.scarf) {
-        c.rect(x - 12 * s, y - 75 * s, 24 * s, 7 * s, solid(k.scarfCol), 3 * s);
-        c.rect(x + 3 * s - k.face * 4 * s, y - 72 * s, 6 * s, 20 * s, solid(k.scarfCol), 2 * s);
-    }
-    // head and hair
-    c.rect(x - 4 * s, y - 76 * s, 8 * s, 6 * s, solid(skinD));   // neck
-    c.circle(hx, hy, 14 * s, solid(skin));
-    if (k.hairStyle == 2) {
-        c.ellipse(hx - k.face * 2 * s, y - 92 * s, 15.5f * s, 9 * s, solid(k.hair));
-        c.circle(hx - k.face * 9 * s, y - 103 * s, 7 * s, solid(k.hair));
-    } else if (k.hairStyle == 1) {
-        c.ellipse(hx - k.face * 2 * s, y - 92 * s, 16 * s, 9.5f * s, solid(k.hair));
-        c.circle(hx - 12 * s - k.face * 2 * s, y - 84 * s, 5 * s, solid(k.hair));
-        c.circle(hx + 12 * s - k.face * 2 * s, y - 84 * s, 5 * s, solid(k.hair));
-    } else {
-        c.ellipse(hx - k.face * 2 * s, y - 91 * s, 15 * s, 9 * s, solid(k.hair));
-        c.ellipse(hx - 13 * s, y - 82 * s, 3 * s, 5 * s, solid(k.hair));
-        c.ellipse(hx + 13 * s, y - 82 * s, 3 * s, 5 * s, solid(k.hair));
-    }
-    if (k.cap) {   // a cap: rounded crown and a brim toward the face
-        Col capD = mixc(mul(k.capCol, 0.7f), hex(0x1a1a4a), 0.2f);
-        c.ellipse(hx - k.face * 1.5f * s, y - 92 * s, 15.5f * s, 11 * s, [&](const Frag& f) {
-            return f.ny > 0.45f ? withA(k.capCol, 0.0f) : k.capCol;
-        });
-        c.ellipse(hx + k.face * 7 * s, y - 88 * s, 15 * s + std::fabs(k.face) * 3 * s, 3.2f * s, solid(capD));
-        c.circle(hx - k.face * 1.5f * s, y - 102.5f * s, 2.2f * s, solid(capD));   // button on top
-    }
-    if (s > 0.35f) {
-        int dp = std::max(1, (int)std::lround(s * 1.6f));
-        float ex = hx + k.face * 4 * s;
-        c.dot(ex - 5 * s, y - 83 * s, eye, dp);
-        c.dot(ex + 5 * s, y - 83 * s, eye, dp);
-        c.dot(ex - 8 * s, y - 77 * s, withA(hex(0xe87a6a), 0.5f), dp);   // cheeks
-        c.dot(ex + 7 * s, y - 77 * s, withA(hex(0xe87a6a), 0.5f), dp);
-    }
-}
-
-// A small skater silhouette leaning into a glide; dir +1 skates to the right.
-void skater(Canvas& c, float x, float y, float s, float dir, Col col)
-{
-    Fill f = solid(col);
-    c.capsule(x, y - 10 * s, x - dir * 9 * s, y - 2.5f * s, 1.6f * s, f);   // trailing leg
-    c.capsule(x, y - 10 * s, x + dir * 2 * s, y - 0.5f * s, 1.7f * s, f);   // gliding leg
-    c.capsule(x - dir * 4 * s, y + 0.2f * s, x + dir * 6 * s, y + 0.2f * s, 0.6f * s, f);   // blade
-    c.capsule(x, y - 10 * s, x + dir * 4 * s, y - 20 * s, 3 * s, f);   // body
-    c.circle(x + dir * 5.5f * s, y - 25.5f * s, 2.7f * s, f);
-    c.capsule(x + dir * 3.5f * s, y - 18 * s, x - dir * 6 * s, y - 13 * s, 1.2f * s, f);
-    c.capsule(x + dir * 3.5f * s, y - 18 * s, x + dir * 10 * s, y - 15 * s, 1.2f * s, f);
-}
-
-// The millpond at Saltmarch: sky, low sun, hills and pines, the church tower with its clock at
-// four, the frozen pond and the snowy bank. warm=false is the winter afternoon, true the golden one.
-void millpond(Canvas& c, bool warm)
-{
-    const float W = ENDING_W, H = ENDING_H;
-    auto pick = [warm](uint32_t cold, uint32_t gold) { return hex(warm ? gold : cold); };
-    Col skyTop = pick(0x6e86b0, 0xe07a52), skyBot = pick(0xf0cdb2, 0xfde4a8);
-    c.rect(0, 0, W, 215, [&](const Frag& f) { return mixc(skyTop, skyBot, clamp01(f.y / 210.0f)); });
-    // low sun with a soft halo
-    float sx = warm ? 440 : 480, sy = warm ? 192 : 166, sr = warm ? 24 : 15;
-    Col sun = pick(0xfff6ea, 0xfff2c0);
-    c.circle(sx, sy, sr * 2.6f, solid(withA(sun, 0.16f)));
-    c.circle(sx, sy, sr * 1.6f, solid(withA(sun, 0.22f)));
-    c.circle(sx, sy, sr, solid(sun));
-    if (!warm)   // a few thin winter clouds
-        for (int i = 0; i < 4; ++i) c.capsule(300 + i * 70.0f, 120 + (i % 2) * 14.0f, 350 + i * 70.0f, 120 + (i % 2) * 14.0f, 2.5f, solid(withA(hex(0xf6e4d8), 0.6f)));
-    // far hills, then a line of dark pines
-    c.ellipse(130, 218, 270, 42, solid(pick(0x7a84a0, 0xb07a70)));
-    c.ellipse(540, 222, 250, 36, solid(pick(0x6c7692, 0xa06a64)));
-    Col pine = pick(0x2e384c, 0x5a3438);
-    for (int i = 0; i < 70; ++i) {
-        float x = 110 + i * 8.0f + rnd(i, 1, 91) * 5, h = 10 + rnd(i, 2, 91) * 16;
-        c.poly({{x - 5, 213}, {x + 5, 213}, {x, 213 - h}}, solid(pine));
-    }
-    // snow everywhere below the horizon
-    c.rect(0, 208, W, H - 208, solid(pick(0xd6e0ea, 0xf4d8b8)));
-    // the church: nave, roof and the clock tower
-    Col stone = pick(0x5c5868, 0x8a5848), stoneD = pick(0x46424f, 0x6a4038), roof = pick(0x3a3646, 0x5a302c);
-    c.rect(80, 158, 78, 58, solid(stone));
-    c.poly({{74, 160}, {164, 160}, {150, 132}, {88, 132}}, solid(roof));
-    c.poly({{74, 160}, {164, 160}, {164, 164}, {74, 164}}, solid(withA(hex(0xffffff), 0.5f)));   // snow on the eaves
-    for (int w = 0; w < 3; ++w) c.rect(96 + w * 20.0f, 176, 7, 16, solid(pick(0x2a2a38, 0xf8c870)), 3.5f);
-    c.rect(28, 70, 60, 146, solid(stone));
-    c.rect(74, 70, 14, 146, solid(stoneD));
-    c.poly({{22, 72}, {94, 72}, {58, 12}}, solid(roof));
-    c.poly({{22, 72}, {94, 72}, {94, 76}, {22, 76}}, solid(stoneD));
-    c.capsule(58, 12, 58, 2, 1.2f, solid(roof));   // finial
-    c.rect(48, 150, 20, 30, solid(pick(0x2a2a38, 0x3a2420)), 10);   // belfry arch
-    clockFace(c, 58, 108, 22, 4, 0, pick(0x2e2a36, 0x4a2a22), pick(0xeee8da, 0xfff0d0), hex(0x1a1418));
-    // the frozen pond
-    c.ellipse(372, 252, 254, 42, solid(pick(0xa8b8cc, 0xd8a880)));
-    c.ellipse(372, 250, 246, 37, solid(pick(0xc8d8e6, 0xf6d4a4)));
-    c.ellipse(sx - 10, 248, 90, 5, solid(withA(sun, 0.55f)));   // the sun on the ice
-    for (int i = 0; i < 7; ++i) {   // skate scratches
-        float x = 200 + i * 52.0f, yy = 236 + (i % 3) * 9.0f;
-        c.capsule(x, yy, x + 34, yy + (i % 2 ? 3 : -2), 0.5f, solid(withA(hex(0xffffff), 0.55f)));
-    }
-    // the near bank, with its own drifts and a bare tree on the right
-    Col bank = pick(0xeef2f8, 0xfdeedc), bankShadow = pick(0xc8d4e2, 0xecc8a8);
-    c.poly({{0, 286}, {90, 280}, {200, 292}, {330, 290}, {470, 298}, {560, 292}, {W, 288}, {W, H}, {0, H}}, solid(bankShadow));
-    c.poly({{0, 292}, {90, 286}, {200, 298}, {330, 296}, {470, 304}, {560, 298}, {W, 294}, {W, H}, {0, H}}, solid(bank));
-    c.ellipse(80, 345, 120, 18, solid(withA(bankShadow, 0.5f)));
-    c.ellipse(520, 350, 140, 16, solid(withA(bankShadow, 0.5f)));
-    Col bark = pick(0x2a2830, 0x4a2a24);
-    c.capsule(602, 300, 594, 110, 6, solid(bark));
-    c.capsule(596, 190, 556, 150, 3, solid(bark));
-    c.capsule(598, 160, 630, 120, 3, solid(bark));
-    c.capsule(595, 130, 570, 96, 2.5f, solid(bark));
-    c.capsule(570, 168, 548, 166, 1.5f, solid(bark));
-    c.capsule(556, 150, 546, 130, 1.5f, solid(bark));
-    // dry reeds poking through the snow
-    Col reed = pick(0x8a7a5a, 0xb08850);
-    for (int i = 0; i < 18; ++i) {
-        float x = 12 + i * 7.0f + rnd(i, 3, 92) * 5, h = 14 + rnd(i, 4, 92) * 18;
-        c.capsule(x, 296, x + (rnd(i, 5, 92) - 0.5f) * 8, 296 - h, 0.9f, solid(reed));
-    }
-}
-
 Image endingPicture(int idx)
 {
     setStage(5);
     Canvas c((float)ENDING_W, (float)ENDING_H, 1.0f, 2);
     const float W = ENDING_W, H = ENDING_H;
-    auto shadow = [&](float x, float y, float rx) { c.ellipse(x, y, rx, rx * 0.22f, solid(withA(hex(0x2a2a4a), 0.18f))); };
-    Look wren;   // ten, blue top and blue cap
-    wren.top = hex(0x3c8cf0); wren.legs = hex(0x2b3f6b); wren.hair = hex(0x6b3e22);
-    wren.cap = true; wren.capCol = hex(0x2a5ac8);
-    wren.scarf = true; wren.scarfCol = hex(0xe8e0d0);
-    Look gran;   // Maren at eighty-one: orange top, white hair in a bun
-    gran.top = hex(0xf08a24); gran.legs = hex(0x6b4a3a); gran.hair = hex(0xe4e0ee); gran.hairStyle = 2;
+    auto sky = [&](uint32_t a, uint32_t b) {
+        c.rect(0, 0, W, H, [&](const Frag& f) { return mixc(hex(a), hex(b), f.y / H); });
+    };
     switch (idx) {
-    case 0: {   // "Four o'clock": the millpond in winter, the tower clock at 4:00, skaters on the ice,
-                // Maren at fourteen watching from the bank and Wren far out on the ice, alone
-        millpond(c, false);
-        const float sk[5][4] = {{250, 246, 0.85f, 1}, {300, 262, 0.95f, -1}, {372, 240, 0.8f, 1}, {420, 258, 0.9f, 1}, {470, 244, 0.8f, -1}};
-        for (auto& k : sk) skater(c, k[0], k[1], k[2], k[3], hex(0x24283a));
-        Look w = wren; w.scarf = false; w.face = -0.4f;
-        shadow(566, 264, 8);
-        person(c, 566, 264, 0.24f, w);
-        Look girl;   // Maren at fourteen: red-orange coat, long dark hair, a yellow scarf
-        girl.top = hex(0xd24a2a); girl.legs = hex(0x3a2a3a); girl.hair = hex(0x3a2418); girl.hairStyle = 1;
-        girl.coat = true; girl.scarf = true; girl.scarfCol = hex(0xf2c84a); girl.face = 0.6f;
-        shadow(176, 336, 26);
-        person(c, 176, 336, 0.92f, girl);
-        for (int i = 0; i < 40; ++i)   // a little falling snow
-            c.circle(rnd(i, 1, 93) * W, rnd(i, 2, 93) * 300, 1.2f, solid(withA(hex(0xffffff), 0.75f)));
+    case 0: {   // The first bike ride: park path, Gran holding the seat of a small bike
+        sky(0x6ab8f0, 0xd8f0ff);
+        c.ellipse(140, 300, 260, 90, shade(hex(0x5aba4a), 0.4f));
+        c.ellipse(520, 320, 260, 100, shade(hex(0x4aa83a), 0.4f));
+        c.rect(0, 280, W, 80, solid(hex(0x6aba4a)));
+        c.poly({{0, 330}, {W, 300}, {W, 320}, {0, 360}}, solid(hex(0xe0c89a)));
+        for (int i = 0; i < 5; ++i) {
+            float x = 60 + i * 140;
+            c.rect(x - 6, 170, 12, 120, shade(hex(0x7a4a2a)));
+            c.circle(x, 160, 50, shade(hex(0x3a9a4a), 0.6f));
+        }
+        // bike
+        c.circle(330, 318, 22, [&](const Frag& f) { float d = std::sqrt(f.nx * f.nx + f.ny * f.ny); return d > 0.8f ? hex(0x202020) : withA(hex(0, 0), 0.0f); });
+        c.circle(410, 318, 22, [&](const Frag& f) { float d = std::sqrt(f.nx * f.nx + f.ny * f.ny); return d > 0.8f ? hex(0x202020) : withA(hex(0, 0), 0.0f); });
+        c.capsule(330, 318, 370, 290, 3, solid(hex(0xe8364f)));
+        c.capsule(370, 290, 410, 318, 3, solid(hex(0xe8364f)));
+        c.capsule(370, 290, 360, 270, 3, solid(hex(0xe8364f)));
+        c.capsule(405, 280, 410, 318, 3, solid(hex(0xe8364f)));
+        figure(c, 375, 300, 0.8f, false, true);
+        figure(c, 300, 330, 1.2f, true, false);
+        c.capsule(312, 260, 355, 275, 5, shade(hex(0xf08a24)));
         break;
     }
-    case 1: {   // "The watch in the reeds": spring thaw, broken ice on dark water, Father's watch at 4:04
-        c.rect(0, 0, W, H, [&](const Frag& f) { return mixc(hex(0x34545a), hex(0x1c3034), clamp01(f.y / H)); });
-        for (int i = 0; i < 26; ++i) {   // ripples
-            float x = rnd(i, 1, 94) * W, y = rnd(i, 2, 94) * H, l = 20 + rnd(i, 3, 94) * 40;
-            c.capsule(x, y, x + l, y, 1.0f, solid(withA(hex(0x5a7e84), 0.6f)));
-        }
-        // mud banks
-        c.ellipse(60, 380, 260, 110, solid(hex(0x4a3a2c)));
-        c.ellipse(40, 372, 200, 80, solid(hex(0x5a4634)));
-        c.ellipse(640, -10, 240, 90, solid(hex(0x4a3a2c)));
-        c.ellipse(660, -14, 190, 70, solid(hex(0x5a4634)));
-        // plates of thawing ice
-        Col ice = hex(0xc4d6dc), iceD = hex(0x93aab2);
-        auto plate = [&](std::vector<Vector2> p, float dy) {
-            std::vector<Vector2> sh = p;
-            for (auto& v : sh) v.y += dy;
-            c.poly(sh, solid(iceD));
-            c.poly(p, solid(ice));
-        };
-        plate({{20, 40}, {150, 20}, {200, 90}, {120, 140}, {30, 120}}, 5);
-        plate({{420, 230}, {520, 210}, {600, 260}, {560, 320}, {450, 300}}, 5);
-        plate({{470, 110}, {540, 95}, {560, 150}, {490, 165}}, 4);
-        plate({{120, 230}, {190, 215}, {215, 262}, {150, 280}}, 4);
-        plate({{230, 30}, {290, 22}, {300, 60}, {240, 66}}, 3);
-        plate({{590, 140}, {640, 130}, {640, 200}, {600, 190}}, 4);
-        // reeds along the banks
-        for (int i = 0; i < 46; ++i) {
-            bool low = i < 28;
-            float bx = low ? rnd(i, 4, 95) * 300 : 380 + rnd(i, 4, 95) * 260;
-            float by = low ? 300 + rnd(i, 5, 95) * 60 : rnd(i, 5, 95) * 60;
-            float h = 60 + rnd(i, 6, 95) * 90, lean = (rnd(i, 7, 95) - 0.5f) * 40;
-            Col rc = mixc(hex(0x6a6a34), hex(0xa09a5a), rnd(i, 8, 95));
-            if (low) c.capsule(bx, by + 40, bx + lean, by - h, 1.6f, solid(rc));
-            else c.capsule(bx, by - 40, bx + lean, by + h * 0.8f, 1.6f, solid(rc));
-            if (low && i % 4 == 0) c.capsule(bx + lean, by - h, bx + lean * 1.05f, by - h + 14, 3, solid(hex(0x6a4a2a)));   // bulrush head
-        }
-        // the chain, trailing off into the water
-        Col gold = hex(0xd0a440), goldD = hex(0x8a6420), goldL = hex(0xf0d070);
-        for (int i = 0; i < 26; ++i) {
-            float t = i / 25.0f;
-            float x = 320 + 22 + t * 250, y = 102 - 20 * std::sin(t * 3.1f) + t * 230;
-            c.circle(x, y, 3.4f, solid(i % 2 ? goldD : gold));
-            c.circle(x, y, 1.4f, solid(withA(hex(0x1c3034), 0.9f)));
-        }
-        // the watch: bow, crown, case, dial at 4:04
-        const float wx = 320, wy = 188;
-        c.circle(wx, wy - 86, 14, solid(goldD));
-        c.circle(wx, wy - 86, 9, solid(hex(0x2a4448)));
-        c.rect(wx - 8, wy - 80, 16, 14, solid(gold), 3);
-        c.rect(wx - 8, wy - 80, 16, 3, solid(goldL), 1.5f);
-        c.ellipse(wx + 6, wy + 8, 76, 74, solid(withA(hex(0x0e1a1e), 0.45f)));   // shadow on the water
-        c.circle(wx, wy, 74, solid(goldD));
-        c.circle(wx, wy, 70, solid(gold));
-        c.circle(wx - 3, wy - 3, 64, solid(goldL));
-        c.circle(wx, wy, 62, solid(gold));
-        clockFace(c, wx, wy, 58, 4, 4, goldD, hex(0xf6eedb), hex(0x2a1e14));
-        // mud and water stains on the case
-        c.ellipse(wx + 52, wy + 40, 16, 8, solid(withA(hex(0x4a3a2c), 0.7f)));
-        c.ellipse(wx - 60, wy + 20, 6, 12, solid(withA(hex(0x4a3a2c), 0.6f)));
+    case 1: {   // The treehouse
+        sky(0xe08a6a, 0xffd8a0);
+        c.rect(0, 290, W, 70, solid(hex(0x3a7a3a)));
+        c.rect(300, 80, 40, 230, shade(hex(0x6a3a2a)));
+        c.circle(320, 90, 150, shade(hex(0x2a7a3a), 0.5f));
+        c.circle(220, 130, 80, shade(hex(0x3a8a4a), 0.5f));
+        c.circle(430, 120, 90, shade(hex(0x3a8a4a), 0.5f));
+        c.rect(250, 140, 140, 70, shade(hex(0xb07a4a), 0.4f), 4);
+        c.poly({{240, 142}, {320, 90}, {400, 142}}, shade(hex(0x8a3a2a)));
+        c.rect(300, 160, 30, 30, solid(hex(0xffd860)));
+        for (int i = 0; i < 6; ++i) c.rect(350, 210 + i * 14, 24, 4, solid(hex(0x8a5a3a)));
+        c.capsule(350, 210, 350, 300, 2, solid(hex(0x8a5a3a)));
+        c.capsule(374, 210, 374, 300, 2, solid(hex(0x8a5a3a)));
+        figure(c, 300, 205, 0.6f, false, true);
+        figure(c, 420, 300, 1.1f, true, false);
         break;
     }
-    case 2: {   // "Every clock in Saltmarch": the clock shop, every face four minutes slow at 3:56,
-                // grey daylight at the window, Maren at her bench under the lamp
-        c.rect(0, 0, W, H, solid(hex(0x3e2c22)));
-        for (int i = 0; i < 22; ++i) c.rect(i * 30.0f, 0, 14, H, solid(hex(0x46322a)));   // wallpaper stripes
-        c.rect(0, 0, W, 16, solid(hex(0x2e2018)));
-        // the window: grey sea and roofs outside
-        c.rect(482, 34, 136, 196, solid(hex(0x2a1c14)), 3);
-        c.rect(490, 42, 120, 180, [&](const Frag& f) { return mixc(hex(0xc8ced4), hex(0x9aa4ae), clamp01((f.y - 42) / 180)); });
-        c.rect(490, 150, 120, 30, solid(hex(0x7a8694)));   // sea
-        c.poly({{490, 222}, {490, 176}, {520, 160}, {548, 176}, {560, 168}, {590, 182}, {610, 172}, {610, 222}}, solid(hex(0x5a6270)));
-        c.rect(546, 42, 8, 180, solid(hex(0x2a1c14)));
-        c.rect(490, 128, 120, 8, solid(hex(0x2a1c14)));
-        c.rect(476, 226, 148, 10, solid(hex(0x5a3e2a)));   // sill
-        c.poly({{490, 230}, {610, 230}, {520, 360}, {380, 360}}, solid(withA(hex(0xb8c4d0), 0.07f)));   // cold light
-        // the tall case clock
-        Col wood = hex(0x6a3e24), woodD = hex(0x4a2a18), woodL = hex(0x8a5632);
-        c.rect(30, 64, 64, 60, solid(wood), 6);
-        c.poly({{26, 68}, {98, 68}, {88, 46}, {36, 46}}, solid(woodD));
-        c.rect(38, 124, 48, 170, solid(wood));
-        c.rect(46, 150, 32, 110, solid(woodD), 4);
-        c.capsule(62, 154, 62, 236, 1, solid(hex(0xb08a3a)));
-        c.circle(62, 240, 9, solid(hex(0xd0a440)));
-        c.rect(30, 294, 64, 66, solid(wood));
-        c.rect(30, 294, 64, 5, solid(woodL));
-        clockFace(c, 62, 94, 24, 3, 56, hex(0xb08a3a));
-        // shelves with mantel clocks
-        auto shelf = [&](float x, float y, float w) {
-            c.rect(x, y, w, 7, solid(woodL));
-            c.rect(x, y + 7, w, 3, solid(woodD));
-            c.poly({{x + 10, y + 10}, {x + 22, y + 10}, {x + 10, y + 26}}, solid(woodD));
-            c.poly({{x + w - 22, y + 10}, {x + w - 10, y + 10}, {x + w - 10, y + 26}}, solid(woodD));
-        };
-        shelf(112, 140, 196);
-        shelf(112, 226, 176);
-        auto tombstone = [&](float cx, float base, float w, float h, Col col) {   // arched mantel clock
-            c.rect(cx - w / 2 - 3, base - 5, w + 6, 5, solid(mul(col, 0.7f)));
-            c.rect(cx - w / 2, base - h + w / 2, w, h - w / 2, solid(col));
-            c.circle(cx, base - h + w / 2, w / 2, solid(col));
-            clockFace(c, cx, base - h + w / 2, w / 2 - 3, 3, 56, hex(0xb08a3a));
-        };
-        auto boxClock = [&](float cx, float base, float w, Col col) {
-            c.rect(cx - w / 2, base - w, w, w, solid(col), 3);
-            clockFace(c, cx, base - w / 2, w / 2 - 4, 3, 56, mul(col, 0.7f));
-        };
-        auto alarm = [&](float cx, float base, float r, Col col) {   // round alarm clock with two bells
-            c.circle(cx - r * 0.7f, base - r * 2.0f, r * 0.42f, solid(hex(0xd0a440)));
-            c.circle(cx + r * 0.7f, base - r * 2.0f, r * 0.42f, solid(hex(0xd0a440)));
-            c.capsule(cx - r * 0.6f, base - r * 0.3f, cx - r * 0.8f, base, 1.5f, solid(mul(col, 0.6f)));
-            c.capsule(cx + r * 0.6f, base - r * 0.3f, cx + r * 0.8f, base, 1.5f, solid(mul(col, 0.6f)));
-            clockFace(c, cx, base - r - 1, r, 3, 56, col);
-        };
-        tombstone(140, 140, 32, 44, hex(0x7a4a2a));
-        alarm(196, 140, 15, hex(0xc04a3a));
-        boxClock(250, 140, 38, hex(0x3a5a4a));
-        tombstone(286, 140, 22, 30, hex(0x5a3a5a));
-        boxClock(144, 226, 30, hex(0x8a6a3a));
-        alarm(198, 226, 13, hex(0x3a6a9a));
-        tombstone(254, 226, 30, 40, hex(0x6a3a24));
-        // wall clocks
-        clockFace(c, 170, 58, 20, 3, 56, hex(0x2a2a2a));
-        clockFace(c, 244, 62, 26, 3, 56, hex(0x9a6a3a));
-        {   // octagonal school clock
-            std::vector<Vector2> oct;
-            for (int i = 0; i < 8; ++i) { float a = (i + 0.5f) / 8 * 6.2831853f; oct.push_back({322 + std::cos(a) * 24, 52 + std::sin(a) * 24}); }
-            c.poly(oct, solid(hex(0x5a3a22)));
-            clockFace(c, 322, 52, 19, 3, 56, hex(0x7a5232));
+    case 2: {   // The phone call: two windows, far apart, the same moon
+        sky(0x1a1a4a, 0x4a3a7a);
+        c.circle(320, 70, 34, shade(hex(0xfff6d0), 0.3f));
+        for (int side = 0; side < 2; ++side) {
+            float x0 = side ? 360 : 40;
+            c.rect(x0, 110, 240, 220, shade(hex(side ? 0x5a4a6a : 0x6a4a3a), 0.3f), 6);
+            c.rect(x0 + 20, 130, 200, 140, solid(hex(0xffd890)));
+            c.rect(x0 + 116, 130, 8, 140, solid(hex(side ? 0x5a4a6a : 0x6a4a3a)));
+            figure(c, x0 + 120, 268, 0.95f, side == 0, false);
+            c.rect(x0 + 128, 172, 10, 18, solid(hex(0x202030)), 3);
         }
-        c.rect(386, 42, 4, 12, solid(hex(0x2a1c14)));   // big station clock on a bracket
-        clockFace(c, 388, 92, 36, 3, 56, hex(0x2a3a4a));
-        clockFace(c, 452, 52, 14, 3, 56, hex(0xb08a3a));
-        {   // sunburst clock
-            for (int i = 0; i < 16; ++i) {
-                float a = i / 16.0f * 6.2831853f;
-                c.capsule(332, 178, 332 + std::sin(a) * 28, 178 - std::cos(a) * 28, 2.2f, solid(hex(0xd0a440)));
-            }
-            clockFace(c, 332, 178, 16, 3, 56, hex(0xd0a440));
-        }
-        clockFace(c, 452, 170, 20, 3, 56, hex(0x6a2a2a));
-        clockFace(c, 400, 160, 13, 3, 56, hex(0x3a5a4a));
-        // lamp glow
-        c.circle(430, 250, 120, solid(withA(hex(0xffc870), 0.08f)));
-        c.circle(430, 262, 70, solid(withA(hex(0xffc870), 0.1f)));
-        // Maren at the bench
-        Look g = gran; g.face = 0.3f;
-        g.reachL = true; g.handL = {380, 292}; g.reachR = true; g.handR = {418, 290};
-        person(c, 366, 352, 1.3f, g);
-        // the bench, the lamp, and the clock she is mending (also at 3:56)
-        c.rect(220, 294, 420, 10, solid(hex(0x8a5a32)));
-        c.rect(220, 304, 420, 56, solid(hex(0x5a3a22)));
-        for (int i = 0; i < 4; ++i) c.rect(240 + i * 100.0f, 316, 70, 34, solid(hex(0x4a2e1a)), 2);   // drawers
-        for (int i = 0; i < 4; ++i) c.rect(270 + i * 100.0f, 330, 10, 4, solid(hex(0xb08a3a)), 2);
-        c.ellipse(430, 296, 92, 9, solid(withA(hex(0xffd890), 0.45f)));   // pool of light
-        c.ellipse(430, 296, 50, 5, solid(withA(hex(0xfff0c0), 0.5f)));
-        c.ellipse(399, 289, 13, 4, solid(withA(hex(0x2a1a10), 0.35f)));
-        clockFace(c, 400, 280, 11, 3, 56, hex(0xb08a3a));
-        c.circle(320, 291, 2, solid(hex(0xd0a440)));   // loose gears
-        c.circle(330, 292, 3, solid(hex(0xb08a3a)));
-        c.ellipse(476, 293, 14, 4, solid(hex(0x2a2a2a)));   // lamp
-        c.capsule(476, 292, 488, 238, 2.2f, solid(hex(0x2a2a2a)));
-        c.capsule(488, 238, 452, 222, 2.2f, solid(hex(0x2a2a2a)));
-        c.poly({{440, 214}, {462, 214}, {474, 244}, {428, 244}}, solid(hex(0x2a5a3a)));
-        c.ellipse(451, 245, 22, 4, solid(hex(0xfff0c0)));
+        for (int i = 0; i < 20; ++i) c.dot(330 + std::sin(i * 0.9f) * 6, 110 + i * 10.0f, hex(0xfff6d0));
         break;
     }
-    default: {   // "The millpond, again": the same pond in golden light, the tower clock at four again,
-                 // Maren and Wren on the bank hand in hand, turned to each other
-        millpond(c, true);
-        const float sk[3][4] = {{470, 240, 0.7f, 1}, {508, 252, 0.75f, -1}, {540, 238, 0.65f, 1}};
-        for (auto& k : sk) skater(c, k[0], k[1], k[2], k[3], withA(hex(0x6a3a3a), 0.45f));
-        const float gx = 296, wx = 356, fy = 338, gs = 1.0f, ws = 0.78f;
-        Vector2 hands{328, 304};
-        shadow(gx, fy, 26);
-        shadow(wx, fy, 20);
-        Look g = gran; g.face = 0.7f; g.reachR = true; g.handR = hands;
-        person(c, gx, fy, gs, g);
-        Look w = wren; w.face = -0.7f; w.reachL = true; w.handL = hands;
-        person(c, wx, fy, ws, w);
-        c.circle(hands.x, hands.y, 4.2f, solid(hex(0xf2c29b)));   // clasped hands
+    default: {   // Home: the house at sunset, two figures at the door
+        sky(0xf08a5a, 0xffd8a0);
+        c.circle(480, 120, 50, solid(hex(0xfff0c0)));
+        c.rect(0, 280, W, 80, solid(hex(0x4a7a3a)));
+        c.rect(180, 150, 280, 160, shade(hex(0xd8c8b0), 0.3f));
+        c.poly({{160, 155}, {320, 60}, {480, 155}}, shade(hex(0x8a3a3a), 0.5f));
+        c.rect(290, 220, 60, 90, solid(hex(0x6a3a2a)));
+        c.rect(300, 230, 40, 70, solid(hex(0xffd060)));
+        c.rect(205, 180, 50, 40, solid(hex(0xffd890)));
+        c.rect(385, 180, 50, 40, solid(hex(0xffd890)));
+        c.poly({{290, 310}, {350, 310}, {420, 360}, {220, 360}}, solid(hex(0xd8c09a)));
+        figure(c, 300, 340, 1.0f, true, false);
+        figure(c, 345, 340, 1.05f, false, false);
+        c.capsule(312, 290, 333, 290, 5, solid(hex(0xf2c29b)));   // holding hands
         break;
     }
     }
