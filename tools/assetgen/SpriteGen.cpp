@@ -1282,9 +1282,9 @@ void drawBossBell(Canvas& c, int frame)
     // ringing: sound marks on the side the clapper strikes
     if (swing != 0) {
         float s = swing < 0 ? -1.0f : 1.0f;
-        r.capsule(1.5f + s * 0.86f, 0.9f, 1.5f + s * 1.04f, 0.74f, 0.045f, solid(wave));
-        r.capsule(1.5f + s * 0.98f, 1.14f, 1.5f + s * 1.22f, 1.06f, 0.045f, solid(wave));
-        r.capsule(1.5f + s * 1.12f, 1.4f, 1.5f + s * 1.36f, 1.4f, 0.045f, solid(wave));
+        r.capsule(1.5f + s * 0.86f, 0.9f, 1.5f + s * 1.04f, 0.74f, 0.03f, solid(wave));
+        r.capsule(1.5f + s * 0.98f, 1.14f, 1.5f + s * 1.22f, 1.06f, 0.03f, solid(wave));
+        r.capsule(1.5f + s * 1.12f, 1.4f, 1.5f + s * 1.36f, 1.4f, 0.03f, solid(wave));
     }
 }
 
@@ -1305,15 +1305,17 @@ void drawBossStorm(Canvas& c, int frame)
     }
     // the bolt, flickering between two shapes
     float k = frame == XF_FLOAT1 ? -1.0f : 1.0f;
-    float tipY = slam ? 2.92f : 2.84f;
-    r.poly({{1.5f + 0.16f * k, 1.62f}, {1.5f - 0.24f * k, 2.12f}, {1.5f + 0.02f * k, 2.12f},
-            {1.5f - 0.3f * k, tipY}, {1.5f + 0.34f * k, 2.0f}, {1.5f + 0.08f * k, 2.0f}, {1.5f + 0.38f * k, 1.62f}},
-           lit(bolt, false));
-    r.capsule(1.5f + 0.16f * k, 1.72f, 1.5f - 0.12f * k, 2.08f, 0.03f, solid(core));
-    if (slam) {   // the strike splashes where it lands
-        r.capsule(1.2f - 0.3f * k + 0.3f, 2.86f, 0.95f, 2.72f, 0.035f, solid(core));
-        r.capsule(1.2f - 0.3f * k + 0.3f, 2.86f, 1.6f, 2.68f, 0.035f, solid(core));
-    }
+    float tipY = slam ? 2.9f : 2.86f, tipX = 1.5f - 0.32f * k;
+    r.poly({{1.5f + 0.18f * k, 1.58f}, {1.5f - 0.28f * k, 2.14f}, {1.5f + 0.02f * k, 2.14f},
+            {tipX, tipY}, {1.5f + 0.4f * k, 1.98f}, {1.5f + 0.1f * k, 1.98f}, {1.5f + 0.44f * k, 1.58f}},
+           solid(bolt));
+    r.capsule(1.5f + 0.24f * k, 1.68f, 1.5f - 0.12f * k, 2.08f, 0.035f, solid(core));
+    r.capsule(1.5f + 0.06f * k, 2.2f, 1.5f - 0.18f * k, 2.6f, 0.03f, solid(core));
+    if (slam)   // the strike sparks where it lands
+        for (int sd = -1; sd <= 1; sd += 2) {
+            r.capsule(tipX + sd * 0.12f, tipY - 0.06f, tipX + sd * 0.34f, tipY - 0.18f, 0.03f, solid(bolt));
+            r.capsule(tipX + sd * 0.1f, tipY - 0.16f, tipX + sd * 0.2f, tipY - 0.34f, 0.03f, solid(bolt));
+        }
     // the cloud: puffs over a flat dark belly
     r.rect(0.3f, 1.05f, 2.4f, 0.66f, lit(belly, false), 0.33f);
     const float puffs[][3] = {{0.72f, 1.18f, 0.44f}, {1.18f, 0.84f, 0.52f}, {1.84f, 0.78f, 0.58f},
