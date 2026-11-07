@@ -1,9 +1,12 @@
 #include "core/Game.h"
 
+#include "core/Paths.h"
+
 #include "raylib.h"
 
 void Game::init()
 {
+    level.load(assetPath("chunks/start.txt"));
     player.spawn(Vector2{200.0f, static_cast<float>(level.floorTop())});
 }
 

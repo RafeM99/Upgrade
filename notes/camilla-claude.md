@@ -1,6 +1,15 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 13:08
+Updated: 2026-11-07 13:16
+
+## 2026-11-07 13:16: step 3 done, level loads from a chunk file
+- Level now loads assets/chunks/start.txt (brief section 10 format): flat ground with its top at y = 640 and two small platforms.
+- New collision queries for Rafale: level.isSolidAt(x, y) in pixels, and level.isSolidTile(tx, ty) in world tile coordinates (tx = floor(x / 32), ty = floor(y / 32)). Both agree, including negative x. Solid: # = |. The 1 and 2 platforms are not solid yet.
+- floorTop() still works with the same signature, but it reads column 0 only. Rafale, use isSolidAt for landing on platforms.
+- Assets are found in the repo's assets/ folder while developing, or next to the executable in a shipped build (src/core/Paths.*).
+- S G B F letters in a chunk are recorded as spawn markers for later. Their tiles count as empty.
+- Ownership: I created assets/chunks/start.txt as a test chunk. It belongs to the level designer (area 4) from now on.
+- Built, run headless, reviewed. The review found a row mismatch between the two solid checks. Fixed and retested before this commit.
 
 ## 2026-11-07 13:08: step 2 done, game loop, floor and player starter
 - I read notes/PLAN.md on claude/project-thread-4030yj (draft, not agreed). It matches my split. I follow it: player movement belongs to Rafale.

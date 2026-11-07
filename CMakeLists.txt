@@ -26,6 +26,11 @@ add_executable(upgrade ${UPGRADE_SOURCES})
 target_include_directories(upgrade PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(upgrade PRIVATE raylib)
 
+# Assets: read from the source folder while developing, else from a copy next to the executable
+target_compile_definitions(upgrade PRIVATE UPGRADE_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+add_custom_command(TARGET upgrade POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:upgrade>/assets)
+
 if(APPLE)
   target_link_libraries(upgrade PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 endif()
