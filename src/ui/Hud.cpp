@@ -164,9 +164,17 @@ void Hud::drawPlaying(Game& g)
         a = std::min(1.0f, g.bannerT * 3);
         float big = g.era <= 1 ? 40 : 46;
         Color c = g.era == 0 ? hexc(0xebebe1) : (g.era == 1 ? hexc(art::SHADES4[3]) : hexc(0xfff4d8));
-        DrawRectangleRec(R(0, 250, 1280, 150), fade(BLACK, 0.45f * a));
+        bool story = !g.bannerStory.empty();
+        int subLines = 1 + (int)std::count(g.bannerSub.begin(), g.bannerSub.end(), '\n');
+        float storyY = 340 + subLines * 30 + 10;
+        DrawRectangleRec(R(0, 250, 1280, story ? storyY - 250 + 52 : 150), fade(BLACK, (story ? 0.6f : 0.45f) * a));
         text(g.banner, 640, 275, big, fade(c, a), true);
         text(g.bannerSub, 640, 340, 22, fade(WHITE, a), true);
+        // the story line: warm, a beat later than the rest, so it reads as its own moment
+        if (story) {
+            float sa = std::min(a, std::max(0.0f, (g.bannerLen - g.bannerT - 0.6f) * 2.0f));
+            text(g.bannerStory, 640, storyY, 21, fade(hexc(0xf2d9a8), sa), true);
+        }
     }
 
     // help line for the first seconds
