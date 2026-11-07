@@ -85,6 +85,7 @@ public:
 
     // messages: a short banner in the middle of the screen
     std::string banner, bannerSub;
+    std::string bannerStory;     // a line of the story under the banner (era upgrades, run start)
     float bannerT = 0, bannerLen = 0;
 
     Art art;
@@ -99,7 +100,7 @@ public:
     float hitPause = 0;
 
     void startRun();
-    void showBanner(const std::string& title, const std::string& sub, float seconds);
+    void showBanner(const std::string& title, const std::string& sub, float seconds, const std::string& story = "");
 
 private:
     std::mt19937 rng_;

@@ -119,13 +119,15 @@ void Game::startRun()
     if (era > 0) spawner.forceChunk(introChunk(era));   // starting late: show the gate
     spawner.fill(level, cam.right() + 60, era, 0, !solo(), markers);
     spawnMarkers();
-    showBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 3.0f);
+    // The run opens on this stage's line of the story; the controls hint sits at the bottom.
+    showBanner(T("era_name_" + std::to_string(era)), T("start_hint"), 5.0f, T("story_" + std::to_string(era)));
 }
 
-void Game::showBanner(const std::string& title, const std::string& sub, float seconds)
+void Game::showBanner(const std::string& title, const std::string& sub, float seconds, const std::string& story)
 {
     banner = title;
     bannerSub = sub;
+    bannerStory = story;
     bannerT = seconds;
     bannerLen = seconds;
 }
@@ -624,7 +626,8 @@ void Game::updatePlaying(float dt)
             boss.start(cam.x, tier(), config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
             audio.play("boss_appear");
             cam.addShake(0.6f);
-            showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
+            // The Forgetting speaks: a different plea in every stage of her life.
+            showBanner(T("boss_appear"), T("boss_says_" + std::to_string(era)), 3.2f);
             events().bossAppeared.emit();
         } else if (era < art::LAST_ERA) beginEraTransition();
         else startEnding();
@@ -884,7 +887,8 @@ void Game::switchEra(int newEra)
     if (era == config().i("player.attack_from_era", 2)) sub += std::string(sub.empty() ? "" : "   ") + T("ability_attack");
     if (!sub.empty()) sub = std::string(T("new_ability")) + "  " + sub;
     sub = std::string(T("era_name_" + std::to_string(era))) + (sub.empty() ? "" : "\n") + sub;
-    showBanner(std::string(T("memory_restored")) + " " + T("memory_" + std::to_string(era)), sub, transLen - 0.6f + 1.5f);
+    showBanner(std::string(T("memory_restored")) + " " + T("memory_" + std::to_string(era)), sub, transLen - 0.6f + 3.0f,
+               T("story_" + std::to_string(era)));
     particles.burst(cam.x, 7, 120, WHITE, 14, 1.2f, 0.2f);
     for (auto& pl : players) if (pl.joined && pl.faded) { pl.faded = false; pl.invuln = 2; }
 }

@@ -1,42 +1,61 @@
 # Upgrade: every line the players read. key = text. "\n" makes a new line.
-# The writer owns this file. The two characters: Player 1 is Gran, Player 2 is Sam, her grandson.
+# The writer owns this file. Story: "The Four Minutes".
+# Player 1 is Maren Ashby, 81, a retired clockmaker. Player 2 is Wren, ten, her little brother
+# (the reveal at the end). The game runs backwards through her life while the graphics run forwards.
+# story_N and boss_says_N are per-stage lines (N = stage 0..6), shown with that stage's banners.
 
 title = UPGRADE
-title_sub = Two of you. One memory. Get it back before it fades.
+title_sub = An old woman. A boy who never grew up. Four minutes she never got back.
 title_start = Press any button to start
 title_join = Player 2: press any of your buttons to join
-title_p2_ready = Player 2 is here!
-title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
-title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
+title_p2_ready = Player 2 is here.
+title_controls_p1 = P1 (Maren): A/D move   SPACE jump   F attack   G ability   S+G second ability
+title_controls_p2 = P2 (Wren): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
 title_controls_pad = Gamepads: stick move, A jump, X attack, B ability. Start or Esc pauses.
 title_credit = GameJam 2026 . theme: Time
 
-p1_name = GRAN
-p2_name = SAM
+p1_name = MAREN
+p2_name = WREN
 p2_join_1 = Player 2?
 p2_join_2 = Press any of your buttons to join
-p2_joined = SAM REMEMBERS
-p2_joined_sub = Two of you now. Stay close.
+p2_joined = WREN IS HERE
+p2_joined_sub = He has been waiting a long time.
 
 bar_label = MEMORY
 score = SCORE
-era_name_0 = 1-BIT . EARLY CHILDHOOD
-era_name_1 = 4-SHADE . LITTLE ONE
-era_name_2 = 8-BIT . SCHOOL YEARS
-era_name_3 = 16-BIT . TEENAGE YEARS
-era_name_4 = 32-BIT . LEAVING HOME
-era_name_5 = 2.5D . GROWN UP
-era_name_6 = FULL 3D . HOME AGAIN
-start_hint = Run right. Jump on the Forgetting. Collect what it drops.
+era_name_0 = 1-BIT . LARKFIELD HOUSE
+era_name_1 = 4-SHADE . THE SHOP
+era_name_2 = 8-BIT . THE HARBOUR
+era_name_3 = 16-BIT . THE WEDDING
+era_name_4 = 32-BIT . THE APPRENTICE
+era_name_5 = 2.5D . THE LONG WINTER
+era_name_6 = FULL 3D . THE MILLPOND
+start_hint = Run right. Jump on the Forgetting. Gather what it lets fall.
 controls_hint = Jump on enemies to break them. Their fragments fill the Memory Bar. Stay ahead of the Wall.
 
+story_0 = There is a boy at the end of the corridor. The nurses do not see him. Maren follows anyway.
+story_1 = A hundred clocks, every one four minutes slow. In fifty years no customer asked her why.
+story_2 = She named her son for someone she never spoke of. She told him it was a bird she liked.
+story_3 = Tom said she married him for his steady hands. It was his patience. He never asked.
+story_4 = Any clock can be mended, old Pell told her. She was fifteen, and she needed that to be true.
+story_5 = Her father did not say her name until the thaw. Her mother never said his name again.
+story_6 = The ice was thick enough. Wren said so. He was ten, and he was never wrong.
+
+boss_says_0 = "Stay in the chair by the window. You were content there."
+boss_says_1 = "You closed the shop. Close this door too."
+boss_says_2 = "Why look back? He is not there."
+boss_says_3 = "Tom forgave you everything. Is that not enough?"
+boss_says_4 = "A clock can be mended. A day cannot."
+boss_says_5 = "You were fourteen. No one blames you. Stay where it is warm."
+boss_says_6 = "Don't go out on the ice, Maren."
+
 memory_restored = MEMORY RESTORED:
-memory_1 = Gran's garden swing
-memory_2 = The first bike ride
-memory_3 = The treehouse
-memory_4 = The train out of town
-memory_5 = The phone call
-memory_6 = Home
+memory_1 = The shop with the green door
+memory_2 = Gulls over Saltmarch harbour
+memory_3 = Tom, in a borrowed coat
+memory_4 = Mr. Pell's hundred clocks
+memory_5 = The winter the river froze
+memory_6 = The millpond
 new_ability = NEW ABILITIES
 
 ability_double_jump = Double jump
@@ -55,32 +74,32 @@ ability_short_time_slow = SLOW
 no_abilities = run . jump . stomp
 
 faded = FADED
-faded_hint = Touch your partner to remember!
-faded_hint_solo = ...
+faded_hint = Find each other. Touch your partner to remember.
+faded_hint_solo = Somewhere, two notes. High, then low.
 status_shield = LOCKET
 status_speed = FAST
-status_magnet = LULLABY
+status_magnet = WHISTLE
 
 memory_lost = THE MEMORY SLIPS
-memory_lost_sub = Both of you faded. Hold on to each other.
-memory_lost_sub_solo = You faded. The memory slips a little further away.
+memory_lost_sub = Hold on to his hand. You let go once.
+memory_lost_sub_solo = The hour slips a little further away.
 
 boss_appear = THE FORGETTING GATHERS
-boss_sub = Jump on it when it lands!
+boss_sub = Jump on it when it lands.
 boss_name = THE FORGETTING
-boss_hint = NOW! Jump on it!
-boss_defeated = IT REMEMBERS
+boss_hint = Now. Jump on it.
+boss_defeated = THE FOG THINS
 
-powerup_0 = KEEPSAKE LOCKET
+powerup_0 = MOTHER'S LOCKET
 powerup_desc_0 = Protects you from one hit.
-powerup_1 = HOURGLASS
+powerup_1 = PELL'S HOURGLASS
 powerup_desc_1 = The Forgetting Wall falls back and slows down.
-powerup_2 = LULLABY
-powerup_desc_2 = Fragments fly to you from far away.
-powerup_3 = OLD PHOTOGRAPH
-powerup_desc_3 = A whole piece of the memory comes back.
-powerup_4 = OLD TRAINERS
-powerup_desc_4 = Run faster for a while.
+powerup_2 = WREN'S WHISTLE
+powerup_desc_2 = Two notes, high then low. Fragments come running from far away.
+powerup_3 = THE OLD PHOTOGRAPH
+powerup_desc_3 = A whole piece of the day comes back.
+powerup_4 = WREN'S SKATES
+powerup_desc_4 = The laces are still knotted. Run faster for a while.
 
 pause = PAUSED
 resume = Resume
@@ -88,19 +107,19 @@ restart = Restart
 quit = Quit to title
 pause_hint = Up/Down to choose, Enter or Space to pick
 
-ending_caption_0 = The first bike ride
-ending_sub_0 = "Don't let go!"  "I let go ages ago. You're doing it yourself."
-ending_caption_1 = The treehouse
-ending_sub_1 = We built it together, one summer. It's still there.
-ending_caption_2 = The phone call
-ending_sub_2 = Every Sunday, even when he moved far away.
-ending_caption_3 = Home
-ending_sub_3 = And then one day, she forgot his name.
-ending_reveal_1 = Player 1 was Gran.
-ending_reveal_2 = Player 2 was Sam, her grandson.
-ending_reveal_3 = The memories were hers. He came back to find them with her.
-ending_reveal_4 = "There you are, Sam. I remember."
+ending_caption_0 = Four o'clock
+ending_sub_0 = She was meant to walk him home at four. She stopped to watch the skaters.
+ending_caption_1 = The watch in the reeds
+ending_sub_1 = Their father's watch came up with the thaw. It had stopped at four minutes past four.
+ending_caption_2 = Every clock in Saltmarch
+ending_sub_2 = For sixty years she set them four minutes slow, so that somewhere she was still on time.
+ending_caption_3 = The millpond, again
+ending_sub_3 = This time she does not look at the skaters.
+ending_reveal_1 = Player 1 was Maren Ashby.
+ending_reveal_2 = Player 2 was Wren Ashby, her little brother. He was ten. He was always ten.
+ending_reveal_3 = She did not come here to find him. He came to find her.
+ending_reveal_4 = "You can let go now, Mare. I've got the hour."
 credits_title = UPGRADE
-credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
-thanks = Thank you for remembering.
+credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nStory: The Four Minutes\nTheme: Time\n\nAll art and sound made in code
+thanks = We keep the hour.
 ending_continue = Press any button
