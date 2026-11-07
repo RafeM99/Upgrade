@@ -1,6 +1,8 @@
 #include "raylib.h"
 #include "rlgl.h"
 
+#include "core/Game.h"
+
 #include <cstdlib>
 #include <cstring>
 
@@ -19,18 +21,28 @@ int main(int argc, char** argv)
     InitWindow(screenWidth, screenHeight, "Upgrade");
     SetTargetFPS(60);
 
-    const char* title = "Upgrade";
-    const int fontSize = 80;
+    Game game;
+    game.init();
+
+    // Fixed 60 Hz update with an accumulator; draw once per frame
+    const float step = 1.0f / 60.0f;
+    float accumulator = 0.0f;
     int frame = 0;
 
     while (!WindowShouldClose()) {
         ++frame;
         const bool lastFrame = maxFrames > 0 && frame >= maxFrames;
 
+        float frameTime = GetFrameTime();
+        if (frameTime > 0.25f) frameTime = 0.25f;
+        accumulator += frameTime;
+        while (accumulator >= step) {
+            game.update(step);
+            accumulator -= step;
+        }
+
         BeginDrawing();
-        ClearBackground(Color{20, 20, 30, 255});
-        const int textWidth = MeasureText(title, fontSize);
-        DrawText(title, (screenWidth - textWidth) / 2, (screenHeight - fontSize) / 2, fontSize, RAYWHITE);
+        game.draw();
         if (lastFrame && shotFile) {
             rlDrawRenderBatchActive();   // flush drawing before reading the screen
             Image shot = LoadImageFromScreen();

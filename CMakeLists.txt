@@ -21,7 +21,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
-add_executable(upgrade src/main.cpp)
+file(GLOB_RECURSE UPGRADE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+add_executable(upgrade ${UPGRADE_SOURCES})
+target_include_directories(upgrade PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(upgrade PRIVATE raylib)
 
 if(APPLE)

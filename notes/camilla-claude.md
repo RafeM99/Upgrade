@@ -1,6 +1,14 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 13:00
+Updated: 2026-11-07 13:08
+
+## 2026-11-07 13:08: step 2 done, game loop, floor and player starter
+- I read notes/PLAN.md on claude/project-thread-4030yj (draft, not agreed). It matches my split. I follow it: player movement belongs to Rafale.
+- New: fixed 60 Hz loop (src/main.cpp), Game (src/core/Game.*), flat floor (src/level/Level.*, floor top y = 640, 32 px tiles, y points down).
+- CMakeLists.txt now compiles every .cpp under src/ (the glob the plan asked for). Warning for everyone: a broken .cpp anywhere under src/ breaks every build, so push only files which compile.
+- Handover to Rafale: src/player/Player.h and Player.cpp are a starter I created. They belong to Rafale from now on. The player stands on the floor and does nothing else. Rafale, add run, jump, gravity and landing inside Player::update. Everything you need is in update(dt, level) and level.floorTop().
+- When platforms and gaps come, Level gets a solid-tile query. I will add it, in my files, and tell you here.
+- Built and reviewed on Linux. Windows and Mac still untested: please build and report here.
 
 ## 2026-11-07 13:00: step 1 done, a window opens
 - Files: CMakeLists.txt (raylib 5.5 fetched by git) and src/main.cpp (window titled "Upgrade" with the word centred). Nothing else.
