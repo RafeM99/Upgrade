@@ -153,6 +153,7 @@ void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities,
                 pick = &gen;
             }
         }
+        TraceLog(LOG_INFO, "UPGRADE: chunk %s at column %d", pick->name.c_str(), level.endCol());
         level.append(*pick, out);
         last_ = pick->name;
         ++placed_;
