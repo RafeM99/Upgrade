@@ -601,7 +601,7 @@ void Game::updatePlaying(float dt)
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
-            boss.start(cam.x, era, config().i("boss.base_hits", 3));
+            boss.start(cam.x, era, config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1));
             audio.play("boss_appear");
             cam.addShake(0.6f);
             showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
@@ -747,7 +747,7 @@ void Game::memoryLost()
 {
     lostTimer = 1.5f;
     audio.play("memory_lost");
-    showBanner(T("memory_lost"), T("memory_lost_sub"), 2.6f);
+    showBanner(T("memory_lost"), solo() ? T("memory_lost_sub_solo") : T("memory_lost_sub"), 2.6f);
     events().memoryLost.emit();
 }
 

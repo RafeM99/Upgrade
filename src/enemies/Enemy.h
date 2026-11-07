@@ -53,7 +53,7 @@ struct Boss {
     bool wantsSpawn = false;   // the Game spawns a minion when this is set
     bool defeated = false;
 
-    void start(float camX, int era, int hpBase);
+    void start(float camX, int era, int hpBase, int hpPerEra);
     void update(float dt, float camLeft, float camRight, const Level& level, const Player* players, int era, float timeScale);
     bool vulnerable() const { return state == 3 && hurt <= 0; }
     bool dangerous() const { return state == 2; }        // only the swoop hurts; a resting boss just pushes you back

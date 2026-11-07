@@ -123,11 +123,11 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
 }
 
 // ------------------------------------------------------------------ Boss
-void Boss::start(float camX, int era, int hpBase)
+void Boss::start(float camX, int era, int hpBase, int hpPerEra)
 {
     active = true;
     defeated = false;
-    maxHp = hp = hpBase + era;
+    maxHp = hp = hpBase + era * hpPerEra;
     state = 0;
     stateTime = 0;
     t = 0;
