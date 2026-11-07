@@ -111,7 +111,7 @@ void Game::startRun()
         pl = Player();
         pl.index = p;
         pl.joined = joined;
-        pl.spawnAt(4.0f + p * 1.2f, (float)LEVEL_H - 2);
+        pl.spawnAt(4.0f + p * 1.7f, (float)LEVEL_H - 2);   // apart: the figures are drawn 1.5 tiles wide
     }
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();

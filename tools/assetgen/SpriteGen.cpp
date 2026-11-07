@@ -609,39 +609,43 @@ Pose playerPose(int frame)
     return p;
 }
 
-// 1-bit Gran and Sam: 8 x 12 pixels, hand placed. Solid light figures with a dark halo (the
-// sheet outline), so they read against the line-drawn 1-bit scenery.
+// 1-bit Gran and Sam: 12 x 18 pixels (1.5x the 8 x 12 tile box), hand placed. Solid light
+// figures with a dark halo (the sheet outline), so they read against the 1-bit scenery.
+// Gran: a bun, a dark parting line, cardigan arms apart from the body, a skirt. Sam: a smaller
+// child whose cap is a checker pattern, so it reads apart from his face.
 void drawPlayer1bit(Canvas& c, bool gran, int frame)
 {
-    // Gran: bun, glasses-less young-ish face, cardigan, skirt.  Sam: a small child in a cap.
-    static const Rows gHead = {"..##....", ".#####..", ".##o##..", "...###.."};
-    static const Rows sHead = {"..###...", ".######.", "..#o##..", "..###..."};
-    static const Rows gDown = {".#####..", "#.###.#.", "#.###.#.", "..###...", ".#####.."};
-    static const Rows gRun = {".#####..", "#.###..#", "#.###...", "..###...", ".#####.."};
-    static const Rows gUp = {"#######.", "..###...", "..###...", "..###...", ".#####.."};
-    static const Rows gFwd = {".#####..", "..######", "..###...", "..###...", ".#####.."};
-    static const Rows gBack = {"..#####.", ".####.#.", "#.###...", "..###...", ".#####.."};
-    static const Rows gWall = {".#####.#", "#.####..", "#.###...", "..###...", ".#####.."};
-    static const Rows gStand = {".#####..", "..#.#...", ".##.##.."};
-    static const Rows gWide = {".#####..", ".#...#..", "##...##."};
-    static const Rows gPass = {".#####..", "..#.#...", "..####.."};
-    static const Rows gTuck = {".#####..", ".##.##.."};
-    static const Rows gSquat = {"##...##."};
-    static const Rows sDown = {".#####..", "#.###.#.", "..###..."};
-    static const Rows sUp = {".#####..", "..###...", "..###..."};
-    static const Rows sFwd = {"..###...", ".#######", "..###..."};
-    static const Rows sBack = {"..####..", "#####...", "..###..."};
-    static const Rows sWall = {".####.#.", "#.####..", "..###..."};
-    static const Rows sStand = {"..#.#...", ".##.##.."};
-    static const Rows sWide = {".#...#..", "##...##."};
-    static const Rows sPass = {"..##....", "..###..."};
-    static const Rows sTuck = {".##.##.."};
-    static const Rows sSquat = {"##...##."};
-    const int H = 12;
+    static const Rows gHead = {"...##.......", "..####......", ".#######....", ".########...", ".#####o#....", "..######....",
+                               "...####....."};
+    static const Rows sHead = {"...:::::....", "..:::::::...", "..::::::::::", "..######....", "..####o#....", "...####....."};
+    static const Rows gDown = {"..######....", "#.######.#..", "#.######.#..", "#..####..#..", "...####....."};
+    static const Rows gRun = {"..######....", "..######.##.", ".#.######...", "#..######...", "...####....."};
+    static const Rows gUp = {"..######....", ".########...", "..######....", "..######....", "...####....."};
+    static const Rows gFwd = {"..######....", "..##########", "..######....", "..######....", "...####....."};
+    static const Rows gBack = {"..######....", ".#######....", "#.######....", "#.######....", "...####....."};
+    static const Rows gWall = {"..######.##.", "..#######...", ".#.######...", ".#.######...", "...####....."};
+    static const Rows gStand = {".########...", ".########...", "..######....", "..##..##....", "..##..##....", ".###.###...."};
+    static const Rows gWide = {".########...", ".########...", "..##...##...", ".##.....##..", "##.......##.", "###.......##"};
+    static const Rows gPass = {".########...", ".########...", "..######....", "...##.##....", "...##..##...", "..###..###.."};
+    static const Rows gTuck = {".########...", ".########...", "..###.###...", ".###..###..."};
+    static const Rows gSquat = {".########...", "##########..", "##.......##."};
+    static const Rows sDown = {"..######....", ".#.####.#...", ".#.####.#...", "...####....."};
+    static const Rows sRun = {"..######....", "..######.#..", ".#.######...", "#..####....."};
+    static const Rows sUp = {"..######....", "..######....", "...####.....", "...####....."};
+    static const Rows sFwd = {"..######....", "..##########", "...####.....", "...####....."};
+    static const Rows sBack = {"..######....", ".######.....", "#..####.....", "...####....."};
+    static const Rows sWall = {"..######.#..", ".#.#####....", ".#.####.....", "...####....."};
+    static const Rows sStand = {"...##.##....", "...##.##....", "...##.##....", "..###.###..."};
+    static const Rows sWide = {"...##..##...", "..##....##..", ".##......##.", ".###.....###"};
+    static const Rows sPass = {"...####.....", "...##.##....", "...##..##...", "..###..###.."};
+    static const Rows sTuck = {"...##.##....", "..##...##...", "..###..###.."};
+    static const Rows sSquat = {".###....###.", "###......###"};
+    const int H = 18;
 
     if (frame == PF_SPECIAL && gran) {   // gliding under her umbrella
-        stamp(c, {"..####..", ".######.", "########", "..##...#", ".#####.#", ".##o####", "...###.#",
-                  ".######.", "#.###...", "..###...", ".#####..", "..#.#..."}, 0, 0);
+        stamp(c, {"...######...", ".##########.", "############", "#..#..#..#.#", ".........#..", "..##.....#..",
+                  ".####....#..", ".#######.#..", ".########...", ".#####o###..", "..######....", "...####.....",
+                  "..######....", ".#.####.....", ".########...", "..######....", "..##..##....", ".###.###...."}, 0, 0);
         return;
     }
     const Rows& head = gran ? gHead : sHead;
@@ -650,7 +654,7 @@ void drawPlayer1bit(Canvas& c, bool gran, int frame)
     bool headDown = false;
     switch (frame) {
     case PF_IDLE1: headDown = true; break;
-    case PF_RUN0: case PF_RUN2: body = gran ? gRun : sDown; legs = gran ? gWide : sWide; break;
+    case PF_RUN0: case PF_RUN2: body = gran ? gRun : sRun; legs = gran ? gWide : sWide; break;
     case PF_RUN1: case PF_RUN3: legs = gran ? gPass : sPass; bob = -1; break;
     case PF_JUMP: body = gran ? gUp : sUp; legs = gran ? gTuck : sTuck; bob = -1; break;
     case PF_FALL: body = gran ? gUp : sUp; legs = gran ? gWide : sWide; break;
@@ -667,13 +671,13 @@ void drawPlayer1bit(Canvas& c, bool gran, int frame)
     if (frame == PF_JUMP) oy = H - total - 1;
     stamp(c, lower, 0, oy + (int)head.size());
     stamp(c, headDx ? shiftRight(head, headDx) : head, 0, oy + (headDown ? 1 : 0));
-    if (frame == PF_JUMP || frame == PF_FALL || (frame == PF_SPECIAL && !gran))
-        stamp(c, {"#.....#."}, 0, oy + (int)head.size() - 2 + (gran ? 0 : 1));   // hands up by the head
-    if (frame == PF_SPECIAL && !gran) {
-        stamp(c, {"#......#"}, 0, oy - 1);
-        stamp(c, {"#......#"}, 0, H - 1);
+    if (frame == PF_JUMP || frame == PF_FALL || (frame == PF_SPECIAL && !gran))   // hands up by the head
+        stamp(c, {"#........#..", "#........#.."}, 0, oy + (int)head.size() - 3);
+    if (frame == PF_SPECIAL && !gran) {   // sparks of the time pulse
+        stamp(c, {"#.........#."}, 0, std::max(0, oy - 2));
+        stamp(c, {".#.......#.."}, 0, H - 2);
     }
-    if (frame == PF_ATTACK) stamp(c, {"#", ".", "#"}, 7, oy + (int)head.size());
+    if (frame == PF_ATTACK) stamp(c, {"#", ".", ".", "#"}, 11, oy + (int)head.size() - 1);
 }
 
 void drawPlayer(Canvas& c, int who, int frame)
@@ -695,7 +699,7 @@ void drawPlayer(Canvas& c, int who, int frame)
     Col lower = gran ? pc(0x7a4a3a, 2) : pc(0x2b3f6b, 1);     // skirt / jeans
     Col legs = gran ? pc(0x5a4048, 1) : lower;                 // stockings / jeans
     Col shoes = gran ? pc(0x3a2422, 0) : pc(0xf4f4f4, 3);
-    Col hair = gran ? pc(granHair[e], 2) : pc(0x6b3e22, 0);
+    Col hair = gran ? pc(granHair[e], e == 1 ? 1 : 2) : pc(0x6b3e22, 0);   // 4-shade: darker than her face
     Col cap = pc(0x22c4b0, 1);
     Col ink = pc(0x1c1420, 0);
     if (e == 2) { hair = gran ? hex(0x5a5468) : hex(0x8c4a2f); cap = hex(0x1e8a4c); }
@@ -703,15 +707,15 @@ void drawPlayer(Canvas& c, int who, int frame)
 
     float hr = granHead[e], st = gran ? stoop[e] : 0.0f;
     if (!gran) {
-        float k = samSize[e];
-        c.tk = k;
-        c.tox = 0.5f * (1 - k);
-        c.toy = 1.49f * (1 - k);
+        float k = samSize[e], base = c.tk;   // base: the sheet's own scale (PLAYER_K)
+        c.tk = base * k;
+        c.tox += base * 0.5f * (1 - k);
+        c.toy += base * 1.49f * (1 - k);
         hr = granHead[e] * (1.0f + (1.0f - k) * 0.9f);   // children have bigger heads for their size
         if (e >= 5) hr = 0.19f;
     }
-    const int tp = TILE_PX[e];
-    const int eyePx = tp >= 64 ? 3 : (tp >= 32 ? 2 : 1);
+    const float tp = TILE_PX[e] * c.tk;   // target pixels per design unit (the sheet draws 1.5x)
+    const int eyePx = tp >= 80 ? 4 : (tp >= 28 ? 2 : 1);
 
     Vector2 hip{0.5f + p.lean * 0.3f, 1.0f + p.bob};
     Vector2 sh{0.5f + p.lean * 0.8f + st, 0.68f + p.bob + st * 0.5f};
@@ -811,133 +815,279 @@ void drawPlayer(Canvas& c, int who, int frame)
 //   1-bit: hand-placed blocks, dither only on the big ones.   4-shade: blocky, two greys each.
 //   8-bit: chunky, colour + shadow + outline.   16-bit: rounder, three-tone.
 //   32-bit on: rounded, four-tone, coloured outline and small details (teeth, cracks, feelers).
+// The blob, one creature in six visual languages:
+//   1-bit   a hand-placed lump, its lower half a dither "fade", two dark eyes
+//   4-shade an ink blot: darkest-but-one grey, drips for feet, a light shine, big light eyes
+//   8-bit   a TV-static ghost: flat pink, one shadow colour, scanline stripes, a zigzag hem
+//   16-bit  a teardrop slime: three-tone violet, a curled tip, a wide wobbling base
+//   32-bit  a puff of fog: overlapping lumps, wisps trailing off, cyan glowing eyes, teeth
+//   2.5D    the fog puff, smooth and round, with a glitch tear through it
+void drawBlobEra(Canvas& c, int frame)
+{
+    const int e = g_era;
+    float sq = frame == BF_SQUASH ? 0.0f : 0.07f * std::sin(frame * 1.5707963f);
+    float step = (frame % 2) ? 0.05f : -0.05f;
+    const bool squash = frame == BF_SQUASH;
+    Col white = pc(0xfaf3e6, 3), black = pc(0x0f0d1a, 0);
+    if (e == 1) {
+        Col ink = tone(1), shine = tone(2);
+        if (squash) {
+            c.rect(0.04f, 0.8f, 0.92f, 0.18f, solid(ink), 0.06f);
+            c.rect(0.5f, 0.84f, 0.3f, 0.04f, solid(white));
+            return;
+        }
+        float top = 0.26f + sq * 0.6f;
+        c.ellipse(0.5f, 0.6f + sq * 0.3f, 0.4f * (1 + sq), 0.34f * (1 - sq), solid(ink));
+        c.rect(0.1f, 0.6f, 0.8f, 0.24f, solid(ink));
+        // drips for feet, swapping each step
+        c.rect(0.14f + step, 0.8f, 0.14f, 0.18f, solid(ink), 0.06f);
+        c.rect(0.44f, 0.8f, 0.12f, 0.12f + (frame % 2) * 0.05f, solid(ink), 0.05f);
+        c.rect(0.7f - step, 0.8f, 0.14f, 0.18f, solid(ink), 0.06f);
+        c.rect(0.22f, top + 0.08f, 0.18f, 0.06f, solid(shine));   // shine, top-left
+        c.rect(0.18f, top + 0.14f, 0.06f, 0.08f, solid(shine));
+        c.rect(0.5f, 0.44f, 0.16f, 0.2f, solid(white));
+        c.rect(0.72f, 0.44f, 0.14f, 0.2f, solid(white));
+        c.rect(0.58f, 0.5f, 0.07f, 0.1f, solid(black));
+        c.rect(0.79f, 0.5f, 0.07f, 0.1f, solid(black));
+        return;
+    }
+    if (e == 2) {
+        Col body = hex(0x8a7fb4), shadow = hex(0x6a2c6e), fuzz = hex(0xf28cb4);
+        if (squash) {
+            c.rect(0.06f, 0.82f, 0.88f, 0.16f, solid(body));
+            c.rect(0.06f, 0.92f, 0.88f, 0.06f, solid(shadow));
+            c.rect(0.56f, 0.85f, 0.2f, 0.04f, solid(black));
+            return;
+        }
+        float bob = (frame % 2) ? 0.04f : 0.0f, top = 0.34f + sq * 0.4f + bob;
+        // a squat box of static: a fuzz of pink spikes on top, scanline stripes, one big eye
+        for (int k = 0; k < 4; ++k) {
+            float x = 0.18f + k * 0.17f, hgt = (k + frame) % 2 ? 0.12f : 0.07f;
+            c.rect(x, top - hgt, 0.08f, hgt + 0.02f, solid(fuzz));
+        }
+        c.rect(0.12f, top, 0.76f, 0.84f - top, solid(body));
+        c.rect(0.12f, 0.76f, 0.76f, 0.08f, solid(shadow));
+        for (int k = 0; k < 3; ++k) c.rect(0.12f, top + 0.1f + k * 0.12f, 0.24f, 0.04f, solid(shadow));   // scanlines
+        c.rect(0.2f + step, 0.84f, 0.16f, 0.12f, solid(shadow));   // stubby feet
+        c.rect(0.64f - step, 0.84f, 0.16f, 0.12f, solid(shadow));
+        c.rect(0.48f, top + 0.1f, 0.3f, 0.22f, solid(white));
+        c.rect(0.64f, top + 0.14f, 0.1f, 0.14f, solid(black));
+        return;
+    }
+    if (e == 3) {
+        Col body = hex(0x6e6a9e);
+        if (squash) {
+            c.ellipse(0.5f, 0.88f, 0.46f, 0.1f, lit(body));
+            c.rect(0.5f, 0.86f, 0.24f, 0.03f, solid(black));
+            return;
+        }
+        float ry = 0.3f * (1 - sq), rx = 0.36f * (1 + sq);
+        c.ellipse(0.5f, 0.97f - 0.06f, 0.46f * (1 + sq * 0.5f), 0.08f, lit(body));   // the spreading base
+        c.ellipse(0.5f, 0.92f - ry, rx, ry, lit(body));
+        // the teardrop tip, curling back
+        c.poly({{0.36f, 0.92f - 1.6f * ry}, {0.5f, 0.92f - 1.9f * ry}, {0.34f - step, 0.92f - 2.35f * ry}, {0.62f, 0.92f - 1.7f * ry}},
+               lit(body));
+        c.dot(0.3f, 0.92f - 1.45f * ry, warmLight(hex(0xa8a4d0)));   // one lit fleck, not a gloss
+        float ey = 0.92f - ry * 0.95f;
+        c.ellipse(0.58f, ey, 0.09f, 0.11f, solid(white));
+        c.ellipse(0.78f, ey, 0.08f, 0.1f, solid(white));
+        c.dot(0.61f, ey, black, 2);
+        c.dot(0.8f, ey, black, 2);
+        c.rect(0.6f, ey + 0.16f, 0.2f, 0.035f, solid(hex(0x2a2140)));
+        return;
+    }
+    // 32-bit and 2.5D: a puff of fog with glowing eyes
+    Col fog = hex(e >= 5 ? 0x6a5aa8 : 0x5a4a8a), core = coolShadow(fog, 1.6f), glow = hex(0x7fe8ff);
+    if (squash) {
+        c.ellipse(0.5f, 0.88f, 0.46f, 0.1f, lit(fog));
+        for (int k = 0; k < 3; ++k) c.circle(0.2f + k * 0.3f, 0.8f, 0.06f, lit(fog));
+        c.rect(0.56f, 0.86f, 0.24f, 0.03f, solid(glow));
+        return;
+    }
+    float lift = sq * 0.5f;
+    // trailing wisps, drifting the other way each step
+    c.circle(0.2f - step, 0.9f, 0.08f, lit(fog));
+    c.circle(0.08f - step * 2, 0.84f, 0.045f, lit(fog));
+    c.circle(0.8f + step, 0.92f, 0.07f, lit(fog));
+    // the body: lumps of fog
+    c.ellipse(0.5f, 0.66f + lift * 0.4f, 0.4f * (1 + sq), 0.28f * (1 - sq), lit(fog));
+    c.circle(0.34f, 0.44f + lift, 0.2f, lit(fog));
+    c.circle(0.6f, 0.38f + lift, 0.23f, lit(fog));
+    c.circle(0.2f, 0.62f, 0.14f, lit(fog));
+    // static flecks deep inside
+    c.dot(0.3f, 0.62f, core, e >= 5 ? 3 : 2);
+    c.dot(0.42f, 0.78f, core, 1);
+    c.dot(0.22f, 0.5f + lift, core, 1);
+    // glowing eyes: a dark socket, a cyan iris, a white core
+    float ey = 0.46f + lift;
+    c.ellipse(0.6f, ey, 0.09f, 0.1f, solid(core));
+    c.ellipse(0.8f, ey + 0.01f, 0.08f, 0.09f, solid(core));
+    c.ellipse(0.61f, ey, 0.055f, 0.065f, solid(glow));
+    c.ellipse(0.8f, ey + 0.01f, 0.045f, 0.055f, solid(glow));
+    c.dot(0.62f, ey - 0.02f, white, e >= 5 ? 2 : 1);
+    c.dot(0.81f, ey - 0.01f, white, e >= 5 ? 2 : 1);
+    // a crooked mouth with two teeth
+    c.rect(0.56f, ey + 0.16f, 0.28f, 0.06f, solid(core), 0.02f);
+    c.rect(0.6f, ey + 0.16f, 0.04f, 0.03f, solid(white));
+    c.rect(0.74f, ey + 0.16f, 0.04f, 0.03f, solid(white));
+    if (e >= 5) c.glitchRows(frame * 7 + 3, 0.05f);   // the Forgetting tearing through it
+}
+
 void drawBlob(Canvas& c, int frame)
 {
-    if (g_era == 0) {
+    if (g_era == 0) {   // 10 x 10 pixels: a light lump fading into a dither at the bottom
         static const Rows walk[2] = {
-            {"....#...", "...#....", "..####..", ".######.", ".###o#o#", "########", "########", ".##..##."},
-            {"........", "...#....", "..#.....", ".######.", "####o#o#", "########", "########", "##....##"}};
-        if (frame == BF_SQUASH) stamp(c, {".######.", "###o#o##"}, 0, 6);
+            {"....#.....", "...#......", "..#####...", ".#######..", "####o##o#.", "#########.", "#########.",
+             "#:#:#:#:#.", ".:#:#:#:..", ".##...##.."},
+            {"..........", "...#......", "..######..", ".#######..", "####o##o#.", "#########.", "#########.",
+             "#:#:#:#:#.", ".:#:#:#:..", "##.....##."}};
+        if (frame == BF_SQUASH) stamp(c, {".########.", "####o##o##", ":#:#:#:#:#"}, 0, 7);
         else stamp(c, walk[frame % 2], 0, 0);
         return;
     }
+    drawBlobEra(c, frame);
+}
+
+// The flyer in each stage's own language:
+//   1-bit   a hand-placed bat, one dark eye        4-shade a moth: dark blocky wings with light spots
+//   8-bit   a flat bat: red body, purple triangle wings, one big square eye
+//   16-bit  a torn page from a photo album flapping like a bird, one red eye on it
+//   32-bit  a crow of static: dark indigo, fingered feather wings, a cyan eye (2.5D: smoother, a tail)
+void drawFlyerEra(Canvas& c, int frame)
+{
     const int e = g_era;
-    Col body = pc(0x8a7fb4, 2), eyeW = pc(0xfaf3e6, 3), pupil = pc(0x0f0d1a, 0), dark = farSide(body);
-    if (frame == BF_SQUASH) {
-        c.rect(0.06f, 0.78f, 0.88f, 0.2f, lit(body), 0.08f);
-        c.rect(0.3f, 0.84f, 0.14f, 0.04f, solid(pupil));
-        c.rect(0.6f, 0.84f, 0.14f, 0.04f, solid(pupil));
+    const bool hurt = frame == FF_HURT;
+    float flap = hurt ? 0.0f : std::sin(frame * 1.5707963f);
+    float wy = 0.48f - 0.3f * flap;
+    Col white = pc(0xfaf3e6, 3), black = pc(0x0f0d1a, 0);
+    if (e == 1) {
+        Col wing = hurt ? tone(3) : tone(1), body = hurt ? tone(2) : tone(0), spot = tone(2);
+        // two blocky wings each side (fore and hind), stepping with the flap
+        c.rect(0.06f, wy - 0.12f, 0.36f, 0.22f, solid(wing), 0.04f);
+        c.rect(0.58f, wy - 0.12f, 0.36f, 0.22f, solid(wing), 0.04f);
+        c.rect(0.16f, 0.52f, 0.26f, 0.18f, solid(wing), 0.04f);
+        c.rect(0.58f, 0.52f, 0.26f, 0.18f, solid(wing), 0.04f);
+        if (!hurt) {
+            c.rect(0.16f, wy - 0.06f, 0.1f, 0.08f, solid(spot));
+            c.rect(0.74f, wy - 0.06f, 0.1f, 0.08f, solid(spot));
+        }
+        c.rect(0.42f, 0.32f, 0.16f, 0.44f, solid(body), 0.06f);
+        c.rect(0.4f, 0.2f, 0.04f, 0.14f, solid(body));   // feelers
+        c.rect(0.56f, 0.2f, 0.04f, 0.14f, solid(body));
+        c.rect(0.48f, 0.38f, 0.08f, 0.08f, solid(white));
         return;
     }
-    float sq = 0.07f * std::sin(frame * 1.5707963f);
-    float step = (frame % 2) ? 0.05f : -0.05f;
-    // feet
-    c.rect(0.18f + step, 0.86f, 0.2f, 0.12f, lit(dark, false), 0.05f);
-    c.rect(0.62f - step, 0.86f, 0.2f, 0.12f, lit(dark, false), 0.05f);
-    float ry = 0.36f * (1 - sq), rx = 0.42f * (1 + sq), top = 0.92f - 2 * ry;
-    if (e <= 2) {
-        // blocky dome: round top corners, flat bottom
-        float R = e == 1 ? 0.24f : 0.3f, cx = 0.5f, cyy = top + ry;
-        c.shape(cx - rx, top, cx + rx, top + 2 * ry, [&](Frag& f) {
-            f.nx = (f.x - cx) / rx;
-            f.ny = (f.y - cyy) / ry;
-            if (f.x < cx - rx || f.x > cx + rx || f.y < top || f.y > top + 2 * ry) return false;
-            if (f.y > top + R) return true;
-            float qx = std::max(std::fabs(f.x - cx) - (rx - R), 0.0f), qy = top + R - f.y;
-            return qx * qx + qy * qy <= R * R;
-        }, lit(body));
-    } else {
-        c.ellipse(0.5f, 0.92f - ry, rx, ry, lit(body));
-        if (e >= 4) {   // patches of static on its skin, and a drip
-            c.dot(0.3f, top + ry * 0.8f, dark, 2); c.dot(0.42f, top + ry * 1.4f, dark, 1); c.dot(0.24f, top + ry * 1.3f, dark, 1);
-            c.capsule(0.36f, 0.9f, 0.36f, 0.97f, 0.035f, solid(body));
-        }
+    if (e == 2) {
+        Col body = hurt ? white : hex(0xe8364f), wing = hurt ? hex(0xf7d73a) : hex(0x6a2c6e);
+        c.poly({{0.4f, 0.46f}, {0.02f, wy - 0.12f}, {0.14f, wy + 0.14f}}, solid(wing));
+        c.poly({{0.6f, 0.46f}, {0.98f, wy - 0.12f}, {0.86f, wy + 0.14f}}, solid(wing));
+        c.rect(0.28f, 0.3f, 0.44f, 0.4f, solid(body));
+        c.rect(0.28f, 0.3f, 0.08f, 0.08f, solid(wing));   // ears
+        c.rect(0.64f, 0.3f, 0.08f, 0.08f, solid(wing));
+        c.rect(0.44f, 0.4f, 0.22f, 0.2f, solid(white));
+        c.rect(0.56f, 0.44f, 0.08f, 0.12f, solid(black));
+        c.rect(0.36f, 0.7f, 0.06f, 0.08f, solid(wing));   // feet
+        c.rect(0.58f, 0.7f, 0.06f, 0.08f, solid(wing));
+        return;
     }
-    // antenna of static
-    if (e >= 2) {
-        c.capsule(0.4f, top + 0.04f, 0.33f, top - 0.1f, 0.025f, solid(dark));
-        c.circle(0.32f, top - 0.12f, 0.05f, solid(pc(0xf28cb4, 2)));
+    if (e == 3) {
+        // a torn album page: cream paper, a cooler underside, ragged edges, a photo corner
+        Col paper = hurt ? hex(0xf8d070) : hex(0xf4f0e6), under = hex(0xa8a4d0), red = hex(0xe04a3a);
+        auto page = [&](float sx) {   // one wing-page, mirrored by sx
+            auto X = [&](float x) { return 0.5f + sx * (x - 0.5f); };
+            c.poly({{X(0.46f), 0.44f}, {X(0.04f), wy - 0.1f}, {X(0.1f), wy + 0.02f}, {X(0.02f), wy + 0.1f},
+                    {X(0.16f), wy + 0.16f}, {X(0.26f), wy + 0.12f}, {X(0.46f), 0.6f}}, lit(flap > 0.3f ? under : paper, false));
+        };
+        page(1); page(-1);
+        c.rect(0.34f, 0.3f, 0.32f, 0.42f, lit(paper), 0.02f);   // the body: a folded page
+        c.poly({{0.34f, 0.3f}, {0.44f, 0.3f}, {0.34f, 0.4f}}, solid(hex(0x2a2140)));   // photo corner
+        c.rect(0.34f, 0.6f, 0.32f, 0.04f, solid(under));   // a ruled line
+        c.circle(0.56f, 0.46f, 0.09f, solid(red));
+        c.dot(0.58f, 0.46f, black, 2);
+        return;
     }
-    // eyes (looking ahead) and a mouth
-    float ey = top + ry * 0.75f;
-    if (e <= 2) {
-        c.rect(0.46f, ey - 0.12f, 0.18f, 0.25f, solid(eyeW));
-        c.rect(0.7f, ey - 0.12f, 0.16f, 0.25f, solid(eyeW));
-        c.rect(0.565f, ey - 0.05f, 0.07f, 0.13f, solid(pupil));
-        c.rect(0.79f, ey - 0.05f, 0.07f, 0.13f, solid(pupil));
-    } else {
-        c.ellipse(0.6f, ey, 0.1f, 0.12f, solid(eyeW));
-        c.ellipse(0.8f, ey, 0.08f, 0.1f, solid(eyeW));
-        c.dot(0.64f, ey, pupil, e >= 4 ? 2 : 1);
-        c.dot(0.82f, ey, pupil, e >= 4 ? 2 : 1);
-        c.capsule(0.62f, ey + 0.2f, 0.8f, ey + 0.18f, 0.03f, solid(pc(0x26305e, 0)));
-        if (e >= 4) c.dot(0.7f, ey + 0.2f, eyeW);
+    // 32-bit and 2.5D: a crow of static
+    Col body = hurt ? hex(0xd8d4f0) : hex(0x3a3060), wing = hurt ? hex(0xf8d070) : hex(0x4a3a7a), glow = hex(0x7fe8ff);
+    auto wingAt = [&](float sx) {
+        auto X = [&](float x) { return 0.5f + sx * (x - 0.5f); };
+        c.poly({{X(0.44f), 0.42f}, {X(0.2f), wy - 0.12f}, {X(0.02f), wy - 0.02f}, {X(0.12f), wy + 0.02f}, {X(0.04f), wy + 0.1f},
+                {X(0.16f), wy + 0.12f}, {X(0.12f), wy + 0.2f}, {X(0.3f), wy + 0.16f}, {X(0.46f), 0.62f}}, lit(wing));
+    };
+    wingAt(1); wingAt(-1);
+    c.ellipse(0.5f, 0.52f, 0.2f, 0.24f, lit(body));
+    c.poly({{0.42f, 0.7f}, {0.58f, 0.7f}, {0.62f, 0.92f}, {0.5f, 0.84f}, {0.38f, 0.92f}}, lit(body));   // tail
+    c.poly({{0.66f, 0.42f}, {0.82f, 0.48f}, {0.66f, 0.52f}}, solid(hex(0xf8d070)));   // beak
+    c.circle(0.58f, 0.42f, 0.07f, solid(coolShadow(body, 1.6f)));
+    c.circle(0.59f, 0.42f, 0.045f, solid(glow));
+    c.dot(0.6f, 0.41f, white, e >= 5 ? 2 : 1);
+    if (!hurt) {   // static flecks on the breast
+        c.dot(0.44f, 0.58f, coolShadow(body, 1.8f), e >= 5 ? 2 : 1);
+        c.dot(0.5f, 0.66f, coolShadow(body, 1.8f), 1);
     }
 }
 
 void drawFlyer(Canvas& c, int frame)
 {
-    if (g_era == 0) {
+    if (g_era == 0) {   // 10 x 10 pixels
         static const Rows flap[4] = {
-            {"#......#", "##....##", ".##..##.", "..####..", "..##o#..", "...##...", "........", "........"},
-            {"........", "........", "###..###", ".######.", "..##o#..", "...##...", "........", "........"},
-            {"........", "........", "...##...", "..####..", ".###o##.", "##.##.##", "#......#", "........"},
-            {"........", "........", "###..###", ".######.", "..##o#..", "...##...", "........", "........"}};
-        if (frame == FF_HURT) stamp(c, {"........", "#......#", ".#.##.#.", "..####..", ".#o##o#.", "..####..", "...##...", "........"}, 0, 0);
+            {"#........#", "##......##", ".##....##.", "..######..", "..###o##..", "...####...", "....##....", "..........", "..........", ".........."},
+            {"..........", "..........", "###....###", ".########.", "..###o##..", "...####...", "....##....", "..........", "..........", ".........."},
+            {"..........", "..........", "..........", "..######..", ".####o###.", "##.####.##", "#...##...#", "#........#", "..........", ".........."},
+            {"..........", "..........", "###....###", ".########.", "..###o##..", "...####...", "....##....", "..........", "..........", ".........."}};
+        if (frame == FF_HURT)
+            stamp(c, {"..........", "#........#", ".#.####.#.", "..######..", ".#o####o#.", "..######..", "...####...", "....##....", "..........", ".........."}, 0, 0);
         else stamp(c, flap[frame % 4], 0, 0);
         return;
     }
-    const int e = g_era;
-    Col body = pc(0xe8364f, 2), wing = pc(0x6a2c6e, 1), membrane = pc(0xb05aa0, 2);
-    Col eye = pc(0xfaf3e6, 3), pupil = pc(0x0f0d1a, 0);
-    if (frame == FF_HURT) { body = pc(0xfaf3e6, 3); wing = pc(0xf7d73a, 2); membrane = wing; }
-    float flap = frame == FF_HURT ? 0.0f : std::sin(frame * 1.5707963f);
-    float wy = 0.48f - 0.3f * flap;
-    // wings: two torn-paper sails
-    c.poly({{0.42f, 0.5f}, {0.02f, wy - 0.08f}, {0.08f, wy + 0.08f}, {0.2f, wy + 0.16f}}, lit(wing, false));
-    c.poly({{0.58f, 0.5f}, {0.98f, wy - 0.08f}, {0.92f, wy + 0.08f}, {0.8f, wy + 0.16f}}, lit(wing, false));
-    if (e >= 3) {
-        c.poly({{0.4f, 0.5f}, {0.12f, wy - 0.02f}, {0.22f, wy + 0.1f}}, solid(membrane));
-        c.poly({{0.6f, 0.5f}, {0.88f, wy - 0.02f}, {0.78f, wy + 0.1f}}, solid(membrane));
-    }
-    // body
-    if (e <= 2) c.poly({{0.5f, 0.2f}, {0.78f, 0.5f}, {0.5f, 0.82f}, {0.22f, 0.5f}}, lit(body));
-    else {
-        c.ellipse(0.5f, 0.52f, 0.25f, 0.27f, lit(body));
-        c.poly({{0.44f, 0.74f}, {0.56f, 0.74f}, {0.5f, 0.9f}}, lit(body));   // tail spike
-    }
-    if (e >= 4) {   // feelers
-        c.capsule(0.46f, 0.3f, 0.38f, 0.14f, 0.02f, solid(farSide(body)));
-        c.capsule(0.56f, 0.3f, 0.64f, 0.14f, 0.02f, solid(farSide(body)));
-    }
-    // one big eye
-    if (e <= 2) {
-        c.rect(0.46f, 0.38f, 0.22f, 0.22f, solid(eye));
-        c.rect(0.58f, 0.44f, 0.08f, 0.1f, solid(pupil));
-    } else {
-        c.circle(0.56f, 0.48f, 0.12f, solid(eye));
-        c.dot(0.6f, 0.48f, pupil, e >= 4 ? 2 : 1);
-    }
+    drawFlyerEra(c, frame);
 }
 
 void drawBrute(Canvas& c, int frame)
 {
     if (g_era == 0) {
-        Rows top = {"................", "................", ".....######.....", "...##########...", "..############..",
-                    "..#########o#o#.", ".##############.", "################", "##::::::::::::##",
-                    "##.:::::::::::.#", "##.:::::::::::.#", "##.:::::::::::.#", "....########...."};
-        static const Rows legs[4] = {{"....###..###....", "....###..###....", "...####..####..."},
-                                     {"....###...###...", "...###....###...", "..####....####.."},
-                                     {"....###..###....", "....###..###....", "...####..####..."},
-                                     {"...###...###....", "...###....###...", "..####....####.."}};
+        // 20 x 20 pixels: a solid head and shoulders over a dithered chest, arms apart
+        Rows top = {"....................", "....................", ".......#######......", ".....###########....",
+                    "....#############...", "....#########o##o#..", "....##############..", "...###############..",
+                    ".##################.", "####################", "###.::::::::::::.###", "###.::::::::::::.###",
+                    "###.::::::::::::.###", "###.::::::::::::.###", "###.::::::::::::.###", ".##.::::::::::::.##.",
+                    ".....##########....."};
+        static const Rows legs[4] = {{".....####..####.....", ".....####..####.....", "....#####..#####...."},
+                                     {".....####...####....", "....####....####....", "...#####....#####..."},
+                                     {".....####..####.....", ".....####..####.....", "....#####..#####...."},
+                                     {"....####...####.....", "....####....####....", "...#####....#####..."}};
         if (frame == RF_HURT)
             for (auto& r : top) for (auto& ch : r) if (ch == ':') ch = '#';
-        if (frame == RF_CHARGE) { top = shiftRight(top, 1); top[5] = "...#########oo#o"; }
+        if (frame == RF_CHARGE) { top = shiftRight(top, 1); top[5] = ".....#########oo#oo"; }
         stamp(c, top, 0, 0);
-        stamp(c, legs[frame <= RF_WALK3 ? frame : 0], 0, 13);
+        stamp(c, legs[frame <= RF_WALK3 ? frame : 0], 0, 17);
         return;
     }
     const int e = g_era;
+    if (e == 2) {   // 8-bit: a hulking set with an old TV for a head, two red pixels on its screen
+        const bool hurt = frame == RF_HURT;
+        Col body = hurt ? hex(0xb8b6c8) : hex(0x5a5468), shadow = hex(0x26305e), casing = hurt ? hex(0xfaf3e6) : hex(0xb8b6c8);
+        Col screen = hex(0x0f0d1a), red = hex(0xe8364f);
+        float lean = frame == RF_CHARGE ? 0.16f : 0.0f;
+        float step = (frame <= RF_WALK3) ? 0.1f * std::sin(frame * 1.5707963f) : 0.0f;
+        c.rect(0.58f + step, 1.5f, 0.32f, 0.46f, solid(shadow));   // legs
+        c.rect(1.1f - step, 1.5f, 0.32f, 0.46f, solid(shadow));
+        c.rect(0.3f + lean - step, 0.9f, 0.26f, 0.7f, solid(shadow));   // far arm
+        c.rect(0.44f + lean, 0.86f, 1.16f, 0.74f, solid(body));         // body
+        c.rect(0.44f + lean, 1.44f, 1.16f, 0.16f, solid(shadow));
+        c.rect(0.66f + lean, 0.28f, 0.92f, 0.66f, solid(casing));        // the TV head
+        c.rect(0.74f + lean, 0.36f, 0.62f, 0.5f, solid(screen));
+        c.rect(1.4f + lean, 0.44f, 0.1f, 0.08f, solid(shadow));           // knobs
+        c.rect(1.4f + lean, 0.62f, 0.1f, 0.08f, solid(shadow));
+        c.rect(0.9f + lean, 0.12f, 0.06f, 0.18f, solid(casing));          // rabbit ears
+        c.rect(1.2f + lean, 0.08f, 0.06f, 0.22f, solid(casing));
+        float eh = frame == RF_CHARGE ? 0.12f : 0.08f;
+        c.rect(1.0f + lean, 0.54f, 0.1f, eh, solid(red));
+        c.rect(1.2f + lean, 0.54f, 0.1f, eh, solid(red));
+        if (!hurt) c.rect(0.8f + lean, 0.42f, 0.08f, 0.04f, solid(hex(0x6a2c6e)));   // a scanline
+        c.rect(1.4f + lean + step, 0.9f, 0.28f, 0.66f, solid(body));      // near arm and fist
+        c.rect(1.36f + lean + step, 1.46f, 0.36f, 0.3f, solid(casing));
+        return;
+    }
     Col fog = pc(0x6e6a8e, 1), fogL = pc(0xa8a4c8, 2), eye = pc(0xff4040, 3), deep = farSide(fog);
     if (frame == RF_HURT) { fog = pc(0xd8d4f0, 2); fogL = pc(0xffffff, 3); deep = farSide(fog); }
     float lean = frame == RF_CHARGE ? 0.16f : 0.0f;
@@ -961,6 +1111,13 @@ void drawBrute(Canvas& c, int frame)
             c.capsule(0.7f + lean, 0.96f, 0.86f + lean, 1.08f, 0.025f, solid(crack));
             c.capsule(0.86f + lean, 1.08f, 0.8f + lean, 1.26f, 0.025f, solid(crack));
             c.capsule(1.1f + lean, 1.3f, 1.26f + lean, 1.4f, 0.025f, solid(crack));
+            // a cold light showing through the biggest crack: the fog family's cyan
+            c.ellipse(0.98f + lean, 1.16f, 0.07f, 0.09f, solid(crack));
+            c.ellipse(0.98f + lean, 1.16f, 0.04f, 0.055f, solid(hex(0x7fe8ff)));
+            if (e >= 5) {   // 2.5D: plates of packed fog on the shoulders
+                c.ellipse(0.72f + lean, 0.84f, 0.2f, 0.12f, lit(fogL));
+                c.ellipse(1.36f + lean, 0.88f, 0.22f, 0.13f, lit(fogL));
+            }
         }
     }
     // brow and eyes
@@ -1496,11 +1653,222 @@ void drawStoryBoss(Canvas& c, int frame)
 }
 
 // ------------------------------------------------------------------ tiles
+// The earth of one stage: a few colours, hue-shifted (shadows lean blue-purple, light leans yellow).
+// The 8-bit stage reuses colours so each tile keeps to four of its 16.
+struct EarthCols { Col grassL, grass, grassD, moss, dirt, deep, stone, stoneD, root; };
+EarthCols earthCols()
+{
+    switch (g_era) {
+    case 1: return {tone(3), tone(2), tone(1), tone(0), tone(1), tone(0), tone(2), tone(0), tone(0)};
+    case 2: return {hex(0x6fdc4a), hex(0x6fdc4a), hex(0x1e8a4c), hex(0x1e8a4c), hex(0x8c4a2f), hex(0x8c4a2f),
+                    hex(0xb8b6c8), hex(0x0f0d1a), hex(0x6a2c6e)};
+    case 3: return {hex(0xd0e870), hex(0x8ac84a), hex(0x4a9a3a), hex(0x2a6a3a), hex(0x9a5a30), hex(0x6a3a22),
+                    hex(0xa8a4d0), hex(0x463a66), hex(0x3a2018)};
+    case 4: return {hex(0xd8ec78), hex(0x74cc48), hex(0x3a9440), hex(0x22583a), hex(0x96522e), hex(0x5c3026),
+                    hex(0xbcb8cc), hex(0x5a5078), hex(0x36201c)};
+    default: return {hex(0xe0ec80), hex(0x86c64a), hex(0x4a9038), hex(0x2a5a30), hex(0x9c6a3a), hex(0x64402e),
+                     hex(0xc4bcb0), hex(0x6a5e70), hex(0x3c2a1e)};
+    }
+}
+
+// One buried stone: a dark rim below-right, the body, a warm lit pixel top-left (16-bit on).
+void earthStone(Canvas& c, const EarthCols& k, float x, float y, float rx, float ry)
+{
+    float px = 1.0f / c.tpu;
+    c.ellipse(x + px * 0.6f, y + px, rx, ry, solid(k.stoneD));
+    c.ellipse(x, y, rx, ry, solid(k.stone));
+    if (g_era >= 3) c.dot(x - rx * 0.45f, y - ry * 0.5f, warmLight(k.stone));
+}
+
+// A bent line made of short pieces (roots, cracks), at least one pixel wide.
+void earthLine(Canvas& c, std::initializer_list<Vector2> pts, Col col, float widthPx = 1.0f)
+{
+    float r = std::max(0.5f, widthPx * 0.55f) / c.tpu;
+    const Vector2* p = pts.begin();
+    for (size_t i = 1; i < pts.size(); ++i) c.capsule(p[i - 1].x, p[i - 1].y, p[i].x, p[i].y, r, solid(col));
+}
+
+// Earth tiles. `top`: the grass-capped surface tile. `v`: variant 0..3, each with its own
+// stones, roots and cracks; every variant meets every other at the tile edges (straight grass
+// bands, the dark layer's edge height fixed at the sides), so any order joins seamlessly.
+void drawEarth(Canvas& c, bool top, int v)
+{
+    const EarthCols k = earthCols();
+    const float px = 1.0f / c.tpu;
+    if (top) {
+        c.rect(0, 0, 1, 1, solid(k.dirt));
+        // the dark lower layer: its edge is 0.74 at both sides, the sine terms vanish there
+        float a1 = 0.04f + 0.05f * rnd(v, 1, 301), a2 = (rnd(v, 2, 301) - 0.5f) * 0.1f, a3 = (rnd(v, 3, 301) - 0.5f) * 0.06f;
+        c.shape(0, 0.5f, 1, 1, [&](Frag& f) {
+            const float P = 3.14159265f;
+            return f.y > 0.74f - a1 * std::sin(f.x * P) + a2 * std::sin(f.x * 2 * P) + a3 * std::sin(f.x * 3 * P);
+        }, solid(k.deep));
+        // dark roots and darker moss under the grass lip, different on every variant
+        int roots = 1 + (v % 2);
+        for (int i = 0; i < roots; ++i) {
+            float rx = 0.18f + 0.64f * rnd(v, 10 + i, 302), len = 0.18f + 0.22f * rnd(v, 20 + i, 302);
+            float bend = (rnd(v, 30 + i, 302) - 0.5f) * 0.2f;
+            earthLine(c, {{rx, 0.26f}, {rx + bend * 0.5f, 0.26f + len * 0.5f}, {rx + bend, 0.26f + len}}, k.root);
+            if (g_era >= 3 && rnd(v, 40 + i, 302) > 0.4f)   // a side rootlet
+                earthLine(c, {{rx + bend * 0.5f, 0.26f + len * 0.5f}, {rx + bend * 0.5f + 0.1f, 0.3f + len * 0.6f}}, k.root);
+        }
+        if ((v == 3 || v == 1) && g_era != 2) earthStone(c, k, 0.3f + 0.4f * rnd(v, 5, 303), 0.5f + 0.08f * rnd(v, 6, 303), 0.075f, 0.05f);
+        for (int i = 0; i < 3; ++i) {   // moss clumps hanging below the lip
+            float mx = 0.12f + 0.76f * rnd(v, 50 + i, 304), mw = 0.06f + 0.08f * rnd(v, 60 + i, 304);
+            c.ellipse(mx, 0.27f, mw, 0.05f + 0.05f * rnd(v, 70 + i, 304), solid(k.moss));
+        }
+        // the grass: a light top line, the body, a dark lip (straight bands: they join any variant)
+        c.rect(0, 0, 1, 0.27f, [&](const Frag& f) { return f.y < 0.07f ? k.grassL : (f.y < 0.2f ? k.grass : k.grassD); });
+        // blades hanging over the lip at uneven places
+        int blades = 3 + v % 2;
+        for (int i = 0; i < blades; ++i) {
+            float gx = (i + 0.2f + 0.6f * rnd(v, 80 + i, 305)) / blades, len = 0.31f + 0.08f * rnd(v, 90 + i, 305);
+            gx = std::min(0.92f, std::max(0.08f, gx));
+            c.poly({{gx - 0.045f, 0.25f}, {gx + 0.045f, 0.25f}, {gx + 0.01f, len}}, solid(k.grassD));
+        }
+        // light flecks in the grass, never on a fixed beat
+        for (int i = 0; i < 2; ++i) c.dot(0.1f + 0.8f * rnd(v, 100 + i, 306), 0.1f, k.grassL);
+        return;
+    }
+    // deep earth: one dark layer (no stripe per row), with stones, cracks, roots and flecks
+    c.rect(0, 0, 1, 1, solid(k.deep));
+    for (int i = 0; i < 2 + v % 2; ++i) {   // lighter flecks of dirt
+        float fx = 0.1f + 0.8f * rnd(v, 110 + i, 307), fy = 0.1f + 0.8f * rnd(v, 120 + i, 307);
+        c.rect(fx, fy, 2 * px, px, solid(k.deep.r == k.dirt.r ? k.root : k.dirt));
+    }
+    switch (v) {
+    case 0:   // one big stone and a pebble
+        earthStone(c, k, 0.32f, 0.62f, 0.13f, 0.08f);
+        earthStone(c, k, 0.78f, 0.2f, 0.06f, 0.045f);
+        break;
+    case 1:   // a crack running down and a dark root
+        earthLine(c, {{0.2f, 0.12f}, {0.3f, 0.34f}, {0.24f, 0.52f}, {0.36f, 0.7f}}, k.stoneD);
+        earthLine(c, {{0.3f, 0.34f}, {0.44f, 0.4f}}, k.stoneD);
+        earthLine(c, {{0.62f, 0.2f}, {0.7f, 0.42f}, {0.66f, 0.62f}, {0.78f, 0.82f}}, k.root, g_era >= 4 ? 2.0f : 1.0f);
+        break;
+    case 2:   // a cluster of three pebbles high up, a scratch low down
+        earthStone(c, k, 0.6f, 0.28f, 0.08f, 0.055f);
+        earthStone(c, k, 0.74f, 0.34f, 0.06f, 0.045f);
+        earthStone(c, k, 0.65f, 0.44f, 0.05f, 0.035f);
+        earthLine(c, {{0.12f, 0.74f}, {0.24f, 0.7f}, {0.32f, 0.78f}}, k.stoneD);
+        break;
+    default:  // a flat slate on its side, low, and a hair root
+        c.rect(0.46f + px, 0.8f + px, 0.3f, 0.07f, solid(k.stoneD));
+        c.rect(0.46f, 0.8f, 0.3f, 0.07f, solid(k.stone));
+        earthLine(c, {{0.2f, 0.1f}, {0.26f, 0.3f}, {0.22f, 0.44f}}, k.root);
+        break;
+    }
+}
+
+// The buried keepsake, two tiles wide; `half` 0 draws the left tile, 1 the right one.
+void drawFeature(Canvas& c, int half)
+{
+    if (g_era == 0) {   // 1-bit: a white bone outline lying in the black earth
+        c.rect(0, 0, 1, 1, solid(ONEBIT_DARK));
+        if (half == 0) stamp(c, {"........", "........", "........", ".##.....", "#..#####", "#.......", ".#..####", "..##...."}, 0, 0);
+        else stamp(c, {"........", "........", "........", "......#.", "#####..#", ".......#", "####..#.", "....##.."}, 0, 0);
+        return;
+    }
+    drawEarth(c, false, 3 - half * 3);   // plain variants under it
+    const EarthCols k = earthCols();
+    c.tox = -(float)half;   // draw in 2 x 1 space; the canvas clips to this tile
+    switch (g_era) {
+    case 1: {   // a rusty old key
+        Col m = tone(2), d = tone(0);
+        c.circle(0.62f, 0.5f, 0.2f, solid(d));
+        c.circle(0.62f, 0.5f, 0.15f, solid(m));
+        c.circle(0.62f, 0.5f, 0.07f, solid(d));
+        c.rect(0.8f, 0.45f, 0.8f, 0.1f, solid(m));
+        c.rect(1.4f, 0.55f, 0.07f, 0.14f, solid(m));
+        c.rect(1.52f, 0.55f, 0.07f, 0.1f, solid(m));
+        break;
+    }
+    case 2: {   // an ammonite fossil: a spiral of ribs
+        c.circle(1.0f, 0.5f, 0.34f, solid(k.stone));
+        for (int i = 0; i < 40; ++i) {
+            float a = i * 0.36f, r = 0.3f * (1 - i / 44.0f);
+            c.dot(1.0f + std::cos(a) * r, 0.5f + std::sin(a) * r, k.stoneD);
+        }
+        break;
+    }
+    case 3: {   // a long gnarled root with side shoots
+        earthLine(c, {{0.05f, 0.18f}, {0.4f, 0.32f}, {0.8f, 0.28f}, {1.2f, 0.46f}, {1.6f, 0.5f}, {1.95f, 0.7f}}, k.root, 2.0f);
+        earthLine(c, {{0.4f, 0.32f}, {0.5f, 0.55f}, {0.44f, 0.75f}}, k.root);
+        earthLine(c, {{1.2f, 0.46f}, {1.26f, 0.7f}, {1.4f, 0.86f}}, k.root);
+        earthLine(c, {{0.8f, 0.28f}, {0.9f, 0.14f}}, k.root);
+        break;
+    }
+    case 4: {   // a lost horseshoe and two bent nails
+        Col iron = hex(0x8a5a4a), ironD = hex(0x4a2a3a);
+        for (int i = 0; i < 14; ++i) {
+            float a = 3.14159265f * (0.1f + 0.8f * i / 14.0f), b = 3.14159265f * (0.1f + 0.8f * (i + 1) / 14.0f);
+            c.capsule(1.0f + std::cos(a) * 0.3f, 0.4f + std::sin(a) * 0.32f, 1.0f + std::cos(b) * 0.3f, 0.4f + std::sin(b) * 0.32f,
+                      0.07f, solid(i < 7 ? ironD : iron));
+        }
+        earthLine(c, {{0.35f, 0.4f}, {0.5f, 0.52f}, {0.52f, 0.62f}}, ironD, 2.0f);
+        earthLine(c, {{1.55f, 0.7f}, {1.72f, 0.62f}}, ironD, 2.0f);
+        break;
+    }
+    default: {  // 2.5D: an old bone with knobbly ends
+        Col bone = hex(0xe8dcc0), boneD = hex(0xa89a90);
+        c.rect(0.45f, 0.45f, 1.1f, 0.12f, solid(boneD));
+        c.rect(0.45f, 0.43f, 1.1f, 0.1f, solid(bone));
+        for (float ex : {0.4f, 1.6f}) {
+            c.circle(ex, 0.42f, 0.09f, solid(boneD));
+            c.circle(ex, 0.58f, 0.09f, solid(boneD));
+            c.circle(ex - 0.01f, 0.41f, 0.08f, solid(bone));
+            c.circle(ex - 0.01f, 0.56f, 0.08f, solid(bone));
+        }
+        break;
+    }
+    }
+    c.tox = 0;
+}
+
+// Power-ups in each stage's own language. Returns true when it drew the whole frame.
+//   1-bit: hand-placed 8 x 8 icons.   4-shade: the icon on a dark LCD badge.
+//   8-bit: flat colour.   16-bit: one shadow tone.   32-bit and 2.5D: three tones and small details.
+// From 4-shade on the icon is drawn at 0.9 of the tile, so the game draws the frame 1:1.
+bool powerUpFrame(Canvas& c, int t)
+{
+    if (g_era == 0) {
+        static const Rows icon[5] = {
+            {"..#..#..", "...##...", ".##..##.", "########", "########", ".######.", "..####..", "...##..."},   // locket
+            {"########", ".#....#.", "..#..#..", "...##...", "...##...", "..#::#..", ".######.", "########"},   // hourglass
+            {"...#####", "...#...#", "...#...#", "...#...#", ".###.###", "####.###", ".##..##.", "........"},   // note
+            {"########", "#::::::#", "#::::#:#", "#:###::#", "########", "#.####.#", "########", "........"},   // photo
+            {"........", "..###...", "..#.##..", "#.#..##.", "..#...##", "#.######", "########", "........"}};  // trainer
+        stamp(c, icon[t - T_PU_SHIELD], 0, 0);
+        return true;
+    }
+    if (g_era == 1) c.rect(0.04f, 0.04f, 0.92f, 0.92f, solid(tone(0)), 0.2f);   // the LCD badge
+    c.tk = 0.9f;
+    c.tox = c.toy = 0.05f;
+    return false;
+}
+
 void drawTile(Canvas& c, int t)
 {
+    if (t >= T_FEAT_L) { drawFeature(c, t - T_FEAT_L); return; }
+    if (t >= T_PU_SHIELD && t <= T_PU_SPEED && powerUpFrame(c, t)) return;   // pickups: see powerUpFrame
+    if (g_era == 0 && t >= T_GROUND_TOP1) {
+        // 1-bit variants: the same black earth and surface line, now and then a tiny light detail
+        c.rect(0, 0, 1, 1, solid(ONEBIT_DARK));
+        int v = t >= T_GROUND1 ? t - T_GROUND1 : t - T_GROUND_TOP1;
+        if (t < T_GROUND1) {
+            stamp(c, {"########"}, 0, 0);
+            if (v == 0) stamp(c, {"", "...#....", "...#....", "....#..."}, 0, 0);   // a root under the line
+        } else {
+            if (v == 0) stamp(c, {"", "", "..##....", ".#..#...", "..##...."}, 0, 0);
+        }
+        return;
+    }
+    if (t >= T_GROUND_TOP1 && t < T_GROUND1) { drawEarth(c, true, t - T_GROUND_TOP1 + 1); return; }
+    if (t >= T_GROUND1) { drawEarth(c, false, t - T_GROUND1 + 1); return; }
     switch (t) {
     case T_GROUND_TOP:
     case T_GROUND: {
+        if (g_era != 0 && g_era != LAST_ERA) { drawEarth(c, t == T_GROUND_TOP, 0); break; }
         if (g_era == 0) {
             // 1-bit: plain black earth under one solid white surface line, exactly 1 px thick.
             // (A pebble here would repeat every 8 px and read as a dotted rail, so none.)
@@ -1540,57 +1908,101 @@ void drawTile(Canvas& c, int t)
         // each stage builds its platforms from a different material, with a dark underside
         Col line = eraCol(0x2a1a1a, 0.0f);
         switch (g_era) {
-        case 0:   // 1-bit: a white outlined box
-            c.rect(0, 0, 1, 1, solid(ONEBIT_LIGHT));
-            c.rect(0.13f, 0.13f, 0.74f, 0.74f, solid(ONEBIT_DARK));
-            c.rect(0.38f, 0.38f, 0.24f, 0.24f, solid(ONEBIT_LIGHT));
+        case 0:   // 1-bit, the last winter night: an outlined box with snow lying on it
+            stamp(c, {"########", "###.####", "#.#..#.#", "#......#", "#....#.#", "#...#..#", "#..#...#", "########"}, 0, 0);
             break;
-        case 1:   // 4-shade: wooden planks of a garden bench
-        case 6: { // 3D: the same, as garden decking
+        case 1: { // 4-shade, 2014: a laundry-crate board, dark wood so it stands off the pale shirts
+            const float px = 1.0f / c.tpu;
+            c.rect(0, 0, 1, 1, solid(tone(1)));
+            c.rect(0, px, 1, px, solid(tone(2)));                     // lit top edge
+            c.rect(0, 0.5f, 1, px, solid(tone(0)));                   // the gap between the two slats
+            c.rect(0, 1 - 2 * px, 1, px, solid(tone(0)));
+            c.rect(0.1f, 0.5f + 2 * px, 0.3f, px, solid(tone(2)));    // a little grain
+            c.rect(0.55f, 4 * px, 0.25f, px, solid(tone(2)));
+            c.rect(0.47f, 0.08f, 2 * px, 0.84f, solid(tone(0)));      // the crate's upright with two nails
+            c.dot(0.2f, 0.28f, tone(0)); c.dot(0.8f, 0.74f, tone(0));
+            break;
+        }
+        case 6: { // 3D: wooden planks as garden decking (unused in 3D: the blocks are modelled)
             Col wood = eraCol(0xb07a4a, 0.7f), woodDark = mixc(mul(wood, 0.7f), hex(0x3a2a5a), 0.2f);
             c.rect(0, 0, 1, 1, solid(woodDark));
             for (int k = 0; k < 3; ++k) c.rect(0.0f, k * 0.33f + 0.03f, 1.0f, 0.27f, shade(wood, 0.5f));
             c.dot(0.12f, 0.15f, woodDark); c.dot(0.85f, 0.48f, woodDark); c.dot(0.4f, 0.8f, woodDark);
             break;
         }
-        case 2: { // 8-bit: red bricks
-            Col brick = eraCol(0xc8503a, 0.9f), mortar = eraCol(0x4a2a24, 0.0f);
-            c.rect(0, 0, 1, 1, solid(mortar));
-            for (int row = 0; row < 2; ++row)
-                for (int col = -1; col < 2; ++col) {
-                    float x = col * 0.5f + 0.25f + (row ? 0.25f : -0.25f);
-                    c.rect(x + 0.04f, row * 0.5f + 0.05f, 0.42f, 0.4f, solid(brick));
-                    c.rect(x + 0.04f, row * 0.5f + 0.05f, 0.42f, 0.08f, solid(mixc(brick, hex(0xf8d070), 0.35f)));
-                }
+        case 2: { // 8-bit, first day at school: two schoolbooks lying in a stack, page edges out.
+            // Four colours: dark gaps, a green and a plum cover, cream pages.
+            const float px = 1.0f / c.tpu;
+            Col gap = hex(0x0f0d1a), pages = hex(0xfaf3e6);
+            c.rect(0, 0, 1, 1, solid(gap));
+            // top book: one per tile, its spine on the left; bottom book: longer, offset by a third
+            auto book = [&](float x0, float y0, float w, Col cover) {
+                c.rect(x0, y0, w, 0.5f - px, solid(cover));
+                // the fore-edge: cream pages between the boards, the spine on the left
+                c.rect(x0 + 2 * px, y0 + 1.5f * px, w - 3 * px, 0.5f - 3.5f * px, solid(pages));
+                c.rect(x0 + w - 4 * px, y0 + 3 * px, 2 * px, px, solid(gap));   // a page gap
+            };
+            book(px * 0.01f, 0, 1 - px, hex(0x1e8a4c));
+            book(-0.66f, 0.5f, 1 - px, hex(0x6a2c6e));
+            book(0.34f, 0.5f, 1 - px, hex(0x6a2c6e));
             break;
         }
-        case 3: { // 16-bit: rough stone blocks
-            Col st = hex(0x8a8aa8), stD = mixc(mul(st, 0.65f), hex(0x2a2140), 0.3f), stL = mixc(st, hex(0xf8f0c0), 0.3f);
-            c.rect(0, 0, 1, 1, solid(stD));
-            c.rect(0.05f, 0.05f, 0.55f, 0.42f, shade(st, 0.8f), 0.06f);
-            c.rect(0.65f, 0.05f, 0.3f, 0.42f, shade(st, 0.8f), 0.06f);
-            c.rect(0.05f, 0.53f, 0.3f, 0.42f, shade(st, 0.8f), 0.06f);
-            c.rect(0.4f, 0.53f, 0.55f, 0.42f, shade(st, 0.8f), 0.06f);
-            c.rect(0.08f, 0.07f, 0.45f, 0.05f, solid(stL));
-            c.rect(0.43f, 0.55f, 0.45f, 0.05f, solid(stL));
+        case 3: { // 16-bit, the camping trip: a split log, bark below, the pale cut face on top
+            const float px = 1.0f / c.tpu;
+            Col bark = hex(0x6a3a22), barkD = hex(0x3a2018), barkL = hex(0x9a5a30), cut = hex(0xf0c070), cutD = hex(0xc88a4a);
+            c.rect(0, 0, 1, 1, solid(bark));
+            c.rect(0, 0, 1, 0.28f, solid(cutD));                         // the sawn face
+            c.rect(0, px, 1, 0.28f - 3 * px, solid(cut));
+            c.rect(0.06f, 0.12f, 0.36f, px, solid(cutD));                  // grain on the face
+            c.rect(0.55f, 0.18f, 0.3f, px, solid(cutD));
+            c.rect(0, 0.28f, 1, px, solid(barkL));                         // lit rim of the bark
+            c.rect(0, 0.78f, 1, 0.22f, solid(barkD));                      // the round underside in shade
+            for (int i = 0; i < 4; ++i) {                                  // bark furrows
+                float fx = 0.08f + i * 0.25f + (i % 2) * 0.05f;
+                c.rect(fx, 0.38f + (i % 2) * 0.14f, 0.14f, px, solid(barkD));
+            }
+            c.ellipse(0.62f, 0.56f, 0.06f, 0.05f, solid(barkD));         // a knot
+            c.dot(0.6f, 0.53f, barkL);
             break;
         }
-        case 4: { // 32-bit: a steel girder with rivets
-            Col steel = hex(0x4a7ab0), sD = mixc(mul(steel, 0.6f), hex(0x2a1a4a), 0.3f), sL = mixc(steel, hex(0xfff0b0), 0.35f);
-            c.rect(0, 0, 1, 1, solid(sD));
-            c.rect(0, 0.06f, 1, 0.2f, solid(steel));
-            c.rect(0, 0.74f, 1, 0.2f, solid(steel));
-            c.rect(0, 0.06f, 1, 0.05f, solid(sL));
-            c.poly({{0.06f, 0.26f}, {0.2f, 0.26f}, {0.94f, 0.74f}, {0.8f, 0.74f}}, solid(steel));
-            for (int k = 0; k < 4; ++k) { c.dot(0.1f + k * 0.26f, 0.15f, sL); c.dot(0.1f + k * 0.26f, 0.83f, sL); }
+        case 4: { // 32-bit, the train: a riveted plate girder in oxide red, flanges lit from above
+            const float px = 1.0f / c.tpu;
+            Col web = hex(0x8a3e30), webD = hex(0x5a2632), webL = hex(0xc0644a), flange = hex(0xa04a36), hi = hex(0xe8a070);
+            c.rect(0, 0, 1, 1, solid(web));
+            c.rect(0, 0, 1, 0.22f, solid(flange));                         // top flange
+            c.rect(0, px, 1, px, solid(hi));   // (row 0 takes the renderer's outline)
+            c.rect(0, 0.22f - px, 1, px, solid(webD));
+            c.rect(0, 0.8f, 1, 0.2f, solid(webD));                         // bottom flange, in shade
+            c.rect(0, 0.8f, 1, px, solid(flange));
+            for (float sx : {0.12f, 0.62f}) {                              // vertical stiffeners
+                c.rect(sx, 0.22f, 3 * px, 0.58f, solid(webL));
+                c.rect(sx + 3 * px, 0.22f, px, 0.58f, solid(webD));
+            }
+            for (int k = 0; k < 4; ++k) {                                  // rivets along both flanges
+                float rx = 0.06f + k * 0.25f;
+                c.dot(rx, 0.1f, hi); c.dot(rx + px, 0.1f + px, webD);
+                c.dot(rx, 0.88f, webL);
+            }
             break;
         }
-        default: { // 2.5D: concrete slabs
-            Col con = hex(0xb8b4b0), cD = mixc(mul(con, 0.7f), hex(0x3a3a5a), 0.25f);
-            c.rect(0, 0, 1, 1, solid(cD));
-            c.rect(0.03f, 0.03f, 0.94f, 0.44f, shade(con, 0.5f));
-            c.rect(0.03f, 0.53f, 0.94f, 0.44f, shade(con, 0.5f));
-            c.dot(0.3f, 0.2f, cD); c.dot(0.7f, 0.75f, cD);
+        default: { // 2.5D, the hay meadow: a hay bale, bevelled on every edge, tied with twine.
+            // Flat bands only: a lit top bevel, darker side and bottom bevels, straw strokes.
+            const float px = 1.0f / c.tpu, b = 5 * px;
+            Col hay = hex(0xe0b452), hayL = hex(0xf6dc8a), hayD = hex(0xb07e34), hayDD = hex(0x6a4a3a), twine = hex(0x8a4a2a);
+            c.rect(0, 0, 1, 1, solid(hayDD));                              // the dark rim: the outline
+            c.poly({{px, px}, {1 - px, px}, {1 - px - b, px + b}, {px + b, px + b}}, solid(hayL));          // top bevel
+            c.poly({{px, px}, {px + b, px + b}, {px + b, 1 - px - b}, {px, 1 - px}}, solid(hay));           // left
+            c.poly({{1 - px, px}, {1 - px, 1 - px}, {1 - px - b, 1 - px - b}, {1 - px - b, px + b}}, solid(hayD));   // right
+            c.poly({{px, 1 - px}, {px + b, 1 - px - b}, {1 - px - b, 1 - px - b}, {1 - px, 1 - px}}, solid(hayD));   // bottom
+            c.rect(px + b, px + b, 1 - 2 * (px + b), 1 - 2 * (px + b), solid(hay));
+            for (int i = 0; i < 22; ++i) {                                 // straw strokes
+                float sx = 0.12f + 0.76f * rnd(i, 1, 311), sy = 0.14f + 0.7f * rnd(i, 2, 311);
+                c.rect(sx, sy, px, 3 * px + 3 * px * rnd(i, 3, 311), solid(i % 3 ? hayD : hayL));
+            }
+            for (float ty : {0.38f, 0.7f}) {                               // two twine bands round the bale
+                c.rect(px, ty, 1 - 2 * px, 2 * px, solid(twine));
+                c.rect(px, ty + 2 * px, 1 - 2 * px, px, solid(hayD));
+            }
             break;
         }
         }
@@ -1633,6 +2045,23 @@ void drawTile(Canvas& c, int t)
         // FRAG1 is the twinkle frame (a touch smaller, with a sparkle).
         const bool tw = t == T_FRAG1;
         float s = tw ? 0.85f : 1.0f;
+        // drawn at 0.7 of the tile, centred, so the game can draw the frame 1:1 (crisp) at that size
+        if (g_era > 0) { c.tk = 0.7f; c.tox = c.toy = 0.15f; }
+        if (g_era == 5) {   // 2.5D: a folded paper star, each point split into a lit and a shaded facet
+            Col gold = hex(0xf7d73a);
+            float rot = tw ? 0.3f : 0.0f;
+            for (int k = 0; k < 5; ++k) {
+                float a = -1.5708f + rot + k * 1.2566f, al = a - 0.6283f, ar = a + 0.6283f;
+                Vector2 tip{0.5f + std::cos(a) * 0.44f * s, 0.53f + std::sin(a) * 0.44f * s};
+                Vector2 L{0.5f + std::cos(al) * 0.19f * s, 0.53f + std::sin(al) * 0.19f * s};
+                Vector2 R{0.5f + std::cos(ar) * 0.19f * s, 0.53f + std::sin(ar) * 0.19f * s};
+                bool litSide = std::cos(a) < 0.3f && std::sin(a) < 0.5f;
+                c.poly({{0.5f, 0.53f}, L, tip}, solid(litSide ? warmLight(gold) : gold));
+                c.poly({{0.5f, 0.53f}, tip, R}, solid(litSide ? gold : coolShadow(gold)));
+            }
+            if (tw) c.dot(0.8f, 0.14f, hex(0xfaf3e6), 3);
+            break;
+        }
         if (g_era == 0) {   // 1-bit: a hollow diamond, filled on the twinkle
             if (tw) stamp(c, {"........", "......#.", "...#....", "..###...", ".#####..", "..###...", "...#....", "........"}, 0, 0);
             else stamp(c, {"........", "...#....", "..###...", ".##o##..", "###o###.", ".##o##..", "..###...", "...#...."}, 0, 0);
@@ -1683,6 +2112,12 @@ void drawTile(Canvas& c, int t)
         c.circle(0.64f, 0.42f, 0.17f, shade(red));
         c.poly({{0.2f, 0.48f}, {0.8f, 0.48f}, {0.5f, 0.88f}}, shade(red));
         c.dot(0.36f, 0.38f, eraCol(0xffffff, 1.0f), g_style >= 2 ? 2 : 1);
+        if (g_era >= 4) {   // an engraved heart and a gold hinge
+            Col engr = coolShadow(red, 1.3f);
+            c.capsule(0.38f, 0.5f, 0.5f, 0.66f, 0.016f, solid(engr));
+            c.capsule(0.62f, 0.5f, 0.5f, 0.66f, 0.016f, solid(engr));
+            c.circle(0.5f, 0.3f, 0.045f, shade(chain));
+        }
         break;
     }
     case T_PU_SLOW: {    // Hourglass: pushes the Forgetting Wall back and slows it
@@ -1693,6 +2128,11 @@ void drawTile(Canvas& c, int t)
                shade(withA(glass, g_style == 3 ? 0.8f : 1.0f)));
         c.poly({{0.36f, 0.62f}, {0.64f, 0.62f}, {0.72f, 0.82f}, {0.28f, 0.82f}}, shade(sand));
         c.poly({{0.32f, 0.2f}, {0.68f, 0.2f}, {0.5f, 0.42f}}, shade(sand));
+        if (g_era >= 4) {   // turned wooden posts and the thin stream of falling sand
+            c.rect(0.2f, 0.14f, 0.05f, 0.72f, shade(frame));
+            c.rect(0.75f, 0.14f, 0.05f, 0.72f, shade(frame));
+            c.rect(0.49f, 0.42f, 0.025f, 0.22f, solid(sand));
+        }
         break;
     }
     case T_PU_MAGNET: {  // Lullaby note: pulls fragments to you
@@ -1703,6 +2143,11 @@ void drawTile(Canvas& c, int t)
         c.capsule(0.88f, 0.64f, 0.88f, 0.1f, 0.04f, solid(note));
         c.capsule(0.48f, 0.18f, 0.88f, 0.1f, 0.06f, solid(note));
         c.dot(0.3f, 0.7f, glow);
+        if (g_era >= 4) {   // a second beam and two drifting sparkles of the tune
+            c.capsule(0.48f, 0.3f, 0.88f, 0.22f, 0.035f, solid(note));
+            c.dot(0.14f, 0.34f, glow, 2);
+            c.dot(0.66f, 0.92f, glow, 2);
+        }
         break;
     }
     case T_PU_PHOTO: {   // Old photograph: a big chunk of memory
@@ -1710,8 +2155,16 @@ void drawTile(Canvas& c, int t)
         c.rect(0.12f, 0.12f, 0.76f, 0.8f, shade(paper, 0.4f), 0.03f);
         c.rect(0.2f, 0.2f, 0.6f, 0.5f, solid(sky));
         c.rect(0.2f, 0.52f, 0.6f, 0.18f, solid(grass));
-        c.circle(0.42f, 0.46f, 0.06f, solid(eraCol(0xf28a1e, 1.0f)));
-        c.circle(0.6f, 0.48f, 0.05f, solid(eraCol(0x26305e, 0.0f)));
+        if (g_era >= 4) {   // Gran and little Sam standing in the picture, a strip of tape on top
+            c.rect(0.36f, 0.34f, 0.1f, 0.22f, solid(hex(0xf08a24)), 0.03f);
+            c.circle(0.41f, 0.31f, 0.045f, solid(hex(0xf2c29b)));
+            c.rect(0.56f, 0.42f, 0.08f, 0.14f, solid(hex(0x3c8cf0)), 0.02f);
+            c.circle(0.6f, 0.39f, 0.04f, solid(hex(0xe9b58c)));
+            c.rect(0.38f, 0.06f, 0.24f, 0.1f, solid(withA(hex(0xf0e0b0), 1.0f)));
+        } else {
+            c.circle(0.42f, 0.46f, 0.06f, solid(eraCol(0xf28a1e, 1.0f)));
+            c.circle(0.6f, 0.48f, 0.05f, solid(eraCol(0x26305e, 0.0f)));
+        }
         break;
     }
     case T_PU_SPEED: {   // Old trainers: run faster for a while
@@ -1720,6 +2173,10 @@ void drawTile(Canvas& c, int t)
                shade(shoe));
         c.rect(0.12f, 0.74f, 0.8f, 0.1f, solid(sole), 0.03f);
         c.poly({{0.14f, 0.4f}, {0.0f, 0.3f}, {0.04f, 0.46f}, {-0.0f, 0.52f}, {0.14f, 0.54f}}, solid(wing));
+        if (g_era >= 4) {   // laces and a side stripe
+            for (int k = 0; k < 3; ++k) c.dot(0.42f + k * 0.04f, 0.36f + k * 0.07f, sole, 1);
+            c.capsule(0.3f, 0.66f, 0.7f, 0.6f, 0.02f, solid(sole));
+        }
         break;
     }
     default: break;
@@ -2342,11 +2799,14 @@ int generateSprites(const std::string& dir)
         setStage(era);
         std::string d = eraDir(dir, era);
         for (int who = 0; who < 2; ++who)
-            save(makeSheet(PF_COUNT, PLAYER_FW, PLAYER_FH, true, [&](Canvas& c, int f) { drawPlayer(c, who, f); }),
+            save(makeSheet(PF_COUNT, PLAYER_FW, PLAYER_FH, true, [&](Canvas& c, int f) { c.tk = PLAYER_K; drawPlayer(c, who, f); }),
                  d + (who == 0 ? "player_p1.png" : "player_p2.png"));
-        save(makeSheet(BF_COUNT, BLOB_FS, BLOB_FS, true, drawBlob), d + "enemy_blob.png");
-        save(makeSheet(FF_COUNT, FLYER_FS, FLYER_FS, true, drawFlyer), d + "enemy_flyer.png");
-        save(makeSheet(RF_COUNT, BRUTE_FS, BRUTE_FS, true, drawBrute), d + "enemy_brute.png");
+        // creatures are described in their 1 x 1 (brute 2 x 2) design box and drawn ENEMY_K bigger,
+        // at the stage's own pixel size (more pixels, never an upscale)
+        auto big = [](void (*fn)(Canvas&, int)) { return [fn](Canvas& c, int f) { c.tk = ENEMY_K; fn(c, f); }; };
+        save(makeSheet(BF_COUNT, BLOB_FS, BLOB_FS, true, big(drawBlob)), d + "enemy_blob.png");
+        save(makeSheet(FF_COUNT, FLYER_FS, FLYER_FS, true, big(drawFlyer)), d + "enemy_flyer.png");
+        save(makeSheet(RF_COUNT, BRUTE_FS, BRUTE_FS, true, big(drawBrute)), d + "enemy_brute.png");
         save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawBoss), d + "enemy_boss.png");
         // the story boss of each stage (stage 6 keeps the Forgetting itself, modelled in 3D)
         if (era < LAST_ERA) save(makeSheet(XF_COUNT, BOSS_FS, BOSS_FS, true, drawStoryBoss), d + "boss_story.png");
@@ -2357,7 +2817,7 @@ int generateSprites(const std::string& dir)
             for (int t = 0; t < T_COUNT; ++t) {
                 Canvas cv(1, 1, (float)tp, SUPER[era]);
                 drawTile(cv, t);
-                bool outline = t >= T_P1 && t != T_WALL;
+                bool outline = t >= T_P1 && t != T_WALL && t <= T_PU_SPEED;
                 blit(cv, sheet, t * tp, 0, outline);
             }
             save(sheet, d + "tiles.png");
