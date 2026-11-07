@@ -4,9 +4,11 @@
 #include <string>
 
 namespace {
-Texture2D loadTex(const std::string& rel, int era)
+Texture2D loadTex(const std::string& rel, int era, const std::string& fallbackRel = "")
 {
     std::string p = assetPath(rel);
+    // A later era with no art of its own yet borrows the era before it (era 4 -> era 3).
+    if (!fallbackRel.empty() && !FileExists(p.c_str())) p = assetPath(fallbackRel);
     Texture2D t = LoadTexture(p.c_str());
     if (t.id == 0) {
         // Missing art never stops the game: use a magenta square instead.
@@ -14,7 +16,7 @@ Texture2D loadTex(const std::string& rel, int era)
         t = LoadTextureFromImage(img);
         UnloadImage(img);
     }
-    if (era == 3) {
+    if (art::isHiRes(era)) {
         GenTextureMipmaps(&t);
         SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
     } else {
@@ -29,16 +31,19 @@ void Art::load()
 {
     for (int e = 0; e < art::ERA_COUNT; ++e) {
         std::string d = "art/era" + std::to_string(e) + "/";
+        // era 4 shares era 3's sheet layouts, so era 3 art stands in for any missing era 4 file
+        std::string fb = e == art::ERA_MODERN ? "art/era" + std::to_string(e - 1) + "/" : "";
+        auto ld = [&](const std::string& f) { return loadTex(d + f, e, fb.empty() ? "" : fb + f); };
         EraArt& a = era[e];
-        a.player[0] = loadTex(d + "player_p1.png", e);
-        a.player[1] = loadTex(d + "player_p2.png", e);
-        a.blob = loadTex(d + "enemy_blob.png", e);
-        a.flyer = loadTex(d + "enemy_flyer.png", e);
-        a.brute = loadTex(d + "enemy_brute.png", e);
-        a.boss = loadTex(d + "enemy_boss.png", e);
-        a.tiles = loadTex(d + "tiles.png", e);
-        a.wall = loadTex(d + "wall.png", e);
-        for (int l = 0; l < art::BG_LAYERS; ++l) a.bg[l] = loadTex(d + "bg_" + std::to_string(l) + ".png", e);
+        a.player[0] = ld("player_p1.png");
+        a.player[1] = ld("player_p2.png");
+        a.blob = ld("enemy_blob.png");
+        a.flyer = ld("enemy_flyer.png");
+        a.brute = ld("enemy_brute.png");
+        a.boss = ld("enemy_boss.png");
+        a.tiles = ld("tiles.png");
+        a.wall = ld("wall.png");
+        for (int l = 0; l < art::BG_LAYERS; ++l) a.bg[l] = ld("bg_" + std::to_string(l) + ".png");
     }
     for (int i = 0; i < art::ENDING_COUNT; ++i) {
         ending[i] = loadTex("art/ending_" + std::to_string(i) + ".png", 3);

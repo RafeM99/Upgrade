@@ -1,4 +1,4 @@
-// Art.h: loads the generated sprite sheets for all four eras.
+// Art.h: loads the generated sprite sheets for every era.
 #pragma once
 #include "raylib.h"
 #include "render/ArtSpec.h"

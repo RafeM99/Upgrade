@@ -5,18 +5,25 @@
 
 namespace art {
 
-constexpr int ERA_COUNT = 4;
+constexpr int ERA_COUNT = 5;
+constexpr int LAST_ERA = ERA_COUNT - 1;   // the ending comes after this era's bar is full
+constexpr int ERA_25D = 3;                // first era drawn at window resolution with the 3D camera
+constexpr int ERA_MODERN = 4;             // "modern day": HD painted look, soft light, bloom, depth of field
 
-// Pixels per tile in each era: 1-bit, 8-bit, 16-bit, 2.5D.
-constexpr int TILE_PX[ERA_COUNT] = {8, 16, 32, 64};
+// Eras from 2.5D on render at window size with smooth (mipmapped) art.
+inline bool isHiRes(int era) { return era >= ERA_25D; }
+
+// Pixels per tile in each era: 1-bit, 8-bit, 16-bit, 2.5D, modern day.
+// Era 4 sheets use the same sizes and layouts as era 3.
+constexpr int TILE_PX[ERA_COUNT] = {8, 16, 32, 64, 64};
 
 // The world view is VIEW_TILES_H tiles tall. The low-res render target for
 // eras 0-2 is TILE_PX * VIEW_TILES_H pixels tall, so one sprite pixel is one
-// screen pixel of the render target (true pixel art). Era 3 renders at window size.
+// screen pixel of the render target (true pixel art). Eras 3 and 4 render at window size.
 constexpr float VIEW_TILES_H = 14.0f;
 
 // Background layers: each is two screens wide and tiles horizontally.
-constexpr int BG_H[ERA_COUNT] = {112, 224, 448, 360};
+constexpr int BG_H[ERA_COUNT] = {112, 224, 448, 360, 360};
 inline int bgW(int era) { return BG_H[era] * 32 / 9; }
 constexpr int BG_LAYERS = 4;   // 0 sky (opaque), 1 far, 2 mid, 3 near
 

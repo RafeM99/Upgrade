@@ -24,6 +24,8 @@ era_name_0 = 1-BIT . EARLY CHILDHOOD
 era_name_1 = 8-BIT . SCHOOL YEARS
 era_name_2 = 16-BIT . TEENAGE YEARS
 era_name_3 = 2.5D . GROWN UP
+era_name_4 = MODERN DAY . NOW
+era_sub_4 = No new abilities. Just the two of you, and everything you remember.
 start_hint = Run right. Jump on the Forgetting. Collect what it drops.
 controls_hint = Jump on enemies to break them. Their fragments fill the Memory Bar. Stay ahead of the Wall.
 
@@ -31,7 +33,8 @@ memory_restored = MEMORY RESTORED:
 memory_1 = The first bike ride
 memory_2 = The treehouse
 memory_3 = The phone call
-memory_4 = Home
+memory_4 = The video calls
+memory_5 = Home
 new_ability = NEW ABILITIES
 
 ability_double_jump = Double jump

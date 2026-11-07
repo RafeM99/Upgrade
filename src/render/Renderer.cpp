@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/Paths.h"
 #include "render/ArtSpec.h"
+#include "render/ModernLook.h"
 #include "rlgl.h"
 
 #include <algorithm>
@@ -165,13 +166,14 @@ void Renderer::init()
         pal[i * 3 + 2] = (PALETTE16[i] & 255) / 255.0f;
     }
     SetShaderValueV(post_, locPal_, pal, SHADER_UNIFORM_VEC3, 16);
+    modern::init();
     ensureTargets();
 }
 
 void Renderer::ensureTargets()
 {
-    for (int e = 0; e < 4; ++e) {
-        int h = e < 3 ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
+    for (int e = 0; e < ERA_COUNT; ++e) {
+        int h = !isHiRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
         int w = (int)std::lround(h * 16.0 / 9.0);
         if (rt_[e].id != 0 && rtW_[e] == w && rtH_[e] == h) continue;
         if (rt_[e].id != 0) UnloadRenderTexture(rt_[e]);
@@ -189,6 +191,7 @@ void Renderer::shutdown()
     for (auto& r : rt_) if (r.id) UnloadRenderTexture(r);
     UnloadShader(post_);
     UnloadShader(world_);
+    modern::shutdown();
 }
 
 Rectangle Renderer::screenRect() const
@@ -202,7 +205,8 @@ Rectangle Renderer::screenRect() const
 // ------------------------------------------------------------------ background
 void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
 {
-    const float parallax[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
+    const float parallax[ERA_COUNT][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f},
+                                          {0, 0.06f, 0.18f, 0.4f}, {0, 0.04f, 0.15f, 0.42f}};
     for (int l = 0; l < BG_LAYERS; ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
         float scale = (float)h / t.height;
@@ -218,12 +222,12 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
 void Renderer::drawTitleBackground(Game& g, float t)
 {
     ensureTargets();
-    int e = ((int)(t / 3.0f)) % 4;
+    int e = ((int)(t / 3.0f)) % ERA_COUNT;
     renderEra_ = e;
     oldEra_ = -1;
     BeginTextureMode(rt_[e]);
     ClearBackground(BLACK);
-    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (e == 3 ? rtH_[3] / (VIEW_TILES_H * TILE_PX[3]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
+    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (isHiRes(e) ? rtH_[e] / (VIEW_TILES_H * TILE_PX[e]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
     EndTextureMode();
 }
 
@@ -235,7 +239,11 @@ void Renderer::drawWorld(Game& g)
     float p = sweepProgress(g);
     if (p >= 0.0f && p < 1.0f && g.transFromEra != g.era) {
         oldEra_ = g.transFromEra;
-        drawEra(g, oldEra_, 0.0f);   // the old world, still flat, behind the sweep
+        // the old world behind the sweep: still flat, or (2.5D -> modern) still in its 2.5D framing
+        float savedModern = g.cam.modern;
+        g.cam.modern = 0;
+        drawEra(g, oldEra_, oldEra_ >= ERA_25D ? 1.0f : 0.0f);
+        g.cam.modern = savedModern;
     }
     drawEra(g, g.era, g.cam.swing);
     renderEra_ = g.era;
@@ -254,7 +262,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
     g.cam.aspect = (float)rtW_[era] / rtH_[era];
     float pxPerTile = rtH_[era] / g.cam.viewH;
     const float depth = swing;   // blocks extrude as the camera swings
-    g_lightAmount = era == 3 ? swing : 0.0f;
+    g_lightAmount = era == ERA_25D ? swing : 0.0f;   // era 4 lights per pixel in modern_world.fs
+    const bool modernEra = era == ERA_MODERN;
 
     // lights: the players glow warm and cool, the boss eye glows
     g_lights.clear();
@@ -265,10 +274,12 @@ void Renderer::drawEra(Game& g, int era, float swing)
                                 p == 0 ? 0.1f : 0.6f, 6});
     if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.4f, 0.35f, 0.1f, 7});
 
+    if (modernEra) modern::prepareBackground(g, A, g.cam.x, pxPerTile, rtW_[era], rtH_[era]);
     BeginTextureMode(rt);
     ClearBackground(era == 0 ? Color{16, 18, 22, 255} : BLACK);
     // the 1-bit background is drawn at full strength: its ordered patterns are the shading
-    drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
+    if (modernEra) modern::drawBackground(g, A, g.cam.x, pxPerTile, rtW_[era], rtH_[era]);
+    else drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
 
     float nearP, farP;
     float savedSwing = g.cam.swing;
@@ -278,7 +289,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
     rlDrawRenderBatchActive();
     rlSetClipPlanes(nearP, farP);
     BeginMode3D(c3);
-    BeginShaderMode(world_);
+    if (modernEra) modern::beginWorld(g, c3, 1.0f);
+    else BeginShaderMode(world_);
     if (depth > 0.02f) rlEnableDepthTest(); else rlDisableDepthTest();
     rlDisableBackfaceCulling();
 
@@ -313,7 +325,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     }
 
     // ---- shadows (2.5D)
-    if (era == 3) {
+    if (era >= ERA_25D) {
         auto floorBelow = [&](float x, float y) {
             for (int ty = (int)std::floor(y); ty < LEVEL_H; ++ty)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
@@ -440,7 +452,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             // the textured leading strip
             quad(wt, src, edge - wq, y, wq, 0.5f, 0.6f, WHITE);
             // the solid body behind it
-            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : hexc(0x1a1030, era == 3 ? 235 : 255));
+            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : hexc(0x1a1030, era >= ERA_25D ? 235 : 255));
             if (edge - wq > left) solidQuad(left, y, edge - wq - left, 0.5f, 0.6f, body);
         }
         // glitch sparks at the edge
@@ -452,16 +464,22 @@ void Renderer::drawEra(Game& g, int era, float swing)
         }
     }
     rlEnableDepthMask();
-    EndShaderMode();
+    if (modernEra) modern::endWorld();
+    else EndShaderMode();
     EndMode3D();
     rlDisableDepthTest();
     rlSetClipPlanes(0.01, 1000.0);
+    if (modernEra) modern::drawForeground(g, rtW_[era], rtH_[era], 1.0f);
     EndTextureMode();
 }
 
 // ------------------------------------------------------------------ to the screen
 void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, float mosaic, float glitch)
 {
+    if (e == ERA_MODERN) {
+        modern::blit(g, rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, flash, desat, mosaic, glitch);
+        return;
+    }
     float t = g.time;
     float size[2] = {(float)rtW_[e], (float)rtH_[e]};
     float out[2] = {dst.width, dst.height};
@@ -482,8 +500,9 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
 // the size of the old era's pixels breaking off and flying ahead of it.
 void Renderer::drawSweep(Game& g, Rectangle dst, float p)
 {
-    const Color eraGlow[4] = {{235, 235, 225, 255}, {247, 215, 58, 255}, {242, 140, 180, 255}, {255, 220, 150, 255}};
-    Color glow = eraGlow[std::min(3, std::max(0, g.era))];
+    const Color eraGlow[ERA_COUNT] = {{235, 235, 225, 255}, {247, 215, 58, 255}, {242, 140, 180, 255}, {255, 220, 150, 255},
+                                      {255, 236, 205, 255}};
+    Color glow = eraGlow[std::min(LAST_ERA, std::max(0, g.era))];
     float x = dst.x + dst.width * p;
     int y0 = (int)dst.y, h = (int)dst.height;
     DrawRectangleGradientH((int)(x - 90), y0, 90, h, Color{glow.r, glow.g, glow.b, 0}, Color{glow.r, glow.g, glow.b, 110});

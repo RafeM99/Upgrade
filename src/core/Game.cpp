@@ -81,7 +81,7 @@ void Game::shutdown()
 void Game::startRun()
 {
     screen = Screen::Playing;
-    era = std::max(0, std::min(3, opt.startEra));
+    era = std::max(0, std::min(art::LAST_ERA, opt.startEra));
     bar = 0;
     score = 0;
     time = 0;
@@ -107,7 +107,8 @@ void Game::startRun()
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();
     cam.x = 12;
-    cam.swing = era == 3 ? 1.0f : 0.0f;
+    cam.swing = era >= art::ERA_25D ? 1.0f : 0.0f;
+    cam.modern = era >= art::ERA_MODERN ? 1.0f : 0.0f;
     wallX = -10;
     bestX = players[0].x;
     audio.setEra(era);
@@ -285,9 +286,14 @@ void Game::updatePlaying(float dt)
         transT += dt;
         if (!transSwitched && transT >= Renderer::kSwitchAt) switchEra(transFromEra + 1);
         if (!transSwitched) cam.addShake(0.4f * transT / Renderer::kSwitchAt);   // the old world shudders
-        if (transSwitched && era == 3) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
+        if (transSwitched && era == art::ERA_25D) cam.swing = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
+        if (transSwitched && era == art::ERA_MODERN) cam.modern = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
         cam.update(cam.x, 0, wallX - 3, dt);
-        if (transT >= transLen) { transActive = false; cam.swing = era == 3 ? 1.0f : 0.0f; }
+        if (transT >= transLen) {
+            transActive = false;
+            cam.swing = era >= art::ERA_25D ? 1.0f : 0.0f;
+            cam.modern = era >= art::ERA_MODERN ? 1.0f : 0.0f;
+        }
         return;
     }
 
@@ -438,7 +444,7 @@ void Game::updatePlaying(float dt)
             boss.active = false;
             bossBeatenThisEra = true;
             showBanner(T("boss_defeated"), "", 1.5f);
-            if (era < 3) beginEraTransition();
+            if (era < art::LAST_ERA) beginEraTransition();
             else startEnding();
             return;
         }
@@ -609,7 +615,7 @@ void Game::updatePlaying(float dt)
             cam.addShake(0.6f);
             showBanner(T("boss_appear"), T("boss_sub"), 2.5f);
             events().bossAppeared.emit();
-        } else if (era < 3) beginEraTransition();
+        } else if (era < art::LAST_ERA) beginEraTransition();
         else startEnding();
     }
 }
@@ -807,7 +813,7 @@ void Game::beginEraTransition()
     transT = 0;
     transSwitched = false;
     transFromEra = era;
-    transLen = era + 1 == 3 ? 4.4f : 3.4f;
+    transLen = era + 1 >= art::ERA_25D ? 4.4f : 3.4f;   // the camera moves on the last two upgrades
     audio.play("era_up");
     TraceLog(LOG_INFO, "UPGRADE: era transition %d -> %d at frame %d", era, era + 1, frameNo_);
 }
@@ -828,7 +834,7 @@ void Game::unlockAbilitiesFor(int newEra)
 void Game::switchEra(int newEra)
 {
     transSwitched = true;
-    era = std::min(3, newEra);
+    era = std::min(art::LAST_ERA, newEra);
     bar = 0;
     bossBeatenThisEra = false;
     unlockAbilitiesFor(era);
@@ -856,9 +862,11 @@ void Game::switchEra(int newEra)
     audio.setEra(era);
     audio.play("unlock");
     events().eraChanged.emit(era);
-    std::string sub = std::string(T("new_ability")) + "  " + T("p1_name") + ": " +
-                      T(std::string("ability_") + abilityId(abilityForEra(0, era))) + "   " + T("p2_name") + ": " +
-                      T(std::string("ability_") + abilityId(abilityForEra(1, era)));
+    std::string sub = abilityForEra(0, era) < 0 && abilityForEra(1, era) < 0
+                          ? std::string(T("era_sub_" + std::to_string(era)))   // no new ability (modern day)
+                          : std::string(T("new_ability")) + "  " + T("p1_name") + ": " +
+                                T(std::string("ability_") + abilityId(abilityForEra(0, era))) + "   " + T("p2_name") + ": " +
+                                T(std::string("ability_") + abilityId(abilityForEra(1, era)));
     showBanner(std::string(T("memory_restored")) + " " + T("memory_" + std::to_string(era)), sub, transLen - 0.6f + 1.5f);
     particles.burst(cam.x, 7, 120, WHITE, 14, 1.2f, 0.2f);
     for (auto& pl : players) if (pl.joined && pl.faded) { pl.faded = false; pl.invuln = 2; }
@@ -868,8 +876,8 @@ void Game::startEnding()
 {
     screen = Screen::Ending;
     endingT = 0;
-    era = 3;
-    audio.setEra(3);
+    era = art::LAST_ERA;
+    audio.setEra(art::LAST_ERA);
     audio.play("unlock");
     events().memoryComplete.emit();
 }
