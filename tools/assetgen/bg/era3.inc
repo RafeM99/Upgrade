@@ -67,31 +67,40 @@ void e3_broadleaf(Scene& sc, float x, float base, float k, int kind, int seed, E
 }
 
 // A stepped pine: tiers that widen downward, lit on the left, teal shadow on the right.
+// Every tree differs: width, tier count and droop, a lean of the tip, a lopsided side (flip),
+// ragged hems and an occasional broken tier, all from its seed.
 void e3_pine(Scene& sc, float x, float base, float h, int seed, uint32_t lit, uint32_t mid, uint32_t dark, uint32_t trunk)
 {
     int ix = (int)std::lround(x);
     int top = (int)std::lround(base - h);
-    int trunkH = std::max(2, (int)(h * 0.12f));
-    sc.rect((float)ix - 1, base - trunkH, 2, (float)trunkH, hex(trunk));
+    int trunkH = std::max(2, (int)(h * (0.08f + 0.08f * rnd(seed, 1, 701))));
+    for (int k = -1; k < 1; ++k) for (int y = (int)(base - trunkH); y < (int)base; ++y) sc.put(((ix + k) % sc.W + sc.W) % sc.W, y, hex(trunk));
     int bodyH = (int)h - trunkH;
-    int tiers = std::max(3, bodyH / 9);
+    int tiers = std::max(3, (int)(bodyH / (7.0f + 5.0f * rnd(seed, 2, 701))));
     float tierH = (float)bodyH / tiers;
-    float maxHalf = h * 0.24f;
+    float maxHalf = h * (0.17f + 0.12f * rnd(seed, 3, 701));
+    float droop = 0.3f + 0.35f * rnd(seed, 4, 701);                 // how much each tier narrows at its top
+    float side = rnd(seed, 5, 701) < 0.5f ? -1.0f : 1.0f;           // flip: which side is fuller
+    float lop = 0.12f + 0.2f * rnd(seed, 6, 701);
+    float lean = (rnd(seed, 7, 701) - 0.5f) * 3.0f;                 // tip offset in pixels
     for (int y = 0; y < bodyH; ++y) {
         int tier = (int)(y / tierH);
         float inTier = (y - tier * tierH) / tierH;          // 0 at tier top .. 1 at its bottom
-        float tierMax = maxHalf * (0.35f + 0.65f * (tier + 1) / tiers);
-        float half = tierMax * (0.45f + 0.55f * inTier);
+        float tierMax = maxHalf * (0.3f + 0.7f * (tier + 1) / tiers) * (0.85f + 0.3f * rnd(seed, 20 + tier, 702));
+        float half = tierMax * (droop + (1 - droop) * inTier);
         if (tier == 0) half = tierMax * inTier;
-        int hw = (int)std::lround(half);
-        for (int dx = -hw; dx <= hw; ++dx) {
-            // ragged needle tips on the tier bottoms
-            if (std::abs(dx) == hw && inTier > 0.7f && rnd(ix + dx, y, seed) < 0.5f) continue;
-            float rel = (float)dx / std::max(1, hw);
-            uint32_t c = rel < -0.25f ? lit : rel < 0.3f ? mid : dark;
-            if (inTier > 0.8f && rel > -0.6f) c = c == lit ? mid : dark;   // tier underside shadow
-            if (c == mid && rnd(ix + dx, y, seed + 9) < 0.12f) c = lit;
-            sc.put(ix + dx, top + y, hex(c));
+        float u = (float)y / bodyH;
+        int cx = ix + (int)std::lround(lean * (1 - u));
+        int hwL = (int)std::lround(half * (side < 0 ? 1 + lop : 1 - lop * 0.5f));
+        int hwR = (int)std::lround(half * (side > 0 ? 1 + lop : 1 - lop * 0.5f));
+        for (int dx = -hwL; dx <= hwR; ++dx) {
+            int edge = dx < 0 ? hwL : hwR;
+            // ragged needle tips on the tier bottoms, in 2px clumps
+            if (std::abs(dx) >= edge - 1 && inTier > 0.65f && rnd((cx + dx) / 2, tier, seed) < 0.55f) continue;
+            float rel = dx < 0 ? (float)dx / std::max(1, hwL) : (float)dx / std::max(1, hwR);
+            uint32_t c = rel < -0.3f ? lit : rel < 0.3f ? mid : dark;
+            if (inTier > 0.8f && rel > -0.5f) c = c == lit ? mid : dark;   // tier underside shadow
+            sc.put(((cx + dx) % sc.W + sc.W) % sc.W, top + y, hex(c));   // wrapped: the rows tile
         }
     }
 }
@@ -121,35 +130,36 @@ void e3_cloud(Scene& sc, float cx, float cy, float w, int seed)
                 }
 }
 
-// A mountain range: tiled ridge with peaks, lit faces on the left of each slope.
+// A mountain range: straight-sided peaks at irregular spacing (tiling), each with a lit left face,
+// a shaded right face split along a single ridge crease, and a thin lit rim on the left skyline.
 void e3_range(Scene& sc, float baseY, float amp, int seed, int peaks, uint32_t lit, uint32_t body, uint32_t shade)
 {
     const int W = sc.W, H = sc.H;
-    std::vector<float> top(W);
-    for (int x = 0; x < W; ++x) {
-        float t = (float)x / W;
-        float v = 0;
-        // triangular peaks (tiling: whole number of peaks), varied heights
-        float ph = t * peaks;
-        int pi = (int)ph;
-        float f = ph - pi;
-        float hgt = 0.55f + 0.45f * rnd(pi % peaks, 1, seed);
-        float hgt2 = 0.55f + 0.45f * rnd((pi + 1) % peaks, 1, seed);
-        float tri = 1 - std::abs(f - 0.5f) * 2;
-        v = tri * hgt + (1 - tri) * 0.35f * (f < 0.5f ? hgt : hgt2);
-        v += ridge((float)x, W, seed, 0.03f, 0.03f, 0.02f);
-        top[x] = baseY - v * amp;
+    std::vector<float> px(peaks), ph(peaks), pw(peaks), pc(peaks);
+    for (int i = 0; i < peaks; ++i) {
+        px[i] = (i + 0.15f + 0.7f * rnd(i, 0, seed)) * W / peaks;
+        ph[i] = amp * (0.55f + 0.45f * rnd(i, 1, seed));
+        pw[i] = ph[i] * (1.5f + 0.9f * rnd(i, 2, seed));              // half-width at the base
+        pc[i] = 0.25f + 0.35f * rnd(i, 3, seed);                      // crease slope (x per y)
     }
+    auto wdx = [&](float a, float b) { float d = a - b; while (d > W * 0.5f) d -= W; while (d < -W * 0.5f) d += W; return d; };
     for (int x = 0; x < W; ++x) {
-        int ty = (int)std::lround(top[x]);
-        float slope = top[(x + 1) % W] - top[(x + W - 1) % W];   // >0: going down to the right
-        for (int y = ty; y < H; ++y) {
+        float best = -1e9f; int bi = 0; float bdx = 0;
+        for (int i = 0; i < peaks; ++i) {
+            float d = wdx(x + 0.5f, px[i]);
+            float hh = ph[i] * (1 - std::fabs(d) / pw[i]);
+            if (hh > best) { best = hh; bi = i; bdx = d; }
+        }
+        // a small shoulder on the long slopes, smooth so no columns appear
+        best += 2.0f * std::sin(x * 6.2832f * 11 / W + seed);
+        int ty = (int)std::lround(baseY - best);
+        float apexY = baseY - ph[bi];
+        for (int y = std::max(0, ty); y < H; ++y) {
             uint32_t c = body;
-            float depth = (float)(y - ty);
-            if (slope > 0.15f && depth < 26 + 10 * rnd(x / 3, 0, seed)) c = shade;            // right-facing slope in shadow
-            if (slope < -0.15f && depth < 4 + 18 * rnd(x / 4, 2, seed)) c = lit;               // left face lit
-            // a few gullies
-            if (depth > 3 && depth < 40 && rnd(x / 2, y / 6, seed + 5) < 0.04f) c = shade;
+            float crease = (y - apexY) * pc[bi];                 // the ridge line runs down-right of the apex
+            if (bdx > crease) c = shade;                          // right of the crease: shadow face
+            else if (bdx < 0 && y - ty < 2) c = lit;              // lit rim along the left skyline
+            if (bdx > crease && y - ty < 1) c = body;             // soft rim on the shadow side
             sc.put(x, y, hex(c));
         }
     }
@@ -183,22 +193,22 @@ void e3_treehouse(Scene& sc, float tx, float g)
             sc.rect(std::round(x - ww * 0.5f), std::round(y - ww * 0.5f), std::ceil(ww), 1, hex(E3_W2));
         }
     };
-    branch(tx - 4, trTop + 8, tx - 40, trTop - 26, 6);
-    branch(tx + 4, trTop + 6, tx + 44, trTop - 22, 6);
-    branch(tx, trTop + 4, tx + 4, trTop - 40, 7);
+    branch(tx - 4, trTop + 8, tx - 34, trTop - 18, 6);
+    branch(tx + 4, trTop + 6, tx + 36, trTop - 16, 6);
+    branch(tx, trTop + 4, tx + 3, trTop - 26, 7);
 
     // canopy: a big bunch of clusters
     std::vector<E3Blob> bl;
-    const float cx = tx, cy = H * 0.24f;
+    const float cx = tx, cy = H * 0.335f, ck = 0.74f;   // the whole crown stays below ~15% of the height
     const float pts[][3] = {
         {-46, 8, 18}, {46, 10, 18}, {-30, -12, 20}, {28, -14, 20}, {0, -28, 21}, {-14, -40, 15}, {18, -40, 14},
         {-58, 22, 14}, {60, 24, 14}, {-38, 24, 16}, {38, 26, 16}, {0, -6, 22}, {-20, 10, 17}, {22, 12, 17}};
-    for (auto& q : pts) bl.push_back({cx + q[0], cy + q[1], q[2]});
-    e3_canopy(sc, bl, {E3_G3, E3_G2, E3_G1, E3_G0}, 3, 311, cy - 50, cy + 38);
+    for (auto& q : pts) bl.push_back({cx + q[0] * ck, cy + q[1] * ck, q[2] * ck});
+    e3_canopy(sc, bl, {E3_G3, E3_G2, E3_G1, E3_G0}, 3, 311, cy - 50 * ck, cy + 38 * ck);
     // a few bright leaf highlights on top
     for (int i = 0; i < 26; ++i) {
         float a = rnd(i, 0, 312) * 6.28f, r = rnd(i, 1, 312);
-        float x = cx - 40 + rnd(i, 2, 312) * 60, y = cy - 52 + r * 30;
+        float x = cx - 30 + rnd(i, 2, 312) * 45, y = cy - 40 + r * 24;
         (void)a;
         int bx = (int)(x / 3) * 3, by = (int)(y / 3) * 3;
         // only on lit leaves
@@ -277,7 +287,7 @@ void e3_treehouse(Scene& sc, float tx, float g)
     }
 
     // rope swing from the left branch
-    const float sx0 = tx - 32, sy0 = H * 0.31f, sy1 = H * 0.70f;
+    const float sx0 = tx - 30, sy0 = H * 0.40f, sy1 = H * 0.70f;
     for (int y = (int)sy0; y < (int)sy1; ++y) {
         sc.put((int)sx0, y, hex(E3_W4));
         sc.put((int)sx0 + 9, y, hex(E3_W3));
@@ -297,7 +307,7 @@ void e3_treehouse(Scene& sc, float tx, float g)
     };
     lantern(hx0 + 2, py + 4, 5);
     lantern(hx1 - 1, py + 4, 4);
-    lantern(tx - 46, H * 0.33f, 8);
+    lantern(tx - 40, H * 0.41f, 6);
 }
 
 // A fence of rough posts and two rails (posts lit on the left).
@@ -382,27 +392,23 @@ bool bgEra3(Scene& sc, int layer)
     sc.fade = 0;                    // daytime: every layer keeps its own palette colours
 
     if (layer == 0) {
-        // sky: deep blue up top, stepping lighter toward the horizon with dithered seams
-        const float b1 = H * 0.12f, b2 = H * 0.30f;
+        // sky: flat bands with clean edges, no dither. The darker top band ends under the HUD,
+        // the pale horizon band starts low enough that the mountains hide its edge.
+        const int b1 = (int)(H * 0.09f), b2 = (int)(H * 0.50f);
         for (int y = 0; y < H; ++y)
-            for (int x = 0; x < W; ++x) {
-                uint32_t c = y < b1 ? E3_SKY2 : y < b2 ? E3_SKY : E3_SKYL;
-                if (y >= b1 && y < b1 + 4 && ((x + y) & 1) == 0 && (y - b1) < 2 + ((x / 2) & 1)) c = E3_SKY2;
-                if (y >= b2 && y < b2 + 4 && ((x + y) & 1) == 0 && (y - b2) < 2 + ((x / 2) & 1)) c = E3_SKY;
-                sc.put(x, y, hex(c));
-            }
+            for (int x = 0; x < W; ++x) sc.put(x, y, hex(y < b1 ? E3_SKY2 : y < b2 ? E3_SKY : E3_SKYL));
         // pale sun with a soft stepped rim
-        const float sx = W * 0.79f, sy = H * 0.16f;
+        const float sx = W * 0.79f, sy = H * 0.24f;
         sc.disc(sx, sy, 15, 15, hex(E3_SKYL), hex(E3_SKYL), false);
         sc.disc(sx, sy, 12, 12, hex(E3_LIGHT), hex(E3_LIGHT), false);
         sc.disc(sx - 1, sy - 1, 10, 10, hex(E3_WHITE), hex(E3_WHITE), false);
         // stepped clouds
-        const float cl[][3] = {{0.07f, 0.17f, 42}, {0.19f, 0.09f, 30}, {0.36f, 0.22f, 26}, {0.52f, 0.11f, 46},
-                               {0.66f, 0.27f, 30}, {0.92f, 0.12f, 38}, {0.84f, 0.33f, 22}, {0.30f, 0.34f, 18}};
+        const float cl[][3] = {{0.07f, 0.21f, 42}, {0.19f, 0.17f, 30}, {0.36f, 0.25f, 26}, {0.52f, 0.19f, 46},
+                               {0.66f, 0.29f, 30}, {0.94f, 0.20f, 38}, {0.86f, 0.36f, 22}, {0.30f, 0.37f, 18}};
         for (int i = 0; i < 8; ++i) e3_cloud(sc, W * cl[i][0], H * cl[i][1], cl[i][2], 10 + i);
         // a few lone wisps
         for (int i = 0; i < 6; ++i) {
-            float x = W * rnd(i, 0, 90), y = H * (0.06f + 0.3f * rnd(i, 1, 90));
+            float x = W * rnd(i, 0, 90), y = H * (0.16f + 0.24f * rnd(i, 1, 90));
             sc.rect(std::floor(x / 2) * 2, std::floor(y / 2) * 2, 10, 2, hex(E3_SKYL));
         }
         return true;
@@ -417,17 +423,32 @@ bool bgEra3(Scene& sc, int layer)
         // a far row of blue-green pines, then a dense row of dark pines and clustered broadleaves
         const float base = H * 0.745f;
         sc.rect(0, base - 22, (float)W, H - (base - 22), hex(E3_G0));
-        for (int i = 0; i < 70; ++i) {
-            float x = (i + 0.5f * rnd(i, 0, 201)) * W / 70.0f;
-            e3_pine(sc, x, base - 14, 28 + 16 * rnd(i, 1, 201), 210 + i, E3_SLATE, E3_SKY2, E3_SKYD, E3_SKYD);
+        // far blue pines: irregular gaps (clumps and clearings), varied height and two tints
+        for (float x = 0; x < W;) {
+            int i = (int)x;
+            bool teal = rnd(i, 2, 201) < 0.35f;
+            float bOff = -14 + 5 * rnd(i, 3, 201);
+            e3_pine(sc, x, base + bOff, 24 + 22 * rnd(i, 1, 201), 210 + i, teal ? E3_G1 : E3_SLATE, teal ? E3_SLATE : E3_SKY2, E3_SKYD, E3_SKYD);
+            x += 5 + 12 * rnd(i, 0, 201) * rnd(i, 4, 201) + (rnd(i, 5, 201) < 0.08f ? 14 : 0);
         }
-        for (int i = 0; i < 62; ++i) {
-            float x = (i + 0.6f * rnd(i, 0, 202)) * W / 62.0f;
-            if (rnd(i, 3, 202) < 0.2f) {
+        // near forest: pines of three hues and broadleaves, uneven spacing, varied foot height
+        for (float x = 0; x < W;) {
+            int i = (int)x;
+            float foot = base + 1 + 4 * rnd(i, 6, 202);
+            float r = rnd(i, 3, 202);
+            if (r < 0.2f && x > 24 && x < W - 24) {
                 E3Leaf L{E3_G2, E3_G1, E3_G0, E3_SKYD};
-                e3_broadleaf(sc, x, base, 1.0f + 0.3f * rnd(i, 4, 202), (int)(rnd(i, 5, 202) * 3), 220 + i, L, 2, 0.45f);
+                if (rnd(i, 7, 202) < 0.4f) L = {E3_G3, E3_G2, E3_G1, E3_G0};
+                e3_broadleaf(sc, x, foot, 0.8f + 0.5f * rnd(i, 4, 202), (int)(rnd(i, 5, 202) * 3), 220 + i, L, 2, 0.45f);
+                x += 14 + 10 * rnd(i, 0, 202);
             } else {
-                e3_pine(sc, x, base + 2, 36 + 22 * rnd(i, 1, 202), 260 + i, E3_G2, E3_G1, E3_G0, E3_W0);
+                float hu = rnd(i, 8, 202);
+                uint32_t a = E3_G2, m = E3_G1, d = E3_G0;          // the usual green
+                if (hu < 0.25f) { a = E3_G1; m = E3_G0; d = E3_SKYD; }          // dark spruce
+                else if (hu > 0.85f) { a = E3_G3; m = E3_G2; d = E3_G1; }      // young, yellow-green
+                float hgt = 30 + 30 * rnd(i, 1, 202) * rnd(i, 9, 202) + 8 * rnd(i, 10, 202);
+                e3_pine(sc, x, foot, hgt, 260 + i, a, m, d, E3_W0);
+                x += 6 + 10 * rnd(i, 0, 202) + (rnd(i, 11, 202) < 0.1f ? 10 : 0);
             }
         }
         // the lake: a strip of water below the forest with stepped reflections and glints
