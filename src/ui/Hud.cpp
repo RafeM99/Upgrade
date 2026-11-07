@@ -4,6 +4,7 @@
 #include "core/Strings.h"
 #include "player/Abilities.h"
 #include "raylib.h"
+#include "render/ArtSpec.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,13 +43,30 @@ void text(const std::string& s, float x, float y, float size, Color c, bool cent
 
 Rectangle R(float x, float y, float w, float h) { return Rectangle{OX + x * S, OY + y * S, w * S, h * S}; }
 
-// ------------------------------------------------------------------ Memory Bar, styled per era
+// ------------------------------------------------------------------ Memory Bar, styled per stage
 void memoryBar(Game& g)
 {
-    const int era = g.era;
+    const int stage = g.era;
+    const int era = art::STYLE[stage];   // the bar's drawing style: 0 1-bit .. 3 smooth
     float k = std::max(0.0f, std::min(1.0f, g.bar / 100.0f));
     float x = 390, y = 18, w = 500, h = era == 3 ? 26 : 24;
-    if (era == 0) {
+    if (stage == 1) {   // 4-shade: a chunky LCD bar in the four greys
+        DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(art::SHADES4[3]));
+        DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(art::SHADES4[0]));
+        DrawRectangleRec(R(x + 2, y + 2, w - 4, h - 4), hexc(art::SHADES4[1]));
+        int segs = 25;
+        for (int i = 0; i < segs; ++i)
+            if ((i + 0.5f) / segs <= k) DrawRectangleRec(R(x + i * w / segs + 3, y + 3, w / segs - 3, h - 6), hexc(art::SHADES4[i % 5 == 4 ? 2 : 3]));
+    } else if (stage == 4) {   // 32-bit: a bevelled bar with a glossy gradient
+        DrawRectangleRounded(R(x - 6, y - 6, w + 12, h + 12), 0.5f, 8, hexc(0x1a1030));
+        DrawRectangleRounded(R(x - 3, y - 3, w + 6, h + 6), 0.5f, 8, hexc(0x5a4a8a));
+        DrawRectangleRounded(R(x, y, w, h), 0.4f, 8, hexc(0x241a40));
+        if (k > 0) {
+            DrawRectangleGradientH((int)(OX + x * S), (int)(OY + y * S), (int)(w * k * S), (int)(h * S), hexc(0x3aa0e8), hexc(0x7ef0c0));
+            DrawRectangleRec(R(x, y + 2, w * k, 6), fade(WHITE, 0.45f));
+            DrawRectangleRec(R(x, y + h - 5, w * k, 4), fade(hexc(0x1a1030), 0.35f));
+        }
+    } else if (era == 0) {
         DrawRectangleRec(R(x - 4, y - 4, w + 8, h + 8), hexc(0xebebe1));
         DrawRectangleRec(R(x - 2, y - 2, w + 4, h + 4), hexc(0x101216));
         int segs = 20;
@@ -79,11 +97,11 @@ void memoryBar(Game& g)
         DrawRectangleRoundedLinesEx(R(x, y, w, h), 1.0f, 12, 2 * S, fade(hexc(0xfff0d0), 0.6f + 0.4f * std::sin(g.time * 2)));
     }
     // tick marks at 25 / 50 / 75
-    Color tick = era == 0 ? hexc(0xebebe1) : hexc(0xfaf3e6, 200);
+    Color tick = stage == 1 ? hexc(art::SHADES4[3]) : (era == 0 ? hexc(0xebebe1) : hexc(0xfaf3e6, 200));
     for (int i = 1; i <= 3; ++i) DrawRectangleRec(R(x + w * i / 4.0f - 1, y + h, 2, 7), tick);
     std::string label = std::string(T("bar_label")) + "  " + std::to_string((int)std::floor(g.bar)) + "%";
-    text(label, x + w / 2, y + h + 9, 16, era == 0 ? hexc(0xebebe1) : WHITE, true);
-    text(T("era_name_" + std::to_string(era)), x + w / 2, y + h + 29, 13, fade(WHITE, 0.75f), true);
+    text(label, x + w / 2, y + h + 9, 16, stage == 1 ? hexc(art::SHADES4[3]) : (era == 0 ? hexc(0xebebe1) : WHITE), true);
+    text(T("era_name_" + std::to_string(stage)), x + w / 2, y + h + 29, 13, fade(WHITE, 0.75f), true);
 }
 
 // ------------------------------------------------------------------ player panels
@@ -91,9 +109,9 @@ void playerPanel(Game& g, int p)
 {
     const Player& pl = g.players[p];
     float x = p == 0 ? 20 : 1280 - 290, y = 14, w = 270, h = 74;
-    Color col = g.era == 0 ? hexc(0xebebe1) : P_COL[p];
-    Color bg = fade(hexc(0x0f0d1a), g.era == 3 ? 0.55f : 0.8f);
-    if (g.era >= 2) DrawRectangleRounded(R(x, y, w, h), 0.25f, 6, bg);
+    Color col = g.era == 0 ? hexc(0xebebe1) : (g.era == 1 ? hexc(p == 0 ? art::SHADES4[3] : art::SHADES4[2]) : P_COL[p]);
+    Color bg = fade(hexc(g.era == 1 ? art::SHADES4[0] : 0x0f0d1a), art::smooth(g.era) ? 0.55f : 0.8f);
+    if (art::STYLE[g.era] >= 2) DrawRectangleRounded(R(x, y, w, h), 0.25f, 6, bg);
     else DrawRectangleRec(R(x, y, w, h), bg);
     DrawRectangleRec(R(x, y, 8, h), col);
     if (!pl.joined) {
@@ -113,7 +131,7 @@ void playerPanel(Game& g, int p)
         if (!pl.has[a]) continue;
         std::string n = T(std::string("ability_short_") + abilityId(a));
         float tw = MeasureText(n.c_str(), fs(12)) / S + 12;
-        if (g.era >= 2) DrawRectangleRounded(R(cx, y + 38, tw, 22), 0.4f, 4, fade(col, 0.35f));
+        if (art::STYLE[g.era] >= 2) DrawRectangleRounded(R(cx, y + 38, tw, 22), 0.4f, 4, fade(col, 0.35f));
         else DrawRectangleRec(R(cx, y + 38, tw, 22), fade(col, 0.35f));
         text(n, cx + 6, y + 43, 12, WHITE, false, false);
         cx += tw + 6;
@@ -153,8 +171,8 @@ void Hud::drawPlaying(Game& g)
     if (g.bannerT > 0) {
         float a = std::min(1.0f, std::min(g.bannerT * 3, (g.bannerLen - g.bannerT) * 4 + 0.0f));
         a = std::min(1.0f, g.bannerT * 3);
-        float big = g.era == 0 ? 40 : 46;
-        Color c = g.era == 0 ? hexc(0xebebe1) : hexc(0xfff4d8);
+        float big = g.era <= 1 ? 40 : 46;
+        Color c = g.era == 0 ? hexc(0xebebe1) : (g.era == 1 ? hexc(art::SHADES4[3]) : hexc(0xfff4d8));
         DrawRectangleRec(R(0, 250, 1280, 150), fade(BLACK, 0.45f * a));
         text(g.banner, 640, 275, big, fade(c, a), true);
         text(g.bannerSub, 640, 340, 22, fade(WHITE, a), true);
@@ -168,11 +186,12 @@ void Hud::drawPlaying(Game& g)
 void Hud::drawTitle(Game& g)
 {
     setup(g);
-    int e = ((int)(g.time / 3.0f)) % 4;
-    Color title = e == 0 ? hexc(0xebebe1) : (e == 1 ? hexc(0xf7d73a) : (e == 2 ? hexc(0xffb0d0) : hexc(0xfff0d0)));
+    int e = ((int)(g.time / 3.0f)) % art::ERA_COUNT;
+    const unsigned cols[art::ERA_COUNT] = {0xebebe1, art::SHADES4[3], 0xf7d73a, 0xffb0d0, 0x7ef0c0, 0xfff0d0, 0xffffff};
+    Color title = hexc(cols[e]);
     float bob = std::sin(g.time * 2) * 6;
     // the title "upgrades" every few seconds, like the game does
-    float size = 110 + e * 8;
+    float size = 106 + e * 5;
     text(T("title"), 640, 150 + bob, size, title, true);
     text(T("title_sub"), 640, 290, 22, fade(WHITE, 0.9f), true);
     text(T("title_start"), 640, 400, 28, fade(WHITE, 0.55f + 0.45f * std::sin(g.time * 4)), true);

@@ -22,20 +22,24 @@ void GameCamera::update(float targetX, float spread, float minLeft, float dt)
 
 Camera3D GameCamera::camera3D(float& nearPlane, float& farPlane) const
 {
-    float s = swing * swing * (3 - 2 * swing);   // ease
-    float fov = 1.0f + (40.0f - 1.0f) * s;
+    // swing 0..1: flat side view to the 2.5D angle. 1..2: on to the full 3D view, lower and
+    // wider, looking down the street from in front of the path.
+    float s1 = std::min(1.0f, std::max(0.0f, swing)), s2 = std::min(1.0f, std::max(0.0f, swing - 1.0f));
+    float s = s1 * s1 * (3 - 2 * s1);
+    float t = s2 * s2 * (3 - 2 * s2);
+    float fov = 1.0f + (40.0f - 1.0f) * s + 6.0f * t;
     float halfH = viewH / 2;
-    float dist = halfH / std::tan(fov * 0.5f * DEG2RAD);
+    float dist = halfH / std::tan(fov * 0.5f * DEG2RAD) * (1.0f - 0.3f * t);
     // bottom of the view stays on the floor: centre y in 3D (y up, floor at 0)
-    float cy = halfH + (LEVEL_H - viewH) * 0.0f;
+    float cy;
     if (viewH > LEVEL_H) cy = viewH / 2;
-    else cy = LEVEL_H - halfH + 0.0f;
-    cy -= s * 1.2f;
-    float yaw = -0.30f * s, pitch = 0.22f * s;
+    else cy = LEVEL_H - halfH;
+    cy -= s * 1.2f + t * 1.6f;
+    float yaw = -0.30f * s - 0.08f * t, pitch = 0.22f * s + 0.16f * t;
     Camera3D c{};
-    c.target = {x + shakeX - s * 1.5f, cy + shakeY, 0};
+    c.target = {x + shakeX - s * 1.5f - t * 1.0f, cy + shakeY, -0.6f * t};
     c.position = {c.target.x + std::sin(yaw) * std::cos(pitch) * dist, c.target.y + std::sin(pitch) * dist,
-                  std::cos(yaw) * std::cos(pitch) * dist};
+                  c.target.z + std::cos(yaw) * std::cos(pitch) * dist};
     c.up = {0, 1, 0};
     c.fovy = fov;
     c.projection = CAMERA_PERSPECTIVE;

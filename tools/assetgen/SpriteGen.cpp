@@ -1,12 +1,17 @@
 // SpriteGen.cpp: draws every sprite for every era from code.
 //
 // Each sprite is described once with simple shapes (ellipses, rounded rects,
-// capsules, polygons) in tile units. The same description is rasterised four
-// times, once per era, with that era's resolution and colour rules:
-//   era 0  1-bit:  8 px per tile, two colours plus checker dither
-//   era 1  8-bit: 16 px per tile, snapped to a 16-colour palette, outlined
-//   era 2 16-bit: 32 px per tile, shaded, 4096 colours, outlined
-//   era 3  2.5D:  64 px per tile, smooth lit shading, anti-aliased
+// capsules, polygons) in tile units. The same description is rasterised seven
+// times, once per graphics stage, with that stage's resolution and colour rules:
+//   stage 0  1-bit:    8 px per tile, two colours plus checker dither
+//   stage 1  4-shade: 16 px per tile, four warm greys with ordered dither, outlined
+//   stage 2  8-bit:   16 px per tile, snapped to a 16-colour palette, outlined
+//   stage 3  16-bit:  32 px per tile, shaded, 4096 colours, outlined
+//   stage 4  32-bit:  48 px per tile, lit 4-tone ramps with hue-shifted shadows,
+//                     a rim light and coloured (not black) outlines
+//   stage 5  2.5D:    64 px per tile, smooth lit shading, anti-aliased
+//   stage 6  3D:      64 px textures; characters are modelled in the game instead
+// g_style picks the older drawing branch a stage builds on (see art::STYLE).
 #include "Gen.h"
 #include "raylib.h"
 #include "render/ArtSpec.h"
@@ -69,7 +74,10 @@ const uint32_t PALETTE16[16] = {
 const Col ONEBIT_DARK = hex(0x101216);
 const Col ONEBIT_LIGHT = hex(0xebebe1);
 
-int g_era = 0;
+int g_era = 0;     // the stage being drawn (0..6)
+int g_style = 0;   // the older drawing style it builds on: STYLE[g_era]
+
+void setStage(int e) { g_era = e; g_style = STYLE[e]; }
 
 // ------------------------------------------------------------------ canvas
 struct Frag {
@@ -213,12 +221,30 @@ Fill solid(Col c) { return [c](const Frag&) { return c; }; }
 Fill shade(Col c, float strength = 1.0f)
 {
     return [c, strength](const Frag& f) {
-        if (g_era <= 1) {
-            if (g_era == 1 && f.nx * f.nx + f.ny * f.ny < 0.2f && f.nx < -0.1f && f.ny < -0.1f && strength > 0.5f)
+        if (g_era == 4) {
+            // late 2D: a lit ball, cut into four hand-picked tones. Shadows lean cool and
+            // purple, highlights warm, and a thin cool rim light catches the back edge.
+            float nz = std::sqrt(std::max(0.0f, 1 - f.nx * f.nx * 0.8f - f.ny * f.ny * 0.8f));
+            float d = std::max(0.0f, f.nx * -0.45f + f.ny * -0.65f + nz * 0.62f);
+            float lv = 0.35f + 0.75f * d;
+            lv = 1.0f + (lv - 1.0f) * strength;
+            Col o;
+            if (lv < 0.62f) o = mixc(mul(c, 0.58f), hex(0x3a2a6a), 0.22f);
+            else if (lv < 0.84f) o = mixc(mul(c, 0.8f), hex(0x5a4a8a), 0.08f);
+            else if (lv < 1.02f) o = c;
+            else o = mixc(mul(c, 1.12f), hex(0xfff2c8), 0.18f);
+            float r2 = f.nx * f.nx + f.ny * f.ny;
+            if (strength > 0.5f && r2 > 0.62f && r2 < 0.95f && f.nx > 0.35f && f.ny > -0.2f)
+                o = mixc(o, hex(0xbfe8ff), 0.35f);
+            o.a = c.a;
+            return o;
+        }
+        if (g_style <= 1) {
+            if (g_style == 1 && f.nx * f.nx + f.ny * f.ny < 0.2f && f.nx < -0.1f && f.ny < -0.1f && strength > 0.5f)
                 return mixc(c, hex(0xffffff), 0.25f);
             return c;
         }
-        if (g_era == 2) {
+        if (g_style == 2) {
             float k = 1.0f + strength * 0.3f * (-0.45f * f.nx - 0.75f * f.ny);
             if (f.nx * f.nx + f.ny * f.ny > 0.72f) k *= 1.0f - 0.18f * strength;
             Col o = mul(c, k);
@@ -245,7 +271,7 @@ Fill staticFill(Col a, Col b, int seed, float density = 0.5f)
     return [a, b, seed, density](const Frag& f) {
         float r = rnd(f.ix, f.iy, seed);
         Col c = r < density ? b : a;
-        if (g_era >= 2) {
+        if (g_style >= 2) {
             float k = 1.0f + 0.25f * (-0.4f * f.nx - 0.7f * f.ny);
             c = mul(c, k);
         }
@@ -257,7 +283,7 @@ Fill staticFill(Col a, Col b, int seed, float density = 0.5f)
 // Era 0 colour helper: pick the light, dark or dither level explicitly.
 Col eraCol(uint32_t normal, float onebitLevel)
 {
-    if (g_era == 0) return mixc(ONEBIT_DARK, ONEBIT_LIGHT, onebitLevel);
+    if (g_style == 0) return mixc(ONEBIT_DARK, ONEBIT_LIGHT, onebitLevel);
     return hex(normal);
 }
 
@@ -266,6 +292,37 @@ Color toColor(Col c)
 {
     return Color{(unsigned char)std::lround(clamp01(c.r) * 255), (unsigned char)std::lround(clamp01(c.g) * 255),
                  (unsigned char)std::lround(clamp01(c.b) * 255), (unsigned char)std::lround(clamp01(c.a) * 255)};
+}
+
+Col nearestPalette(Col c)
+{
+    int best = 0;
+    float bd = 1e9f;
+    for (int i = 0; i < 16; ++i) {
+        Col p = hex(PALETTE16[i]);
+        float dr = p.r - c.r, dg = p.g - c.g, db = p.b - c.b;
+        float d = dr * dr * 0.3f + dg * dg * 0.59f + db * db * 0.11f;
+        if (d < bd) { bd = d; best = i; }
+    }
+    Col o = hex(PALETTE16[best]);
+    o.a = c.a;
+    return o;
+}
+
+// The four greys of the 4-shade stage. Colours sitting right on the edge between two greys
+// get a checker of both; everything else is a clean flat grey, like a handheld LCD.
+Col shade4(Col c, int ix, int iy)
+{
+    const float cut[3] = {0.2f, 0.41f, 0.62f};
+    float l = lum(c);
+    int idx = 0;
+    for (int i = 0; i < 3; ++i) {
+        if (l > cut[i] + 0.025f) idx = i + 1;
+        else if (l > cut[i] - 0.025f) idx = (((ix + iy) & 1) == 0) ? i + 1 : i;
+    }
+    Col o = hex(SHADES4[idx]);
+    o.a = c.a;
+    return o;
 }
 
 Col quantize(Col c, int ix, int iy)
@@ -280,21 +337,16 @@ Col quantize(Col c, int ix, int iy)
         o.a = c.a;
         return o;
     }
-    if (g_era == 1) {
-        int best = 0;
-        float bd = 1e9f;
-        for (int i = 0; i < 16; ++i) {
-            Col p = hex(PALETTE16[i]);
-            float dr = p.r - c.r, dg = p.g - c.g, db = p.b - c.b;
-            float d = dr * dr * 0.3f + dg * dg * 0.59f + db * db * 0.11f;
-            if (d < bd) { bd = d; best = i; }
-        }
-        Col o = hex(PALETTE16[best]);
-        o.a = c.a;
-        return o;
-    }
-    if (g_era == 2) {
+    if (g_era == 1) return shade4(c, ix, iy);
+    if (g_era == 2) return nearestPalette(c);
+    if (g_era == 3) {
         auto q = [](float v) { return std::round(clamp01(v) * 15.0f) / 15.0f; };
+        return {q(c.r), q(c.g), q(c.b), c.a};
+    }
+    if (g_era == 4) {
+        // 32 levels per channel and a little more saturation: a bright backlit screen
+        float l = lum(c);
+        auto q = [&](float v) { return std::round(clamp01(l + (v - l) * 1.12f) * 31.0f) / 31.0f; };
         return {q(c.r), q(c.g), q(c.b), c.a};
     }
     return c;
@@ -317,13 +369,13 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
             float n = (float)(cv.ss * cv.ss);
             Col c{};
             if (wa > 0) c = {acc.r / wa, acc.g / wa, acc.b / wa, wa / n};
-            if (g_era <= 2) c.a = c.a >= 0.5f ? 1.0f : 0.0f;
+            if (lowRes(g_era)) c.a = c.a >= 0.5f ? 1.0f : 0.0f;
             if (c.a > 0) c = quantize(c, x, y);
             out[(size_t)y * tw + x] = c;
         }
-    if (outline && g_era <= 2) {
+    if (outline && lowRes(g_era)) {
         std::vector<Col> res = out;
-        Col oc = g_era == 0 ? ONEBIT_DARK : hex(0x140f1e);
+        Col oc = g_era == 0 ? ONEBIT_DARK : (g_era == 1 ? hex(SHADES4[0]) : hex(0x140f1e));
         for (int y = 0; y < th; ++y)
             for (int x = 0; x < tw; ++x) {
                 if (out[(size_t)y * tw + x].a > 0) continue;
@@ -333,7 +385,17 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
                     int nx = x + dx[k], ny = y + dy[k];
                     if (nx >= 0 && ny >= 0 && nx < tw && ny < th && out[(size_t)ny * tw + nx].a > 0) near = true;
                 }
-                if (near) res[(size_t)y * tw + x] = oc;
+                if (near && g_era == 4) {
+                    // coloured outline: a deep, slightly purple version of the colour inside
+                    Col in{};
+                    for (int k = 0; k < 4 && in.a <= 0; ++k) {
+                        int nx = x + dx[k], ny = y + dy[k];
+                        if (nx >= 0 && ny >= 0 && nx < tw && ny < th) in = out[(size_t)ny * tw + nx];
+                    }
+                    Col o = mixc(mul(in, 0.32f), hex(0x1a1030), 0.35f);
+                    o.a = 1;
+                    res[(size_t)y * tw + x] = o;
+                } else if (near) res[(size_t)y * tw + x] = oc;
             }
         out = res;
     }
@@ -346,7 +408,7 @@ void blit(const Canvas& cv, Image& sheet, int ox, int oy, bool outline)
         }
 }
 
-const int SUPER[ERA_COUNT] = {1, 2, 2, 4};
+const int SUPER[ERA_COUNT] = {1, 2, 2, 2, 4, 4, 4};
 
 // Builds a one-row sheet of `frames` frames, each fw x fh tiles.
 Image makeSheet(int frames, float fw, float fh, bool outline, const std::function<void(Canvas&, int)>& draw)
@@ -456,14 +518,14 @@ void drawPlayer(Canvas& c, int who, int frame)
     if (gran) {
         c.rect(tx, 0.62f + p.bob, 0.36f, 0.52f, shade(top), 0.1f);
         c.rect(tx + 0.03f, 0.98f + p.bob, 0.3f, 0.18f, shade(legs), 0.04f);  // skirt
-        if (g_era >= 1) {
+        if (g_style >= 1) {
             c.dot(tx + 0.22f, 0.74f + p.bob, eraCol(0xfaf3e6, 1));
             c.dot(tx + 0.22f, 0.86f + p.bob, eraCol(0xfaf3e6, 1));
         }
     } else {
         c.circle(tx + 0.08f, 0.66f + p.bob, 0.1f, shade(topDark));  // hood
         c.rect(tx, 0.62f + p.bob, 0.36f, 0.5f, shade(top), 0.08f);
-        if (g_era >= 1) c.rect(tx + 0.08f, 0.92f + p.bob, 0.22f, 0.08f, solid(topDark));  // pocket
+        if (g_style >= 1) c.rect(tx + 0.08f, 0.92f + p.bob, 0.22f, 0.08f, solid(topDark));  // pocket
     }
 
     // front leg
@@ -485,12 +547,12 @@ void drawPlayer(Canvas& c, int who, int frame)
     }
     // face
     c.dot(hx + 0.09f, hy - 0.01f, dark);
-    if (gran && g_era >= 1) {
+    if (gran && g_style >= 1) {
         Col glass = eraCol(0x3a2a3a, 0.0f);
         c.dot(hx + 0.04f, hy - 0.01f, glass);
         c.dot(hx + 0.14f, hy - 0.01f, glass);
     }
-    if (g_era >= 2) c.dot(hx + 0.1f, hy + 0.09f, mul(skin, 0.7f));  // smile
+    if (g_style >= 2) c.dot(hx + 0.1f, hy + 0.09f, mul(skin, 0.7f));  // smile
 
     // front arm
     c.capsule(shoulder.x + 0.05f, shoulder.y + 0.04f, p.handF.x, p.handF.y, 0.06f, shade(top));
@@ -547,7 +609,7 @@ void drawFlyer(Canvas& c, int frame)
     c.poly({{0.58f, 0.5f}, {0.96f, wy - 0.05f}, {0.84f, wy + 0.12f}}, shade(wing));
     c.poly({{0.5f, 0.18f}, {0.78f, 0.5f}, {0.5f, 0.84f}, {0.22f, 0.5f}}, shade(body));
     c.circle(0.56f, 0.46f, 0.12f, solid(eye));
-    c.dot(0.6f, 0.46f, pupil, g_era >= 2 ? 2 : 1);
+    c.dot(0.6f, 0.46f, pupil, g_style >= 2 ? 2 : 1);
     if (frame != FF_HURT) c.glitchRows(40 + frame, 0.12f);
 }
 
@@ -606,7 +668,7 @@ void drawBoss(Canvas& c, int frame)
     if (frame != XF_HURT) {
         c.circle(1.62f, 1.32f + wob + slam, 0.28f - slam * 0.2f, shade(iris));
         c.circle(1.66f, 1.32f + wob + slam, 0.13f - slam * 0.1f, solid(eraCol(0x0f0d1a, 0.0f)));
-        c.dot(1.55f, 1.2f + wob + slam, white, g_era >= 2 ? 2 : 1);
+        c.dot(1.55f, 1.2f + wob + slam, white, g_style >= 2 ? 2 : 1);
     } else {
         c.capsule(1.1f, 1.1f, 1.9f, 1.55f, 0.05f, solid(eraCol(0x0f0d1a, 0.0f)));
         c.capsule(1.1f, 1.55f, 1.9f, 1.1f, 0.05f, solid(eraCol(0x0f0d1a, 0.0f)));
@@ -625,34 +687,34 @@ void drawTile(Canvas& c, int t)
         Col stone = eraCol(0xb8b6c8, 1.0f);
         c.rect(0, 0, 1, 1, [&](const Frag& f) {
             Col d = dirt;
-            if (g_era == 0) {
+            if (g_style == 0) {
                 // 1-bit: a clean brick-and-mortar pattern, light lines on dark (8 x 8 tile)
                 int lx = f.ix & 7, ly = f.iy & 7;
                 bool mortar = ly == 7 || (lx == 3 && ly < 7 && ly > 1);
                 return mortar ? ONEBIT_LIGHT : ONEBIT_DARK;
             }
-            if (g_era >= 2) d = mixc(dirt, dirtDark, f.y * 0.6f);
+            if (g_style >= 2) d = mixc(dirt, dirtDark, f.y * 0.6f);
             if (rnd(f.ix, f.iy, 5) < 0.12f) d = dirtDark;
             return d;
         });
         // a few stones
-        for (int i = 0; i < (g_era == 0 ? 0 : 3); ++i) {   // stones would be noise in 1-bit
+        for (int i = 0; i < (g_style == 0 ? 0 : 3); ++i) {   // stones would be noise in 1-bit
             float sx = 0.15f + rnd(i, t, 6) * 0.7f, sy = 0.4f + rnd(i, t, 7) * 0.5f;
-            c.ellipse(sx, sy, 0.09f, 0.06f, shade(g_era == 0 ? ONEBIT_LIGHT : stone, 0.8f));
+            c.ellipse(sx, sy, 0.09f, 0.06f, shade(g_style == 0 ? ONEBIT_LIGHT : stone, 0.8f));
         }
         if (t == T_GROUND_TOP) {
             Col grass = eraCol(0x6fdc4a, 1.0f), grassDark = eraCol(0x1e8a4c, 1.0f);
             c.rect(0, 0, 1, 0.28f, [&](const Frag& f) {
-                if (g_era == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // one bright top edge
+                if (g_style == 0) return (f.y < 0.14f) ? ONEBIT_LIGHT : ONEBIT_DARK;   // one bright top edge
                 Col g = f.y < 0.12f ? grass : grassDark;
-                if (g_era >= 2) g = mixc(grass, grassDark, f.y / 0.28f);
+                if (g_style >= 2) g = mixc(grass, grassDark, f.y / 0.28f);
                 return g;
             });
             // grass tufts hanging down
-            for (int i = 0; i < (g_era == 0 ? 2 : 4); ++i) {
+            for (int i = 0; i < (g_style == 0 ? 2 : 4); ++i) {
                 float gx = 0.12f + i * 0.25f;
                 c.poly({{gx - 0.06f, 0.27f}, {gx + 0.06f, 0.27f}, {gx, 0.38f + 0.04f * (i % 2)}},
-                       solid(g_era == 0 ? ONEBIT_LIGHT : grassDark));
+                       solid(g_style == 0 ? ONEBIT_LIGHT : grassDark));
             }
         }
         break;
@@ -681,7 +743,7 @@ void drawTile(Canvas& c, int t)
     case T_P2: {
         Col base = t == T_P1 ? eraCol(0xf28a1e, 0.85f) : eraCol(0x3c9cf0, 0.45f);
         Col glow = t == T_P1 ? eraCol(0xf7d73a, 1.0f) : eraCol(0x7fe8ff, 1.0f);
-        float a = g_era == 3 ? 0.88f : 1.0f;
+        float a = g_style == 3 ? 0.88f : 1.0f;
         c.rect(0.0f, 0.0f, 1.0f, 0.55f, shade(withA(base, a), 0.6f), 0.12f);
         c.rect(0.12f, 0.1f, 0.76f, 0.12f, solid(withA(glow, a)), 0.05f);
         // dotted "memory" pattern so the 1-bit era can tell them apart too
@@ -694,7 +756,7 @@ void drawTile(Canvas& c, int t)
         c.rect(0.06f, 0.04f, 0.88f, 0.42f, shade(stone, 0.7f), 0.05f);
         c.rect(0.06f, 0.54f, 0.88f, 0.42f, shade(stone, 0.7f), 0.05f);
         Col vine = eraCol(0x1e8a4c, 0.0f);
-        if (g_era >= 1) {
+        if (g_style >= 1) {
             c.capsule(0.2f, 0.0f, 0.3f, 0.5f, 0.04f, solid(vine));
             c.capsule(0.3f, 0.5f, 0.18f, 1.0f, 0.04f, solid(vine));
             c.circle(0.36f, 0.3f, 0.06f, solid(eraCol(0x6fdc4a, 1)));
@@ -705,7 +767,7 @@ void drawTile(Canvas& c, int t)
     case T_FRAG1: {
         float s = t == T_FRAG0 ? 1.0f : 0.85f;
         Col gold = eraCol(0xf7d73a, 1.0f), white = eraCol(0xfffbe8, 1.0f);
-        if (g_era == 3) c.circle(0.5f, 0.5f, 0.42f, [&](const Frag& f) {
+        if (g_style == 3) c.circle(0.5f, 0.5f, 0.42f, [&](const Frag& f) {
             float d = std::sqrt(f.nx * f.nx + f.ny * f.ny);
             return withA(gold, (1 - d) * 0.45f);
         });
@@ -724,7 +786,7 @@ void drawTile(Canvas& c, int t)
         c.circle(0.36f, 0.42f, 0.17f, shade(red));
         c.circle(0.64f, 0.42f, 0.17f, shade(red));
         c.poly({{0.2f, 0.48f}, {0.8f, 0.48f}, {0.5f, 0.88f}}, shade(red));
-        c.dot(0.36f, 0.38f, eraCol(0xffffff, 1.0f), g_era >= 2 ? 2 : 1);
+        c.dot(0.36f, 0.38f, eraCol(0xffffff, 1.0f), g_style >= 2 ? 2 : 1);
         break;
     }
     case T_PU_SLOW: {    // Hourglass: pushes the Forgetting Wall back and slows it
@@ -732,7 +794,7 @@ void drawTile(Canvas& c, int t)
         c.rect(0.18f, 0.06f, 0.64f, 0.1f, shade(frame), 0.03f);
         c.rect(0.18f, 0.84f, 0.64f, 0.1f, shade(frame), 0.03f);
         c.poly({{0.26f, 0.16f}, {0.74f, 0.16f}, {0.54f, 0.5f}, {0.74f, 0.84f}, {0.26f, 0.84f}, {0.46f, 0.5f}},
-               shade(withA(glass, g_era == 3 ? 0.8f : 1.0f)));
+               shade(withA(glass, g_style == 3 ? 0.8f : 1.0f)));
         c.poly({{0.36f, 0.62f}, {0.64f, 0.62f}, {0.72f, 0.82f}, {0.28f, 0.82f}}, shade(sand));
         c.poly({{0.32f, 0.2f}, {0.68f, 0.2f}, {0.5f, 0.42f}}, shade(sand));
         break;
@@ -796,7 +858,9 @@ float ridge(float x, int w, int seed, float a1, float a2, float a3)
     return a1 * std::sin(t * 2 + seed) + a2 * std::sin(t * 5 + seed * 1.7f) + a3 * std::sin(t * 11 + seed * 2.3f);
 }
 
-Col q(Col c, int x, int y) { return quantize(c, x, y); }
+// Background colours. In the 4-shade stage the backdrop is lifted toward the light greys,
+// so the dark-outlined sprites in front always read clearly.
+Col q(Col c, int x, int y) { return quantize(g_era == 1 ? mixc(c, hex(0xffffff), 0.2f) : c, x, y); }
 
 void bgLayer(Px& p, int era, int layer)
 {
@@ -810,9 +874,18 @@ void bgLayer(Px& p, int era, int layer)
                 if (era == 0) {
                     c = ONEBIT_DARK;
                     if (rnd(x, y, 3) < 0.0025f && y < H * 0.5f) c = ONEBIT_LIGHT;   // a few stars
-                } else if (era == 1) c = t < 0.55f ? hex(0x3c9cf0) : hex(0x8ccff0);
+                } else if (g_era == 1) c = mixc(hex(0xd8e0e0), hex(0x8ccff0), t * 0.4f);   // a pale handheld sky
+                else if (era == 1) c = t < 0.55f ? hex(0x3c9cf0) : hex(0x8ccff0);
+                else if (g_era == 4) c = mixc(mixc(hex(0x3a78c8), hex(0x8ec8f0), clamp01(t * 1.4f)), hex(0xffd8b0), clamp01(t * 2 - 0.9f));
                 else if (era == 2) c = mixc(mixc(hex(0x4a3a8a), hex(0xd06a8a), clamp01(t * 1.5f)), hex(0xf7b06a), clamp01(t * 2 - 1));
-                else {
+                else if (g_era == 6) {
+                    // morning: deep blue overhead, warm white at the horizon, the sun up high
+                    c = mixc(mixc(hex(0x2e64b8), hex(0x9ccaf0), clamp01(t * 1.5f)), hex(0xfff0dc), clamp01(t * 2.2f - 1.0f));
+                    float dx = (x % (W / 2)) - W * 0.36f, dy = y - H * 0.22f;
+                    float d = std::sqrt(dx * dx + dy * dy) / H;
+                    if (d < 0.06f) c = hex(0xfffbea);
+                    else c = mixc(c, hex(0xfff4d0), clamp01(0.3f - d) * 1.4f);
+                } else {
                     c = mixc(mixc(hex(0x2a2a6a), hex(0xe86a6a), clamp01(t * 1.6f)), hex(0xffc070), clamp01(t * 2.2f - 1.1f));
                     float dx = (x % (W / 2)) - W * 0.3f, dy = y - H * 0.55f;   // sun
                     float d = std::sqrt(dx * dx + dy * dy) / H;
@@ -831,7 +904,8 @@ void bgLayer(Px& p, int era, int layer)
                     for (int y = (int)(oy - r); y <= oy + r; ++y)
                         for (int x = (int)(ox - r); x <= ox + r; ++x)
                             if ((x - ox) * (x - ox) + (y - oy) * (y - oy) * 2.2f < r * r)
-                                p.set(x, y, q(era == 1 ? hex(0xfaf3e6) : mixc(hex(0xfff0f0), hex(0xd8a0c0), (y - oy + r) / (2 * r)), x, y));
+                                p.set(x, y, q(era == 1 ? hex(0xfaf3e6) : (g_era == 4 ? mixc(hex(0xffffff), hex(0xc8d8f0), (y - oy + r) / (2 * r))
+                                                                                       : mixc(hex(0xfff0f0), hex(0xd8a0c0), (y - oy + r) / (2 * r))), x, y));
                 }
             }
         return;
@@ -842,7 +916,7 @@ void bgLayer(Px& p, int era, int layer)
         if (layer == 1) { base = H * 0.55f; top = base + ridge((float)x, W, 3, 8 * s, 4 * s, 1.5f * s); }
         else if (layer == 2) { base = H * 0.68f; top = base + ridge((float)x, W, 7, 6 * s, 3 * s, 1.0f * s); }
         else { base = H * 0.82f; top = base + ridge((float)x, W, 11, 3 * s, 2 * s, 1.5f * s); }
-        if (era == 2 && layer == 1) top -= std::max(0.0f, std::fabs(std::sin(x / (float)W * 6.2831853f * 4)) - 0.6f) * 40 * s;  // peaks
+        if (era == 2 && g_era != 4 && layer == 1) top -= std::max(0.0f, std::fabs(std::sin(x / (float)W * 6.2831853f * 4)) - 0.6f) * 40 * s;  // peaks
         for (int y = (int)top; y < H; ++y) {
             float d = (y - top) / (H - top + 1);
             Col c;
@@ -860,6 +934,13 @@ void bgLayer(Px& p, int era, int layer)
                 const uint32_t cols[4] = {0, 0x8a7fb4, 0x1e8a4c, 0x26305e};
                 c = hex(cols[layer]);
                 if (y - (int)top < 1 * s) c = layer == 2 ? hex(0x6fdc4a) : hex(0xb8b6c8);
+            } else if (g_era == 4) {
+                const uint32_t cols[4] = {0, 0x7a8ac8, 0x4a8a6a, 0x2a6a4a};
+                c = mixc(hex(cols[layer]), hex(0x1a2a3a), d * 0.5f);
+                if (y - (int)top < 2 * s) c = mixc(c, hex(0xfff0c0), 0.35f);   // sunlit ridge
+            } else if (g_era == 6) {
+                const uint32_t cols[4] = {0, 0x8aa0d0, 0x6a9a8a, 0x4a7a5a};
+                c = mixc(hex(cols[layer]), hex(0xfff0dc), (1 - d) * 0.3f * (4 - layer) / 3);
             } else if (era == 2) {
                 const uint32_t cols[4] = {0, 0x6a5aa0, 0x2a5a5a, 0x1a3a3a};
                 c = mixc(hex(cols[layer]), hex(0x10102a), d * 0.6f);
@@ -886,7 +967,37 @@ void bgLayer(Px& p, int era, int layer)
         for (int y = (int)y0; y < y0 + h; ++y)
             for (int x = (int)x0; x < x0 + w; ++x) p.set(x, y, era <= 2 ? q(c, x, y) : c);
     };
-    if (layer == 2 && era == 2) {   // pine forest
+    if (layer == 2 && g_era == 4) {   // the town, and the railway viaduct out of it
+        for (int i = 0; i < 16; ++i) {
+            float x = i * W / 16.0f + rnd(i, 3, 44) * 40 * s / 6, w = (22 + rnd(i, 4, 44) * 16) * s, hgt = (20 + rnd(i, 5, 44) * 26) * s;
+            float y = H * 0.66f - hgt;
+            Col wall = mixc(hex(0xd8b890), hex(0xb07a6a), rnd(i, 6, 44));
+            rectAt(x, y, w, hgt + 40 * s, wall);
+            rectAt(x, y, w * 0.2f, hgt + 40 * s, mul(wall, 0.82f));   // shaded side
+            for (int r = 0; r < (int)(w * 0.55f); ++r)
+                rectAt(x - 2 * s + r, y - (r < w * 0.28f ? r : w * 0.55f - r) * 0.8f, 1, (r < w * 0.28f ? r : w * 0.55f - r) * 0.8f + 1,
+                       hex(0x9a4a3a));
+            for (int wx = 0; wx < 2; ++wx)
+                for (int wy = 0; wy < 2; ++wy)
+                    rectAt(x + 5 * s + wx * w * 0.45f, y + 6 * s + wy * 10 * s, 4 * s, 5 * s, rnd(i, wx + wy * 2, 45) < 0.5f ? hex(0x3a5a8a) : hex(0xfff0b0));
+            if (i == 5) {   // church spire
+                rectAt(x + w * 0.35f, y - 30 * s, w * 0.3f, 30 * s, hex(0xc8b8a0));
+                for (int r = 0; r < 20 * s; ++r) rectAt(x + w * 0.5f - (20 * s - r) * 0.25f, y - 30 * s - r, (20 * s - r) * 0.5f, 1, hex(0x5a6a8a));
+            }
+        }
+        float vy = H * 0.62f;   // viaduct deck with arches, a train on top
+        rectAt(0, vy, (float)W, 5 * s, hex(0x8a6a5a));
+        for (int a = 0; a < 24; ++a) {
+            float ax = a * W / 24.0f;
+            rectAt(ax, vy + 5 * s, 4 * s, 30 * s, hex(0x7a5a4a));
+        }
+        for (int c = 0; c < 5; ++c) {
+            float cx = W * 0.15f + c * 26 * s;
+            rectAt(cx, vy - 10 * s, 24 * s, 10 * s, c == 0 ? hex(0x3a6a9a) : hex(0x4a8ab8));
+            for (int w = 0; w < 4; ++w) rectAt(cx + 2 * s + w * 5.5f * s, vy - 8 * s, 3.5f * s, 3 * s, hex(0xfff0b0));
+        }
+    }
+    if (layer == 2 && era == 2 && g_era != 4) {   // pine forest
         for (int i = 0; i < 40; ++i) {
             float x = i * W / 40.0f + rnd(i, 1, 2) * 10 * s, hgt = (26 + rnd(i, 2, 2) * 18) * s;
             float baseY = H * 0.7f + ridge(x, W, 7, 6 * s, 3 * s, 1 * s);
@@ -897,7 +1008,7 @@ void bgLayer(Px& p, int era, int layer)
             }
         }
     }
-    if (layer == 2 && era == 3) {   // a row of houses with lit windows
+    if (layer == 2 && era == 3 && g_era != 6) {   // a row of houses with lit windows
         for (int i = 0; i < 9; ++i) {
             float x = i * W / 9.0f + rnd(i, 3, 3) * 30, w = (60 + rnd(i, 4, 4) * 40), hgt = (50 + rnd(i, 5, 5) * 40);
             float y = H * 0.74f - hgt;
@@ -909,6 +1020,41 @@ void bgLayer(Px& p, int era, int layer)
                     if (rnd(i, wx * 3 + wy, 7) < 0.7f) rectAt(x + 10 + wx * (w - 20) / 3, y + 12 + wy * 28, 10, 14, hex(0xffd080));
         }
     }
+    if (layer == 3 && g_era == 1) {   // Gran's garden: a picket fence, flowers and a swing
+        float fy = H * 0.86f;
+        for (int x = 0; x < W; x += (int)(5 * s)) rectAt((float)x, fy - 9 * s, 3 * s, 10 * s, hex(0xe8e8e0));
+        rectAt(0, fy - 7 * s, (float)W, 1.5f * s, hex(0xe8e8e0));
+        rectAt(0, fy - 3 * s, (float)W, 1.5f * s, hex(0xe8e8e0));
+        for (int i = 0; i < 30; ++i) {
+            float x = rnd(i, 1, 61) * W, y = fy + 2 * s + rnd(i, 2, 61) * 6 * s;
+            blobAt(x, y, 1.5f * s, 1.5f * s, hex(0xf0f0f0), false);
+        }
+        for (int k = 0; k < 2; ++k) {   // swing frames
+            float x = W * (0.3f + 0.5f * k);
+            for (int y = 0; y < 34 * s; ++y) {
+                p.set((int)(x - y * 0.3f), (int)(fy - y), q(hex(0x403c48), (int)x, y));
+                p.set((int)(x + 30 * s + y * 0.3f), (int)(fy - y), q(hex(0x403c48), (int)x, y));
+            }
+            rectAt(x - 10 * s, fy - 34 * s, 50 * s, 2 * s, hex(0x403c48));
+            rectAt(x + 8 * s, fy - 32 * s, 1, 20 * s, hex(0x807a88));
+            rectAt(x + 18 * s, fy - 32 * s, 1, 20 * s, hex(0x807a88));
+            rectAt(x + 6 * s, fy - 12 * s, 14 * s, 2 * s, hex(0x5a4a3a));
+        }
+        return;
+    }
+    if (layer == 3 && g_era == 4) {   // hedges and street lamps by the station road
+        for (int i = 0; i < 18; ++i) {
+            float x = (i + 0.5f) * W / 18, baseY = H * 0.86f + ridge(x, W, 11, 3 * s, 2 * s, 1.5f * s);
+            blobAt(x, baseY - 4 * s, 12 * s, 7 * s, hex(0x2a7a3a), true);
+            blobAt(x + 7 * s, baseY - 6 * s, 8 * s, 6 * s, hex(0x3a9a4a), true);
+            if (i % 3 == 0) {
+                rectAt(x + 14 * s, baseY - 34 * s, 2 * s, 34 * s, hex(0x2a2a3a));
+                blobAt(x + 15 * s, baseY - 35 * s, 3.5f * s, 3 * s, hex(0xffe8a0), false);
+            }
+        }
+        return;
+    }
+    if (layer >= 2 && g_era == 6) return;   // the 3D stage builds its own trees and houses
     if (layer == 3) {
         int n = era == 0 ? 8 : 14;
         for (int i = 0; i < n; ++i) {
@@ -954,9 +1100,10 @@ void bgLayer(Px& p, int era, int layer)
 }
 
 // ------------------------------------------------------------------ Forgetting Wall texture
-Image wallTexture(int era)
+Image wallTexture(int stage)
 {
-    int tp = TILE_PX[era];
+    int tp = TILE_PX[stage];
+    int era = STYLE[stage];
     int W = (int)(WALL_TEX_W * tp), H = (int)(WALL_TEX_H * tp);
     Image img = GenImageColor(W, H, BLANK);
     Color* d = (Color*)img.data;
@@ -970,6 +1117,7 @@ Image wallTexture(int era)
                 int bx = x / 4, by = y / 2;
                 float r = rnd(bx, by, 2);
                 c = hex(r < 0.4f ? 0x0f0d1a : (r < 0.7f ? 0x6a2c6e : (r < 0.9f ? 0x8a7fb4 : 0xfaf3e6)));
+                if (stage == 1) c = quantize(c, x, y);
             } else {
                 int per = 8;
                 float n = vnoise(y / (float)H * per, fx * 3, per, 3) * 0.6f + vnoise(y / (float)H * per * 2, fx * 6, per * 2, 4) * 0.4f;
@@ -1002,7 +1150,7 @@ void figure(Canvas& c, float x, float y, float sc, bool gran, bool child)
 
 Image endingPicture(int idx)
 {
-    g_era = 3;
+    setStage(5);
     Canvas c((float)ENDING_W, (float)ENDING_H, 1.0f, 2);
     const float W = ENDING_W, H = ENDING_H;
     auto sky = [&](uint32_t a, uint32_t b) {
@@ -1103,7 +1251,7 @@ int generateSprites(const std::string& dir)
         ++n;
     };
     for (int era = 0; era < ERA_COUNT; ++era) {
-        g_era = era;
+        setStage(era);
         std::string d = eraDir(dir, era);
         for (int who = 0; who < 2; ++who)
             save(makeSheet(PF_COUNT, PLAYER_FW, PLAYER_FH, true, [&](Canvas& c, int f) { drawPlayer(c, who, f); }),
@@ -1126,7 +1274,7 @@ int generateSprites(const std::string& dir)
         }
         for (int l = 0; l < BG_LAYERS; ++l) {
             Px p(bgW(era), BG_H[era]);
-            bgLayer(p, era, l);
+            bgLayer(p, STYLE[era], l);
             save(p.img, d + "bg_" + std::to_string(l) + ".png");
         }
         save(wallTexture(era), d + "wall.png");

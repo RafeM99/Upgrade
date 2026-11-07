@@ -1,11 +1,11 @@
 // Upgrade - GameJam 2026 (theme: Time)
 // Two players fight off the Forgetting to recover a memory they share, watching
-// the world grow from 1-bit to 2.5D as it comes back.
+// the world grow from 1-bit through seven graphics stages to full 3D as it comes back.
 //
 // Test options:
 //   --autoplay        bots play (P1 only, add --two for both players)
 //   --two             start with Player 2 joined
-//   --era N           start in era N (0..3)
+//   --era N           start in graphics stage N (0 1-bit, 1 4-shade, 2 8-bit, 3 16-bit, 4 32-bit, 5 2.5D, 6 3D)
 //   --fill            the Memory Bar fills fast (to see every era quickly)
 //   --frames N        quit after N frames      --shot FILE   save the last frame
 //   --shot-every N PREFIX  save a frame every N frames as PREFIX_00000.png

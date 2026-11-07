@@ -14,7 +14,7 @@ Texture2D loadTex(const std::string& rel, int era)
         t = LoadTextureFromImage(img);
         UnloadImage(img);
     }
-    if (era == 3) {
+    if (art::smooth(era)) {
         GenTextureMipmaps(&t);
         SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
     } else {
@@ -41,7 +41,7 @@ void Art::load()
         for (int l = 0; l < art::BG_LAYERS; ++l) a.bg[l] = loadTex(d + "bg_" + std::to_string(l) + ".png", e);
     }
     for (int i = 0; i < art::ENDING_COUNT; ++i) {
-        ending[i] = loadTex("art/ending_" + std::to_string(i) + ".png", 3);
+        ending[i] = loadTex("art/ending_" + std::to_string(i) + ".png", art::LAST_ERA);
         SetTextureWrap(ending[i], TEXTURE_WRAP_CLAMP);
     }
 }

@@ -34,8 +34,13 @@ Playing alone, Player 1 gets both sets so every chunk can be passed.
 2. The Forgetting Wall comes from the left. Touch it and you are Faded: touch your partner to come back.
    Both Faded = the memory slips (bar -10) and you respawn together.
 3. When the bar is full, The Forgetting (mini-boss) appears. It marks where it will land, swoops,
-   then rests on the ground: jump on it. Beat it and the world upgrades: 1-bit, 8-bit, 16-bit, then the 2.5D camera swing.
-4. Beat it in the 2.5D era and the memory is restored: the ending and credits.
+   then rests on the ground: jump on it. Beat it and the world upgrades to the next graphics stage:
+   1-bit, 4-shade, 8-bit, 16-bit, 32-bit, 2.5D (the camera swings), then full 3D.
+4. Beat it in the 3D stage and the memory is restored: the ending and credits.
+
+Each stage has its own sprites, tiles, palette, screen look and level chunks (`stages=` in a chunk header).
+New abilities by stage: 4-shade double jump (P1) and dash (P2), 8-bit attack button, 16-bit ground pound,
+32-bit wall jump, 2.5D glide, 3D time-slow pulse.
 
 Power-ups: Keepsake locket (one free hit), Hourglass (wall falls back and slows), Lullaby (fragment magnet),
 Old photograph (+8 bar), Old trainers (run faster).
@@ -54,6 +59,8 @@ cmake --build build --target assetgen
 ```
 
 ## Test options
-`--autoplay` (bots play), `--two` (P2 joined), `--fill` (bar fills fast), `--era N` (start in era 0-3),
+`--autoplay` (bots play), `--two` (P2 joined), `--fill` (bar fills fast), `--era N` (start in stage 0-6:
+0 1-bit, 1 4-shade, 2 8-bit, 3 16-bit, 4 32-bit, 5 2.5D, 6 3D),
 `--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
-Example: `./build/upgrade --autoplay --two --fill --era 2` shows the 2.5D swing in about two minutes.
+Example: `./build/upgrade --autoplay --two --fill --era 4` shows the 2.5D swing and then the full 3D stage.
+The Memory Bar speed is `memory.fill_speed` in `assets/config.ini` (2.0 = twice the old speed).

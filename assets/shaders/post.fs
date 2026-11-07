@@ -1,9 +1,12 @@
 #version 330
-// post.fs: the era look, applied when the low-res world image is scaled to the screen.
-//   era 0: 1-bit. Two colours, ordered dither, and a handheld LCD pixel grid.
-//   era 1: 8-bit. Snap every pixel to the 16-colour palette, CRT scanlines between pixel rows.
-//   era 2: 16-bit. 32 levels per channel and soft scanlines.
-//   era 3: modern. Full colour with bloom, warm grading and a vignette.
+// post.fs: the look of each graphics stage, applied when the world image is scaled to the screen.
+//   0 1-bit:   two colours, ordered dither, and a handheld LCD pixel grid.
+//   1 4-shade: four warm greys on a reflective dot-matrix LCD; each pixel casts a faint shadow.
+//   2 8-bit:   snap every pixel to the 16-colour palette, CRT scanlines between pixel rows.
+//   3 16-bit:  32 levels per channel and soft scanlines.
+//   4 32-bit:  a bright backlit screen: rich colour, a soft glow around light pixels, no scanlines.
+//   5 2.5D:    full colour with bloom, warm grading and a vignette.
+//   6 3D:      wider bloom, filmic tone mapping, cool shadows and warm highlights.
 // Pixels are scaled "sharp": every source pixel becomes an even block on screen, with only a
 // one-pixel soft edge, so the art stays crisp at any window size.
 // mosaic and glitch drive the era-upgrade transition.
@@ -19,6 +22,7 @@ uniform float desat;    // 0..1 greyscale for "memory lost"
 uniform float mosaic;   // >= 1: source pixels per block, for the transition
 uniform float glitch;   // 0..1: torn scanlines as the old era shuts down
 uniform vec3 palette[16];
+uniform vec3 shades[4];   // the 4-shade greys, dark to light
 out vec4 finalColor;
 
 float bayer4(vec2 p)
@@ -43,7 +47,7 @@ void main()
     vec2 cell = fract(tp);   // where we are inside a source pixel, for the LCD grid and scanlines
     if (mosaic > 1.01) {
         tp = (floor(tp / mosaic) + 0.5) * mosaic;
-    } else if (era < 3) {
+    } else if (era <= 4) {
         vec2 scale = max(outSize / texSize, vec2(1.0));
         vec2 i = floor(tp);
         vec2 f = clamp((tp - i - 0.5) * scale + 0.5, 0.0, 1.0);
@@ -65,6 +69,20 @@ void main()
         // handheld LCD: a faint gap between pixels
         if (fine && (cell.x < 0.12 || cell.y < 0.12)) c = mix(c, dark, 0.35);
     } else if (era == 1) {
+        // the world is already drawn in the four greys; snap anything in between (particles, HUD
+        // effects, blending) back onto them, and darken the pixel's lower right where its shadow
+        // falls on the LCD's backing
+        float l = dot(c, vec3(0.299, 0.587, 0.114));
+        int idx = int(clamp(floor(l * 4.0), 0.0, 3.0));
+        c = shades[idx];
+        if (fine) {
+            vec3 left = texture(texture0, (floor(tp) - vec2(1.0, 1.0) + 0.5) / texSize).rgb;
+            float ls = dot(left, vec3(0.299, 0.587, 0.114));
+            if (ls < 0.3 && (cell.x < 0.2 || cell.y < 0.2)) c = mix(c, shades[0], 0.12);
+            if (cell.x < 0.06 || cell.y < 0.06) c = mix(c, shades[1], 0.08);   // the faint dot-matrix grid
+        }
+        c *= mix(0.9, 1.0, vig);
+    } else if (era == 2) {
         float best = 1e9; vec3 bc = c;
         for (int i = 0; i < 16; ++i) {
             vec3 e = palette[i] - c;
@@ -75,27 +93,52 @@ void main()
         // CRT: dark gaps between pixel rows, a touch of phosphor glow in the middle
         if (fine) c *= mix(0.68, 1.06, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
         c *= mix(0.82, 1.0, vig);
-    } else if (era == 2) {
+    } else if (era == 3) {
         c = floor(c * 31.0 + 0.5) / 31.0;
         if (fine) c *= mix(0.88, 1.0, smoothstep(0.0, 0.3, cell.y));
         c *= mix(0.85, 1.0, vig);
+    } else if (era == 4) {
+        // backlit screen: a soft glow bleeds from bright pixels, colours a touch richer
+        vec2 texel = 1.0 / texSize;
+        vec3 glow = vec3(0.0);
+        for (int i = 0; i < 8; ++i) {
+            float a = float(i) * 0.785;
+            vec3 s = texture(texture0, uv + vec2(cos(a), sin(a)) * texel * 2.5).rgb;
+            glow += s * smoothstep(0.7, 1.0, max(max(s.r, s.g), s.b));
+        }
+        c += glow / 8.0 * 0.45;
+        float l = dot(c, vec3(0.299, 0.587, 0.114));
+        c = mix(vec3(l), c, 1.12);
+        if (fine) c *= mix(0.94, 1.0, smoothstep(0.0, 0.12, min(cell.x, cell.y)));   // the faintest pixel grid
+        c *= mix(0.92, 1.0, vig);
     } else {
         vec2 texel = 1.0 / texSize;
         vec3 glow = vec3(0.0);
         float total = 0.0;
+        float reach = era == 6 ? 8.0 : 5.0;
         for (int i = 0; i < 12; ++i) {
             float a = float(i) * 0.5236;
             for (int r = 1; r <= 2; ++r) {
-                vec2 o = vec2(cos(a), sin(a)) * texel * float(r) * 5.0;
+                vec2 o = vec2(cos(a), sin(a)) * texel * float(r) * reach;
                 vec3 s = texture(texture0, uv + o).rgb;
                 float br = max(max(s.r, s.g), s.b);
                 glow += s * smoothstep(0.65, 1.0, br);
                 total += 1.0;
             }
         }
-        c += glow / total * 1.3;
-        c = mix(c, c * vec3(1.06, 1.0, 0.92), 0.6);   // warm grading
-        c *= mix(0.7, 1.0, vig);
+        if (era == 6) {
+            c += glow / total * 0.5;
+            c *= 1.05;
+            c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);   // filmic (ACES fit)
+            float l = dot(c, vec3(0.299, 0.587, 0.114));
+            c = mix(c * vec3(0.92, 0.97, 1.08), c * vec3(1.06, 1.0, 0.9), smoothstep(0.2, 0.8, l));
+            c = mix(vec3(l), c, 1.1);
+            c *= mix(0.72, 1.0, vig);
+        } else {
+            c += glow / total * 1.3;
+            c = mix(c, c * vec3(1.06, 1.0, 0.92), 0.6);   // warm grading
+            c *= mix(0.7, 1.0, vig);
+        }
     }
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);

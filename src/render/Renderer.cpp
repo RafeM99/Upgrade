@@ -165,13 +165,22 @@ void Renderer::init()
         pal[i * 3 + 2] = (PALETTE16[i] & 255) / 255.0f;
     }
     SetShaderValueV(post_, locPal_, pal, SHADER_UNIFORM_VEC3, 16);
+    locShades_ = GetShaderLocation(post_, "shades");
+    float sh[12];
+    for (int i = 0; i < 4; ++i) {
+        sh[i * 3 + 0] = ((SHADES4[i] >> 16) & 255) / 255.0f;
+        sh[i * 3 + 1] = ((SHADES4[i] >> 8) & 255) / 255.0f;
+        sh[i * 3 + 2] = (SHADES4[i] & 255) / 255.0f;
+    }
+    SetShaderValueV(post_, locShades_, sh, SHADER_UNIFORM_VEC3, 4);
+    models_.init();
     ensureTargets();
 }
 
 void Renderer::ensureTargets()
 {
-    for (int e = 0; e < 4; ++e) {
-        int h = e < 3 ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
+    for (int e = 0; e < ERA_COUNT; ++e) {
+        int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
         int w = (int)std::lround(h * 16.0 / 9.0);
         if (rt_[e].id != 0 && rtW_[e] == w && rtH_[e] == h) continue;
         if (rt_[e].id != 0) UnloadRenderTexture(rt_[e]);
@@ -187,6 +196,7 @@ void Renderer::ensureTargets()
 void Renderer::shutdown()
 {
     for (auto& r : rt_) if (r.id) UnloadRenderTexture(r);
+    models_.shutdown();
     UnloadShader(post_);
     UnloadShader(world_);
 }
@@ -202,12 +212,13 @@ Rectangle Renderer::screenRect() const
 // ------------------------------------------------------------------ background
 void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int w, int h, float alpha)
 {
-    const float parallax[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
+    const float parallaxByStyle[4][4] = {{0, 0.15f, 0.15f, 0.15f}, {0, 0.2f, 0.2f, 0.2f}, {0, 0.06f, 0.18f, 0.4f}, {0, 0.06f, 0.18f, 0.4f}};
+    const float* parallax = parallaxByStyle[STYLE[era]];
     for (int l = 0; l < BG_LAYERS; ++l) {
         const Texture2D& t = g.art.era[era].bg[l];
         float scale = (float)h / t.height;
         float tw = t.width * scale;
-        float off = std::fmod(camX * pxPerTile * parallax[era][l], tw);
+        float off = std::fmod(camX * pxPerTile * parallax[l], tw);
         if (off < 0) off += tw;
         for (float x = -off; x < w; x += tw)
             DrawTexturePro(t, Rectangle{0, 0, (float)t.width, (float)t.height}, Rectangle{x, 0, tw + 1, (float)h}, {0, 0}, 0,
@@ -218,12 +229,12 @@ void Renderer::drawBackground(Game& g, int era, float camX, float pxPerTile, int
 void Renderer::drawTitleBackground(Game& g, float t)
 {
     ensureTargets();
-    int e = ((int)(t / 3.0f)) % 4;
+    int e = ((int)(t / 3.0f)) % ERA_COUNT;
     renderEra_ = e;
     oldEra_ = -1;
     BeginTextureMode(rt_[e]);
     ClearBackground(BLACK);
-    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (e == 3 ? rtH_[3] / (VIEW_TILES_H * TILE_PX[3]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
+    drawBackground(g, e, t * 3.0f, (float)TILE_PX[e] * (smooth(e) ? rtH_[e] / (VIEW_TILES_H * TILE_PX[e]) : 1.0f), rtW_[e], rtH_[e], 1.0f);
     EndTextureMode();
 }
 
@@ -254,7 +265,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
     g.cam.aspect = (float)rtW_[era] / rtH_[era];
     float pxPerTile = rtH_[era] / g.cam.viewH;
     const float depth = swing;   // blocks extrude as the camera swings
-    g_lightAmount = era == 3 ? swing : 0.0f;
+    g_lightAmount = smooth(era) ? std::min(1.0f, swing) : 0.0f;
+    const bool full3D = era == LAST_ERA;
 
     // lights: the players glow warm and cool, the boss eye glows
     g_lights.clear();
@@ -266,7 +278,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     if (g.boss.active) g_lights.push_back({g.boss.x, g.boss.y, 0.4f, 0.35f, 0.1f, 7});
 
     BeginTextureMode(rt);
-    ClearBackground(era == 0 ? Color{16, 18, 22, 255} : BLACK);
+    ClearBackground(era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(SHADES4[3]) : BLACK));
     // the 1-bit background is drawn at full strength: its ordered patterns are the shading
     drawBackground(g, era, g.cam.x, pxPerTile, rtW_[era], rtH_[era], 1.0f);
 
@@ -312,8 +324,16 @@ void Renderer::drawEra(Game& g, int era, float swing)
         }
     }
 
-    // ---- shadows (2.5D)
-    if (era == 3) {
+    // ---- the modelled street of the 3D stage
+    if (full3D) {
+        rlDrawRenderBatchActive();
+        models_.begin(g, c3);
+        models_.drawScenery(g);
+        rlDrawRenderBatchActive();
+    }
+
+    // ---- shadows (2.5D and 3D)
+    if (smooth(era)) {
         auto floorBelow = [&](float x, float y) {
             for (int ty = (int)std::floor(y); ty < LEVEL_H; ++ty)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
@@ -336,7 +356,14 @@ void Renderer::drawEra(Game& g, int era, float swing)
     }
 
     // ---- pickups
+    if (full3D) {
+        for (const auto& f : g.frags) {
+            float a = (!f.placed && f.t > 10) ? std::max(0.0f, (12 - f.t) / 2) : 1.0f;
+            models_.drawFragment(f.x, f.y, f.t + f.x, a);
+        }
+    }
     for (const auto& f : g.frags) {
+        if (full3D) break;
         int fr = ((int)(f.t * 6 + f.x) % 2) ? T_FRAG1 : T_FRAG0;
         float s = 0.7f;
         unsigned char a = (!f.placed && f.t > 10) ? (unsigned char)(255 * std::max(0.0f, (12 - f.t) / 2)) : 255;
@@ -350,6 +377,11 @@ void Renderer::drawEra(Game& g, int era, float swing)
 
     // ---- enemies
     for (const auto& e : g.enemies) {
+        if (full3D) {
+            models_.drawEnemy(g, e);
+            if (e.owner >= 0 && !e.dead) ring(e.cx(), e.cy(), (e.type == EN_BRUTE ? 2.0f : 1.0f) * 0.6f, e.owner == 0 ? Color{255, 150, 60, 200} : Color{80, 160, 255, 200}, 0.9f);
+            continue;
+        }
         const Texture2D* t = &A.blob;
         float fs = BLOB_FS;
         int fr = 0;
@@ -382,11 +414,12 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(b.toX, b.toY + b.h / 2 - 0.2f, 0.7f, wc);
             solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
         }
+        if (full3D) models_.drawBoss(g);
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
         if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
-        quad(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        if (!full3D) quad(A.boss, frameRect(A.boss, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
     }
 
     // ---- players
@@ -403,7 +436,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ox = std::sin(g.time * 6 + p) * 0.05f;
         }
         const Texture2D& t = A.player[p];
-        quad(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox, pl.bottom() - PLAYER_FH + 0.03f,
+        if (full3D) models_.drawPlayer(g, p);
+        else quad(t, frameRect(t, fr, PLAYER_FW, PLAYER_FH, era), pl.cx() - PLAYER_FW / 2 + ox, pl.bottom() - PLAYER_FH + 0.03f,
              PLAYER_FW, PLAYER_FH, 0.05f + p * 0.01f, tint, pl.facing < 0);
         if (pl.shield) ring(pl.cx(), pl.cy(), 0.95f, Color{255, 120, 160, (unsigned char)(150 + 100 * std::sin(g.time * 5))});
         if (pl.faded && pl.reviveProgress > 0) ring(pl.cx(), pl.cy(), 1.1f * (1 - pl.reviveProgress / 0.6f) + 0.3f, Color{255, 255, 255, 230});
@@ -440,7 +474,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             // the textured leading strip
             quad(wt, src, edge - wq, y, wq, 0.5f, 0.6f, WHITE);
             // the solid body behind it
-            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(0x0f0d1a) : hexc(0x1a1030, era == 3 ? 235 : 255));
+            Color body = era == 0 ? Color{16, 18, 22, 255} : (era == 1 ? hexc(SHADES4[0]) : (era == 2 ? hexc(0x0f0d1a) : hexc(0x1a1030, smooth(era) ? 235 : 255)));
             if (edge - wq > left) solidQuad(left, y, edge - wq - left, 0.5f, 0.6f, body);
         }
         // glitch sparks at the edge
@@ -482,8 +516,9 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
 // the size of the old era's pixels breaking off and flying ahead of it.
 void Renderer::drawSweep(Game& g, Rectangle dst, float p)
 {
-    const Color eraGlow[4] = {{235, 235, 225, 255}, {247, 215, 58, 255}, {242, 140, 180, 255}, {255, 220, 150, 255}};
-    Color glow = eraGlow[std::min(3, std::max(0, g.era))];
+    const Color eraGlow[ERA_COUNT] = {{235, 235, 225, 255}, {232, 226, 210, 255}, {247, 215, 58, 255}, {242, 140, 180, 255},
+                                      {126, 240, 192, 255}, {255, 220, 150, 255}, {255, 250, 235, 255}};
+    Color glow = eraGlow[std::min(LAST_ERA, std::max(0, g.era))];
     float x = dst.x + dst.width * p;
     int y0 = (int)dst.y, h = (int)dst.height;
     DrawRectangleGradientH((int)(x - 90), y0, 90, h, Color{glow.r, glow.g, glow.b, 0}, Color{glow.r, glow.g, glow.b, 110});

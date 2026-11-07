@@ -18,10 +18,11 @@ inline int abilityFromId(const char* id)
     return -1;
 }
 
-// The ability player `p` (0 or 1) unlocks on reaching `era` (1..3), or -1.
+// The ability player `p` (0 or 1) unlocks on reaching graphics stage `era` (1..6), or -1.
+// Stage 2 (8-bit) brings the attack button instead (config player.attack_from_era).
 inline int abilityForEra(int p, int era)
 {
-    static const int table[2][4] = {{-1, AB_DOUBLE_JUMP, AB_GROUND_POUND, AB_GLIDE},
-                                    {-1, AB_DASH, AB_WALL_JUMP, AB_TIME_SLOW}};
-    return (era >= 1 && era <= 3 && p >= 0 && p <= 1) ? table[p][era] : -1;
+    static const int table[2][7] = {{-1, AB_DOUBLE_JUMP, -1, AB_GROUND_POUND, -1, AB_GLIDE, -1},
+                                    {-1, AB_DASH, -1, -1, AB_WALL_JUMP, -1, AB_TIME_SLOW}};
+    return (era >= 1 && era <= 6 && p >= 0 && p <= 1) ? table[p][era] : -1;
 }
