@@ -1,5 +1,4 @@
 #pragma once
-// Owner: Core player (area 2). Starter code from the skeleton: replace freely.
 // Keyboard and gamepad input for both players. Bindings are in the table in Input.cpp.
 
 struct InputState {
@@ -7,6 +6,7 @@ struct InputState {
     float moveY = 0.0f;           // -1 down .. +1 up
     bool jumpHeld = false;
     bool jumpPressed = false;     // presses are kept until the next fixed update reads them
+    bool runHeld = false;         // the attack button doubles as the run button
     bool attackPressed = false;
     bool abilityPressed = false;
     bool anyPressed = false;      // any of this player's buttons: used for P2 joining

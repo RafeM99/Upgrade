@@ -8,7 +8,10 @@
 #include "raylib.h"
 
 namespace {
-bool isMarker(char c) { return c == 'S' || c == 'G' || c == 'B' || c == 'F'; }
+// S walker, G flyer, B brute, Q coin mimic, C or F coin, P flagpole.
+bool isMarker(char c) {
+    return c == 'S' || c == 'G' || c == 'B' || c == 'Q' || c == 'C' || c == 'F' || c == 'P';
+}
 
 bool isHeader(const std::string& line) {
     if (line.empty() || line[0] != '#') return false;

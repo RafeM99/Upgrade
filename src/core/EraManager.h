@@ -1,19 +1,16 @@
 #pragma once
-// Owner: Systems (Camilla's Claude).
-// Holds the current era and fires events().eraChanged when the Memory Bar passes a threshold.
-// Eras: 0 = 1-bit, 1 = 8-bit, 2 = 16-bit, 3 = 2.5D. Thresholds come from config.ini [memory].
+// Five console eras. The era goes up by one each time a world's flag is reached.
+// 0 = NES, 1 = SNES, 2 = N64, 3 = GameCube, 4 = Wii.
+
+constexpr int kEraCount = 5;
 
 class EraManager {
 public:
-    void init();
+    void init() { era = 0; }
     int current() const { return era; }
-    float thresholdFor(int e) const;   // bar value where era e starts
-    void checkBar(float barValue);      // moves the era forward and fires the events
-    void setEra(int e);                 // debug or restart; fires eraChanged
+    bool isLast() const { return era == kEraCount - 1; }
+    void setEra(int e);   // fires events().eraChanged
 
 private:
     int era = 0;
-    bool completed = false;
-    float thresholds[4] = {0.0f, 25.0f, 50.0f, 75.0f};
-    float completeAt = 100.0f;
 };

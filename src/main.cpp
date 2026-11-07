@@ -1,4 +1,3 @@
-// Owner: Systems (Camilla's Claude). Shared hotspot: keep edits small and say so in your status file.
 // Opens the window and runs the fixed 60 Hz game loop.
 #include <cstdlib>
 #include <string>
@@ -9,16 +8,18 @@
 #include "core/Paths.h"
 
 int main(int argc, char** argv) {
-    // Test options: --autoplay (players run right and jump), --fill (bar fills on its own),
-    // --frames N (quit after N frames), --shot-every N (save shot_<frame>.png every N frames).
+    // Test options: --autoplay (players run right and jump), --fill (next era every 6 seconds),
+    // --god (nobody dies), --frames N (quit after N frames), --shot-every N (save shot_<frame>.png).
     bool autoplay = false;
     bool fill = false;
+    bool god = false;
     int maxFrames = 0;
     int shotEvery = 0;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--autoplay") autoplay = true;
         else if (arg == "--fill") fill = true;
+        else if (arg == "--god") god = true;
         else if (arg == "--frames" && i + 1 < argc) maxFrames = std::atoi(argv[++i]);
         else if (arg == "--shot-every" && i + 1 < argc) shotEvery = std::atoi(argv[++i]);
     }
@@ -33,7 +34,8 @@ int main(int argc, char** argv) {
     Game game;
     game.init();
     game.setAutoplay(autoplay);
-    game.setAutoFill(fill);
+    game.setAutoAdvance(fill);
+    game.setGod(god);
 
     const float step = 1.0f / 60.0f;   // fixed timestep: physics is the same on every laptop
     float accumulator = 0.0f;

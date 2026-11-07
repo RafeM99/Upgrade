@@ -1,5 +1,17 @@
 # Upgrade (GameJam 2026)
 
+> **Branch claude-sohan-mario:** a Mario-style rage platformer that upgrades from NES to SNES, N64,
+> GameCube and Wii, one world at a time, then carries on with endless worlds. Each flagpole clears a
+> world (and may run away first). Traps: hidden blocks, fake floors, troll ? blocks, hidden spikes,
+> coins that bite. Hold the attack button to run. F1 jumps to the current world's flag (debug).
+> Test options: `--autoplay`, `--god` (nobody dies), `--fill` (skip to the next flag every 6 seconds),
+> `--frames N`, `--shot-every N`.
+>
+> Chunk tiles on this branch: `.` empty, `#` ground, `%` brick, `?` coin block, `!` troll block,
+> `H` hidden block, `X` fake floor, `^` spikes, `V` hidden spikes, `|` pipe, `1`/`2` P1/P2 only,
+> `C` coin, `Q` coin mimic, `S` walker, `G` flyer, `B` brute, `P` flagpole (flag.txt only).
+> Header keys: `min_era=N` (first world it can appear in, 0-4), `coop=true` (only with two players).
+
 Two players fight off the Forgetting to recover a memory they share. The game design is in the brief on main.
 The team's working rules are in CLAUDE.md, and who owns which files is in notes/camilla-claude.md.
 

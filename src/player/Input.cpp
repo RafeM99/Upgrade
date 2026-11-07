@@ -1,4 +1,3 @@
-// Owner: Core player (area 2). Starter code from the skeleton: replace freely.
 #include "player/Input.h"
 #include <cmath>
 #include "raylib.h"
@@ -31,6 +30,7 @@ void Input::poll() {
         bool jumpHeld = down(k.jump) || down(k.jumpAlt);
         bool jumpPressed = pressed(k.jump) || pressed(k.jumpAlt);
         bool attack = pressed(k.attack);
+        bool run = down(k.attack);
         bool ability = pressed(k.ability);
         bool any = jumpPressed || attack || ability || pressed(k.left) || pressed(k.right) ||
                    pressed(k.up) || pressed(k.down);
@@ -44,6 +44,7 @@ void Input::poll() {
             jumpHeld = jumpHeld || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
             bool padJump = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
             bool padAttack = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+            run = run || IsGamepadButtonDown(pad, GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
             bool padAbility = IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_RIGHT_FACE_UP);
             jumpPressed = jumpPressed || padJump;
             attack = attack || padAttack;
@@ -57,6 +58,7 @@ void Input::poll() {
             x = 1.0f;
             jumpHeld = t % 50 < 18;
             jumpPressed = t % 50 == 0;
+            run = true;
             if (p == 1 && frame == 30) any = true;
         }
 
@@ -64,6 +66,7 @@ void Input::poll() {
         s.moveX = x < -1.0f ? -1.0f : (x > 1.0f ? 1.0f : x);
         s.moveY = y;
         s.jumpHeld = jumpHeld;
+        s.runHeld = run;
         s.jumpPressed = s.jumpPressed || jumpPressed;
         s.attackPressed = s.attackPressed || attack;
         s.abilityPressed = s.abilityPressed || ability;

@@ -9,7 +9,7 @@
 #include <vector>
 
 struct SpawnMarker {
-    char type;    // 'S' Static Blob, 'G' Glitch Flyer, 'B' Fog Brute, 'F' fragment
+    char type;    // 'S' walker, 'G' flyer, 'B' brute, 'Q' coin mimic, 'C'/'F' coin, 'P' flagpole
     float x;      // world (or chunk) position of the tile's bottom-left corner
     float y;
 };
