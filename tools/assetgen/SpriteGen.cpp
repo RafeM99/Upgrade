@@ -810,173 +810,398 @@ void drawPlayer(Canvas& c, int who, int frame)
 // Creatures of the Forgetting. Each stage has its own take on them:
 //   1-bit: hand-placed blocks, dither only on the big ones.   4-shade: blocky, two greys each.
 //   8-bit: chunky, colour + shadow + outline.   16-bit: rounder, three-tone.
-//   32-bit on: rounded, four-tone, coloured outline and small details (teeth, cracks, feelers).
+//   32-bit on: rounded, four-tone, coloured outline and small details.
+// They are things from Gran's memory gone wrong: a lump of something she can't name, a memory
+// book flying on its own pages, the grandfather clock from the hall.
+
+// A lump with no fixed shape: an ellipse whose edge is bent by a few slow waves. `ph` moves
+// the waves (whole turns over the walk cycle, so the loop is seamless); `floorY` cuts the
+// bottom flat where it sits on the ground. The fake normal follows the bent edge, so the
+// usual lighting still reads it as one soft mass.
+void lump(Canvas& c, float cx, float cy, float rx, float ry, float amp, float ph, float floorY, const Fill& fill)
+{
+    float R = 1 + amp * 2.0f;
+    c.shape(cx - rx * R, cy - ry * R, cx + rx * R, std::min(floorY, cy + ry * R), [&](Frag& f) {
+        if (f.y > floorY) return false;
+        float dx = (f.x - cx) / rx, dy = (f.y - cy) / ry;
+        float a = std::atan2(dy, dx);
+        float k = 1 + amp * (0.9f * std::sin(2 * a + 0.7f + ph) + 0.6f * std::sin(3 * a + 2.1f - 2 * ph) +
+                             0.25f * std::sin(5 * a + 1.3f + 3 * ph));
+        f.nx = dx / k;
+        f.ny = dy / k;
+        return f.nx * f.nx + f.ny * f.ny <= 1.0f;
+    }, fill);
+}
+
+// The walker: something half-remembered. A soft, lopsided lump of grey-violet that will not
+// hold one shape, smeared out behind as if rubbed with a thumb, with two dim dots that might
+// be a face. Nothing on it you could name.
 void drawBlob(Canvas& c, int frame)
 {
     if (g_era == 0) {
-        static const Rows walk[2] = {
-            {"....#...", "...#....", "..####..", ".######.", ".###o#o#", "########", "########", ".##..##."},
-            {"........", "...#....", "..#.....", ".######.", "####o#o#", "########", "########", "##....##"}};
-        if (frame == BF_SQUASH) stamp(c, {".######.", "###o#o##"}, 0, 6);
-        else stamp(c, walk[frame % 2], 0, 0);
+        // 8 x 8 by hand: a different lopsided outline each step, the two dots never level
+        static const Rows walk[4] = {
+            {"........", "..##....", ".####.#.", ".######.", "####o###", "######o#", "#######.", ":##.###."},
+            {"........", "........", "..###...", ".#####.#", ".###o###", "######o#", "########", "##..##.."},
+            {"........", "...#....", "..####..", ".######.", "#####o##", ":#####o#", "########", ".###.##."},
+            {"........", "........", ".##.##..", ".######.", "####o###", "######o#", "#######.", "##..###."}};
+        if (frame == BF_SQUASH) stamp(c, {"#.....#.", "..####..", ".######.", "###o#o##"}, 0, 4);
+        else stamp(c, walk[frame % 4], 0, 0);
         return;
     }
     const int e = g_era;
-    Col body = pc(0x8a7fb4, 2), eyeW = pc(0xfaf3e6, 3), pupil = pc(0x0f0d1a, 0), dark = farSide(body);
+    const int tp = TILE_PX[e];
+    const int dotPx = tp >= 64 ? 3 : (tp >= 32 ? 2 : 1);
+    Col body = pc(0x9a90b2, 2), smear = pc(0x7c7590, 1), faint = pc(0x5a536c, 1);
+    Col sheen = pc(0xb8b2c6, 3);
+    if (e == 2) { body = hex(0x8a7fb4); smear = hex(0x5a5468); faint = hex(0x5a5468); sheen = hex(0xb8b6c8); }
+    if (e == 3) { faint = hex(0x463a66); smear = hex(0x6e6a9e); }
+    if (e >= 4) faint = hex(0x4a4462);
+    const float ph = frame * 1.5707963f;
+
     if (frame == BF_SQUASH) {
-        c.rect(0.06f, 0.78f, 0.88f, 0.2f, lit(body), 0.08f);
-        c.rect(0.3f, 0.84f, 0.14f, 0.04f, solid(pupil));
-        c.rect(0.6f, 0.84f, 0.14f, 0.04f, solid(pupil));
+        // gone flat: a puddle with a couple of flecks thrown off, the two dots shut
+        lump(c, 0.5f, 0.93f, 0.44f, 0.1f, 0.12f, 0.6f, 0.99f, lit(body));
+        if (e >= 4) {
+            c.circle(0.14f, 0.76f, 0.04f, solid(body));
+            c.circle(0.86f, 0.72f, 0.03f, solid(smear));
+        }
+        c.rect(0.52f, 0.9f, 0.1f, 1.2f / tp, solid(faint));
+        c.rect(0.72f, 0.91f, 0.08f, 1.2f / tp, solid(faint));
         return;
     }
-    float sq = 0.07f * std::sin(frame * 1.5707963f);
-    float step = (frame % 2) ? 0.05f : -0.05f;
-    // feet
-    c.rect(0.18f + step, 0.86f, 0.2f, 0.12f, lit(dark, false), 0.05f);
-    c.rect(0.62f - step, 0.86f, 0.2f, 0.12f, lit(dark, false), 0.05f);
-    float ry = 0.36f * (1 - sq), rx = 0.42f * (1 + sq), top = 0.92f - 2 * ry;
-    if (e <= 2) {
-        // blocky dome: round top corners, flat bottom
-        float R = e == 1 ? 0.24f : 0.3f, cx = 0.5f, cyy = top + ry;
-        c.shape(cx - rx, top, cx + rx, top + 2 * ry, [&](Frag& f) {
-            f.nx = (f.x - cx) / rx;
-            f.ny = (f.y - cyy) / ry;
-            if (f.x < cx - rx || f.x > cx + rx || f.y < top || f.y > top + 2 * ry) return false;
-            if (f.y > top + R) return true;
-            float qx = std::max(std::fabs(f.x - cx) - (rx - R), 0.0f), qy = top + R - f.y;
-            return qx * qx + qy * qy <= R * R;
-        }, lit(body));
-    } else {
-        c.ellipse(0.5f, 0.92f - ry, rx, ry, lit(body));
-        if (e >= 4) {   // patches of static on its skin, and a drip
-            c.dot(0.3f, top + ry * 0.8f, dark, 2); c.dot(0.42f, top + ry * 1.4f, dark, 1); c.dot(0.24f, top + ry * 1.3f, dark, 1);
-            c.capsule(0.36f, 0.9f, 0.36f, 0.97f, 0.035f, solid(body));
-        }
+    // it shifts its weight as it goes: the mass leans into the step and back
+    const float sway = 0.03f * std::sin(ph), squish = 0.04f * std::cos(ph * 2);
+    const float cx = 0.5f + sway, cy = 0.64f + squish * 0.5f;
+    const float rx = 0.38f * (1 + squish), ry = 0.29f * (1 - squish);
+
+    // the smear: streaks left behind it, as if the lump were rubbed sideways
+    const float smearLen[4][3] = {{0.2f, 0.12f, 0.16f}, {0.15f, 0.18f, 0.1f}, {0.22f, 0.1f, 0.14f}, {0.12f, 0.16f, 0.18f}};
+    const float smearY[3] = {0.6f, 0.73f, 0.86f}, smearR[3] = {0.045f, 0.04f, 0.05f};
+    for (int i = 0; i < 3; ++i) {
+        float x0 = cx - rx * (i == 1 ? 0.75f : 0.85f);
+        c.capsule(x0 - smearLen[frame][i], smearY[i] + squish * 0.3f, x0 + 0.1f, smearY[i], smearR[i], solid(smear));
     }
-    // antenna of static
-    if (e >= 2) {
-        c.capsule(0.4f, top + 0.04f, 0.33f, top - 0.1f, 0.025f, solid(dark));
-        c.circle(0.32f, top - 0.12f, 0.05f, solid(pc(0xf28cb4, 2)));
+    // one mass: the sag pulling off its back and the half-formed bumps on top are lit as part
+    // of the same lump, so they swell out of it rather than sit on it
+    auto mass = [&, body](float scx, float scy, float srx, float sry) -> Fill {
+        Fill base = lit(body);
+        return [=](const Frag& f) {
+            Frag g = f;
+            g.nx = (f.x - scx) / srx;
+            g.ny = (f.y - scy) / sry;
+            return base(g);
+        };
+    };
+    const Fill one = mass(cx, cy, rx * 1.1f, ry * 1.15f);
+    // it doesn't sit on the ground like a stone: it slumps, spreading out into a soft skirt
+    lump(c, cx + 0.02f, 0.93f, rx * 1.12f, 0.07f, 0.1f, ph + 2.0f, 0.985f, one);
+    lump(c, cx - 0.2f, 0.82f, 0.19f, 0.14f, 0.08f, ph + 1.0f, 0.98f, one);
+    const float bumpX[4] = {0.64f, 0.4f, 0.58f, 0.36f}, bumpR[4] = {0.12f, 0.11f, 0.1f, 0.13f};
+    lump(c, bumpX[frame] + sway, cy - ry * 0.8f, bumpR[frame], bumpR[frame] * 0.85f, 0.1f, ph * 2, 1.0f, one);
+    if (frame % 2 == 0) c.circle(cx - 0.19f, cy - ry * 0.7f, 0.07f, one);
+    else c.circle(cx + 0.24f, cy - ry * 0.55f, 0.06f, one);
+    // the mass itself, never quite the same shape twice
+    lump(c, cx, cy, rx, ry, 0.06f, ph, 0.98f, one);
+    if (e >= 4)   // a smudge of light dragged across it, as if rubbed with a thumb
+        c.capsule(cx - 0.24f, cy - ry * 0.5f, cx - 0.06f, cy - ry * 0.6f, 0.03f, solid(sheen));
+    if (e >= 4) {   // loose specks drifting off the back
+        c.dot(cx - rx - 0.22f, 0.66f + 0.02f * (frame % 2), smear, dotPx - 1 > 0 ? dotPx - 1 : 1);
+        c.dot(cx - rx - 0.3f, 0.79f - 0.02f * (frame % 2), smear, 1);
     }
-    // eyes (looking ahead) and a mouth
-    float ey = top + ry * 0.75f;
-    if (e <= 2) {
-        c.rect(0.46f, ey - 0.12f, 0.18f, 0.25f, solid(eyeW));
-        c.rect(0.7f, ey - 0.12f, 0.16f, 0.25f, solid(eyeW));
-        c.rect(0.565f, ey - 0.05f, 0.07f, 0.13f, solid(pupil));
-        c.rect(0.79f, ey - 0.05f, 0.07f, 0.13f, solid(pupil));
-    } else {
-        c.ellipse(0.6f, ey, 0.1f, 0.12f, solid(eyeW));
-        c.ellipse(0.8f, ey, 0.08f, 0.1f, solid(eyeW));
-        c.dot(0.64f, ey, pupil, e >= 4 ? 2 : 1);
-        c.dot(0.82f, ey, pupil, e >= 4 ? 2 : 1);
-        c.capsule(0.62f, ey + 0.2f, 0.8f, ey + 0.18f, 0.03f, solid(pc(0x26305e, 0)));
-        if (e >= 4) c.dot(0.7f, ey + 0.2f, eyeW);
-    }
+    // two dim dots that might be eyes, never quite level
+    const float dy0[4] = {0.0f, 0.015f, 0.0f, -0.015f};
+    c.dot(cx + 0.0f, cy - 0.07f + dy0[frame], faint, dotPx);
+    c.dot(cx + 0.15f, cy - 0.04f - dy0[frame], faint, dotPx);
 }
 
+// The flyer: a memory book, a little worn hardback with its covers folded right back so the
+// pages fan out on both sides and beat like wings. A faded ribbon hangs from it like a tail
+// and one eye looks out of the cover.
 void drawFlyer(Canvas& c, int frame)
 {
+    const bool hurt = frame == FF_HURT;
     if (g_era == 0) {
+        // 8 x 8 by hand: the cover a light block with one dark eye, a fan of pages either side
+        // (level, up, level, down), the ribbon hanging under it
         static const Rows flap[4] = {
-            {"#......#", "##....##", ".##..##.", "..####..", "..##o#..", "...##...", "........", "........"},
-            {"........", "........", "###..###", ".######.", "..##o#..", "...##...", "........", "........"},
-            {"........", "........", "...##...", "..####..", ".###o##.", "##.##.##", "#......#", "........"},
-            {"........", "........", "###..###", ".######.", "..##o#..", "...##...", "........", "........"}};
-        if (frame == FF_HURT) stamp(c, {"........", "#......#", ".#.##.#.", "..####..", ".#o##o#.", "..####..", "...##...", "........"}, 0, 0);
+            {"........", "........", "..####..", "####o###", "#.####.#", "..####..", "...#....", "........"},
+            {"#......#", "##....##", ".######.", "..##o#..", "..####..", "..####..", "....#...", "........"},
+            {"........", "........", "..####..", "####o###", "#.####.#", "..####..", "....#...", "........"},
+            {"........", "........", "..####..", "..##o#..", ".######.", "##.##.##", "#..#...#", "........"}};
+        if (hurt) stamp(c, {"........", ".#....#.", "..####..", "..#oo#..", "#.####.#", ".#####.#", "#..#....", "........"}, 0, 0);
         else stamp(c, flap[frame % 4], 0, 0);
         return;
     }
     const int e = g_era;
-    Col body = pc(0xe8364f, 2), wing = pc(0x6a2c6e, 1), membrane = pc(0xb05aa0, 2);
-    Col eye = pc(0xfaf3e6, 3), pupil = pc(0x0f0d1a, 0);
-    if (frame == FF_HURT) { body = pc(0xfaf3e6, 3); wing = pc(0xf7d73a, 2); membrane = wing; }
-    float flap = frame == FF_HURT ? 0.0f : std::sin(frame * 1.5707963f);
-    float wy = 0.48f - 0.3f * flap;
-    // wings: two torn-paper sails
-    c.poly({{0.42f, 0.5f}, {0.02f, wy - 0.08f}, {0.08f, wy + 0.08f}, {0.2f, wy + 0.16f}}, lit(wing, false));
-    c.poly({{0.58f, 0.5f}, {0.98f, wy - 0.08f}, {0.92f, wy + 0.08f}, {0.8f, wy + 0.16f}}, lit(wing, false));
-    if (e >= 3) {
-        c.poly({{0.4f, 0.5f}, {0.12f, wy - 0.02f}, {0.22f, wy + 0.1f}}, solid(membrane));
-        c.poly({{0.6f, 0.5f}, {0.88f, wy - 0.02f}, {0.78f, wy + 0.1f}}, solid(membrane));
+    const int tp = TILE_PX[e];
+    const int eyePx = tp >= 64 ? 3 : (tp >= 32 ? 2 : 1);
+    const float px = 1.0f / tp;
+    Col cover = pc(0xa04a58, 1), coverD = farSide(cover), worn = pc(0xc87a80, 2);
+    Col page = pc(0xf4eedc, 3), pageD = pc(0xd2c6a8, 2), pageE = pc(0xa89a80, 1);
+    Col label = pc(0xead8a8, 3), ink = pc(0x2a1a1e, 0), ribbon = pc(0xd8a848, 2), white = pc(0xfaf3e6, 3);
+    if (e == 2) { cover = hex(0xe8364f); coverD = hex(0x6a2c6e); worn = hex(0xf28cb4); pageD = hex(0xf5c9a0); ribbon = hex(0xf7d73a); }
+    if (e == 3) { cover = hex(0xa02a3a); coverD = hex(0x5a1a2a); worn = hex(0xc06a8a); pageD = page; pageE = hex(0xc89a7a); }
+    if (e <= 2) pageE = pageD;   // low res: every page the same, split by a line of shade
+    if (hurt) { cover = pc(0xf0c8c8, 2); coverD = pc(0xc89aa0, 1); }
+
+    const float flap = hurt ? 0.0f : std::sin(frame * 1.5707963f);
+    const float a0 = hurt ? 0.95f : -(e <= 2 ? 0.9f : 0.8f) * flap;   // wing angle: negative is up
+    const int pages = e <= 2 ? 3 : 4;
+    const float spread = e <= 2 ? 0.34f : (hurt ? 0.36f : 0.26f);
+    const float bx = 0.5f, by = 0.5f + (hurt ? 0.04f : 0.03f * flap);
+    const float cw = e <= 2 ? 0.4f : 0.36f, ch = e <= 2 ? 0.5f : 0.46f;
+
+    // each wing: a fan of pages from behind the cover, back to front, alternating light and shade
+    auto wing = [&](float side) {
+        float wx = bx + side * (cw * 0.5f - 0.05f), wy = by - 0.03f;
+        for (int pass = 0; pass < 2; ++pass)
+            for (int i = pages - 1; i >= 0; --i) {
+                float k = i - (pages - 1) * 0.5f;
+                float a = a0 + k * spread;
+                float len = 0.42f - std::fabs(k) * 0.05f;
+                float dx = std::cos(a) * side, dy = std::sin(a);
+                float nx = -dy, ny = dx;   // across the page
+                float w0 = 0.05f, w1 = e <= 2 ? 0.1f : 0.085f;
+                Vector2 tip{wx + dx * len, wy + dy * len};
+                if (pass == 0)
+                    c.poly({{wx + nx * w0, wy + ny * w0}, {tip.x + nx * w1, tip.y + ny * w1}, {tip.x + dx * 0.03f, tip.y + dy * 0.03f},
+                            {tip.x - nx * w1, tip.y - ny * w1}, {wx - nx * w0, wy - ny * w0}}, solid(e <= 2 || i % 2 == 0 ? page : pageD));
+                else if (i > 0)   // where one page lies over the next: a thin line of shade
+                    c.capsule(wx + dx * 0.04f, wy + dy * 0.04f, tip.x - nx * w1 * 0.3f, tip.y - ny * w1 * 0.3f,
+                              (e <= 2 ? 0.55f : 0.5f) * px, solid(pageE));
+            }
+    };
+    wing(-1.0f);
+    wing(1.0f);
+    if (hurt && e >= 3)   // a page torn loose, fluttering off
+        c.poly({{0.7f, 0.1f}, {0.84f, 0.06f}, {0.87f, 0.17f}, {0.73f, 0.21f}}, solid(page));
+
+    // the ribbon bookmark hanging out of the bottom, swinging as it flies
+    const float rs = hurt ? 0.06f : 0.05f * std::cos(frame * 1.5707963f);
+    float rx0 = bx + 0.06f, ry0 = by + ch * 0.5f - 0.02f, rx1 = rx0 + rs, ry1 = by + ch * 0.5f + 0.18f;
+    float rw = std::max(0.03f, 0.75f * px);
+    c.poly({{rx0 - rw, ry0}, {rx0 + rw, ry0}, {rx1 + rw * 1.2f, ry1}, {rx1, ry1 - 0.04f}, {rx1 - rw * 1.2f, ry1}}, solid(ribbon));
+
+    // the cover: worn cloth over board, the spine down its back edge
+    float x0 = bx - cw * 0.5f, y0 = by - ch * 0.5f;
+    c.rect(x0, y0, cw, ch, lit(cover), e >= 4 ? 0.035f : 0.0f);
+    float sw = std::max(0.07f, 1.0f * px);
+    c.rect(x0, y0, sw, ch, solid(coverD), e >= 4 ? 0.02f : 0.0f);   // spine
+    if (e >= 3) {   // bands on the spine, rubbed corners on the cloth
+        c.rect(x0, y0 + 0.07f, sw, px, solid(ribbon));
+        c.rect(x0, y0 + ch - 0.08f, sw, px, solid(ribbon));
+        c.poly({{x0 + cw - 0.08f, y0}, {x0 + cw, y0}, {x0 + cw, y0 + 0.08f}}, solid(worn));
+        c.poly({{x0 + cw - 0.07f, y0 + ch}, {x0 + cw, y0 + ch}, {x0 + cw, y0 + ch - 0.07f}}, solid(worn));
     }
-    // body
-    if (e <= 2) c.poly({{0.5f, 0.2f}, {0.78f, 0.5f}, {0.5f, 0.82f}, {0.22f, 0.5f}}, lit(body));
+    if (e >= 4) {   // threadbare patches
+        c.dot(x0 + 0.13f, y0 + ch - 0.07f, worn, 1);
+        c.dot(x0 + 0.25f, y0 + ch - 0.12f, worn, 1);
+    }
+    // a paper label on the cover, with a line of faded writing
+    if (e <= 2) c.rect(x0 + sw + px, y0 + px, cw - sw - 2 * px, px, solid(label));
     else {
-        c.ellipse(0.5f, 0.52f, 0.25f, 0.27f, lit(body));
-        c.poly({{0.44f, 0.74f}, {0.56f, 0.74f}, {0.5f, 0.9f}}, lit(body));   // tail spike
+        c.rect(x0 + 0.1f, y0 + 0.06f, cw - 0.16f, 0.11f, solid(label), 0.01f);
+        c.rect(x0 + 0.13f, y0 + 0.1f, cw - 0.22f, px, solid(pageE));
     }
-    if (e >= 4) {   // feelers
-        c.capsule(0.46f, 0.3f, 0.38f, 0.14f, 0.02f, solid(farSide(body)));
-        c.capsule(0.56f, 0.3f, 0.64f, 0.14f, 0.02f, solid(farSide(body)));
-    }
-    // one big eye
-    if (e <= 2) {
-        c.rect(0.46f, 0.38f, 0.22f, 0.22f, solid(eye));
-        c.rect(0.58f, 0.44f, 0.08f, 0.1f, solid(pupil));
+    // the one eye, looking ahead
+    float ex = x0 + cw * 0.6f, ey = y0 + ch * 0.64f;
+    if (hurt) {
+        if (e <= 3) {   // a small pixel X
+            int n = e <= 2 ? 1 : 2;
+            for (int i = -n; i <= n; ++i) { c.dot(ex + i * px, ey + i * px, ink); c.dot(ex + i * px, ey - i * px, ink); }
+        } else {
+            float w = 1.1f * px;
+            c.capsule(ex - 0.07f, ey - 0.05f, ex + 0.07f, ey + 0.05f, w, solid(ink));
+            c.capsule(ex - 0.07f, ey + 0.05f, ex + 0.07f, ey - 0.05f, w, solid(ink));
+        }
+    } else if (e <= 2) {
+        c.rect(ex - 1.5f * px, ey - px, 3 * px, 2 * px, solid(white));
+        c.dot(ex + 0.5f * px, ey - 0.5f * px, ink);
     } else {
-        c.circle(0.56f, 0.48f, 0.12f, solid(eye));
-        c.dot(0.6f, 0.48f, pupil, e >= 4 ? 2 : 1);
+        c.ellipse(ex, ey, 0.09f, 0.075f, solid(white));
+        c.dot(ex + 0.03f, ey - 0.01f, ink, eyePx);
+        if (e >= 4) c.rect(ex - 0.1f, ey - 0.1f, 0.2f, px, solid(coverD));   // a heavy lid
     }
 }
 
+// The brute: a grandfather clock come off the wall. A tall wooden longcase (a hood with a
+// round face, a narrow trunk with a glass door and the pendulum swinging behind it, a plinth)
+// stumping along on two short feet, scowling out of its own clock face. To charge it leans
+// right over and the pendulum swings hard.
 void drawBrute(Canvas& c, int frame)
 {
+    const bool hurt = frame == RF_HURT, charge = frame == RF_CHARGE;
     if (g_era == 0) {
-        Rows top = {"................", "................", ".....######.....", "...##########...", "..############..",
-                    "..#########o#o#.", ".##############.", "################", "##::::::::::::##",
-                    "##.:::::::::::.#", "##.:::::::::::.#", "##.:::::::::::.#", "....########...."};
-        static const Rows legs[4] = {{"....###..###....", "....###..###....", "...####..####..."},
-                                     {"....###...###...", "...###....###...", "..####....####.."},
-                                     {"....###..###....", "....###..###....", "...####..####..."},
-                                     {"...###...###....", "...###....###...", "..####....####.."}};
-        if (frame == RF_HURT)
-            for (auto& r : top) for (auto& ch : r) if (ch == ':') ch = '#';
-        if (frame == RF_CHARGE) { top = shiftRight(top, 1); top[5] = "...#########oo#o"; }
-        stamp(c, top, 0, 0);
-        stamp(c, legs[frame <= RF_WALK3 ? frame : 0], 0, 13);
+        // 16 x 16 by hand: crest, hood round a white face, a narrow trunk with the pendulum behind
+        // dark glass, plinth, feet. 'f' the face (light; dark when hurt), 'h' brows, eyes and the
+        // hands (dark; light when hurt), 'g' the glass.
+        static const Rows clock = {
+            "......####......",
+            "..############..",
+            "..###oooooo###..",
+            "..##offffffo##..",
+            "..#ohhffffhho#..",
+            "..#ofhhffhhfo#..",
+            "..#offffffffo#..",
+            "..#offfhhfffo#..",
+            "..##ofhffhfo##..",
+            "..###oooooo###..",
+            "..############..",
+            "....#gggggg#....",
+            "....#gggggg#....",
+            "....#gggggg#....",
+            "...##########..."};
+        static const Rows feet[4] = {{"...###...###...."}, {"....###.###....."}, {"....###...###..."}, {"....###.###....."}};
+        Rows g = clock;
+        // the pendulum: rod and a two-pixel bob, swinging (flung back on the charge)
+        const int bob[RF_COUNT] = {7, 8, 7, 6, 8, 5};
+        g[11][8] = '#';
+        g[12][bob[frame] < 7 ? 7 : (bob[frame] > 7 ? 9 : 8)] = '#';
+        g[13][bob[frame]] = '#';
+        g[13][bob[frame] + 1] = '#';
+        for (auto& row : g)
+            for (auto& ch : row) {
+                if (ch == 'f') ch = hurt ? 'o' : '#';
+                else if (ch == 'h') ch = hurt ? '#' : 'o';
+                else if (ch == 'g') ch = 'o';
+            }
+        Rows ft = feet[frame <= RF_WALK3 ? frame : 0];
+        if (charge) {   // leaning right in: the higher the row, the further forward
+            for (int y = 0; y < (int)g.size(); ++y) {
+                int s = y < 4 ? 2 : (y < 11 ? 1 : 0);
+                if (s) g[y] = shiftRight(Rows{g[y]}, s)[0];
+            }
+            ft = {"..###....###...."};
+        }
+        stamp(c, g, 0, 0);
+        stamp(c, ft, 0, 15);
         return;
     }
     const int e = g_era;
-    Col fog = pc(0x6e6a8e, 1), fogL = pc(0xa8a4c8, 2), eye = pc(0xff4040, 3), deep = farSide(fog);
-    if (frame == RF_HURT) { fog = pc(0xd8d4f0, 2); fogL = pc(0xffffff, 3); deep = farSide(fog); }
-    float lean = frame == RF_CHARGE ? 0.16f : 0.0f;
-    float step = (frame <= RF_WALK3) ? 0.1f * std::sin(frame * 1.5707963f) : 0.0f;
-    float rad = e <= 2 ? 0.12f : 0.16f;
-    // legs
-    c.rect(0.58f + step, 1.5f, 0.32f, 0.46f, lit(deep, false), rad);
-    c.rect(1.1f - step, 1.5f, 0.32f, 0.46f, lit(deep, false), rad);
-    // far arm
-    c.capsule(0.62f + lean, 0.95f, 0.36f + lean - step, 1.46f, 0.16f, lit(deep));
-    c.circle(0.36f + lean - step, 1.5f, 0.19f, lit(deep));
-    // body and head
-    if (e <= 2) {
-        c.rect(0.42f + lean, 0.62f, 1.2f, 1.04f, lit(fog), 0.3f);
-        c.rect(0.82f + lean, 0.28f, 0.74f, 0.56f, lit(fogL), 0.22f);
+    const int tp = TILE_PX[e];
+    Col wood = pc(0xa26a3c, 2), woodD = pc(0x6e4026, 1), woodL = pc(0xc8925a, 3), side = farSide(wood);
+    Col brass = pc(0xe0b04a, 3), dial = pc(0xf4e8cc, 3), glass = pc(0x2e2a3e, 0), ink = pc(0x2a1a14, 0);
+    Col eye = pc(0xe8364f, 0);
+    if (e == 1) { side = tone(1); woodD = tone(1); woodL = tone(3); brass = tone(3); }
+    if (e == 2) { wood = hex(0x8c4a2f); woodD = hex(0x5a5468); side = hex(0x6a2c6e); woodL = hex(0xf28a1e); brass = hex(0xf7d73a);
+                  dial = hex(0xfaf3e6); glass = hex(0x26305e); ink = hex(0x0f0d1a); eye = hex(0xe8364f); }
+    if (hurt) { wood = pc(0xf0d8c0, 3); woodD = pc(0xc8a888, 2); side = pc(0xd8bca0, 2); woodL = pc(0xffffff, 3); }
+
+    const float ph = frame * 1.5707963f;
+    const float step = frame <= RF_WALK3 ? std::sin(ph) : 0.0f;
+    float lean = charge ? 0.24f : (hurt ? -0.07f : 0.03f * step);   // radians, positive leans forward
+    float bob = frame <= RF_WALK3 ? -0.035f * std::fabs(step) : 0.0f;
+    float swing = charge ? -0.17f : (hurt ? 0.14f : 0.12f * std::cos(ph));   // pendulum bob offset
+    const float pvx = 1.0f, pvy = 1.84f;   // the case tips about its base
+    const float cs = std::cos(lean), sn = std::sin(lean);
+    auto P = [&](float x, float y) {
+        float dx = x - pvx, dy = y + bob - pvy;
+        return Vector2{pvx + dx * cs - dy * sn, pvy + dx * sn + dy * cs};
+    };
+    auto box = [&](float x, float y, float w, float h, const Fill& f, float ch = 0) {
+        if (ch <= 0) { c.poly({P(x, y), P(x + w, y), P(x + w, y + h), P(x, y + h)}, f); return; }
+        c.poly({P(x + ch, y), P(x + w - ch, y), P(x + w, y + ch), P(x + w, y + h - ch), P(x + w - ch, y + h),
+                P(x + ch, y + h), P(x, y + h - ch), P(x, y + ch)}, f);
+    };
+    auto circ = [&](float x, float y, float r, const Fill& f) { Vector2 p = P(x, y); c.circle(p.x, p.y, r, f); };
+    auto ell = [&](float x, float y, float rx, float ry, const Fill& f) { Vector2 p = P(x, y); c.ellipse(p.x, p.y, rx, ry, f); };
+    auto line = [&](float x0, float y0, float x1, float y1, float r, const Fill& f) {
+        Vector2 a = P(x0, y0), b = P(x1, y1);
+        c.capsule(a.x, a.y, b.x, b.y, r, f);
+    };
+    const float thin = std::max(0.02f, 0.75f / tp);
+
+    // feet: two short stubby ones
+    {
+        float lift0 = frame <= RF_WALK3 ? 0.07f * std::max(0.0f, step) : 0.0f;
+        float lift1 = frame <= RF_WALK3 ? 0.07f * std::max(0.0f, -step) : 0.0f;
+        float f0 = 0.66f + 0.07f * step, f1 = 1.08f - 0.07f * step;
+        if (charge) { f0 = 0.52f; f1 = 1.24f; }
+        c.rect(f0, 1.8f - lift0, 0.28f, 0.18f, lit(woodD, false), 0.07f);
+        c.rect(f1, 1.8f - lift1, 0.28f, 0.18f, lit(woodD, false), 0.07f);
+    }
+    // the side of the case, so it stands turned a little toward the way it walks
+    box(0.43f, 1.5f, 0.1f, 0.3f, solid(side));
+    box(0.56f, 0.86f, 0.1f, 0.66f, solid(side));
+    box(0.42f, 0.22f, 0.1f, 0.68f, solid(side));
+    // plinth
+    box(0.5f, 1.5f, 1.0f, 0.3f, lit(wood));
+    box(0.5f, 1.72f, 1.0f, 0.08f, solid(woodD));
+    box(0.47f, 1.47f, 1.06f, 0.06f, solid(woodL));
+    // trunk with its glass door; the pendulum swings behind the glass
+    box(0.64f, 0.86f, 0.72f, 0.64f, lit(wood));
+    box(0.74f, 0.93f, 0.52f, 0.5f, solid(glass), e >= 3 ? 0.04f : 0.0f);
+    {
+        float bx = 1.0f + swing, byy = 1.28f;
+        line(1.0f, 0.93f, bx, byy - 0.06f, thin, solid(brass));
+        circ(bx, byy, e <= 2 ? 0.09f : 0.08f, lit(brass));
+    }
+    if (e >= 3) line(0.8f, 1.1f, 0.92f, 0.97f, thin, solid(withA(mixc(glass, dial, 0.45f), 1.0f)));   // a glint on the glass
+    if (e >= 4) circ(1.22f, 1.18f, 0.02f, solid(brass));   // the door's keyhole
+    // hood: cornice, a gentle arched crest and brass finials
+    ell(1.0f, 0.24f, 0.44f, 0.16f, lit(wood));
+    box(0.48f, 0.2f, 1.04f, 0.7f, lit(wood));
+    box(0.44f, 0.17f, 1.12f, 0.07f, solid(woodL));
+    box(0.46f, 0.84f, 1.08f, 0.06f, solid(woodD));
+    circ(0.5f, 0.12f, 0.05f, lit(brass));
+    circ(1.5f, 0.12f, 0.05f, lit(brass));
+    circ(1.0f, 0.06f, 0.055f, lit(brass));
+    // the clock face is its face
+    const float fx = 1.03f, fy = 0.54f;
+    if (e <= 3) {
+        // low res: the face placed pixel by pixel (8 x 8 inside a one-pixel brass ring):
+        // 'o' the brows and the hands (twenty past eight, a scowl), 'e' the eyes
+        const float dr = 4.4f / tp;
+        circ(fx, fy, dr + 1.1f / tp, solid(e == 1 ? tone(1) : brass));
+        circ(fx, fy, dr, solid(dial));
+        Rows face = {"........", "oo....oo", "..o..o..", ".ee..ee.", "........", "...oo...", "..o..o..", "........"};
+        if (charge) { face[1] = "........"; face[2] = "oo....oo"; face[3] = ".ee..ee."; face[4] = ".ee..ee."; }
+        if (hurt) { face[3] = ".oo..oo."; }
+        Col eyeLo = e == 1 ? tone(1) : eye;
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 8; ++x) {
+                char ch = face[y][x];
+                if (ch == '.') continue;
+                Vector2 p = P(fx + (x - 3.5f) / tp, fy + (y - 3.5f) / tp);
+                c.dot(p.x, p.y, ch == 'e' ? eyeLo : ink);
+            }
     } else {
-        c.ellipse(1.0f + lean, 1.12f, 0.62f, 0.56f, lit(fog));
-        c.ellipse(1.18f + lean, 0.58f, 0.42f, 0.36f, lit(fogL));
-        if (e >= 4) {   // cracks of static across the chest
-            Col crack = farSide(deep);
-            c.capsule(0.7f + lean, 0.96f, 0.86f + lean, 1.08f, 0.025f, solid(crack));
-            c.capsule(0.86f + lean, 1.08f, 0.8f + lean, 1.26f, 0.025f, solid(crack));
-            c.capsule(1.1f + lean, 1.3f, 1.26f + lean, 1.4f, 0.025f, solid(crack));
+        circ(fx, fy, 0.31f, solid(brass));
+        circ(fx, fy, 0.27f, litFace(dial));
+        for (int i = 0; i < 12; ++i)   // hour marks
+            if (i == 0 || i == 6 || (i >= 2 && i <= 4) || (i >= 8 && i <= 10)) {
+                float a = i * 0.5235988f;
+                Vector2 p = P(fx + std::sin(a) * 0.225f, fy - std::cos(a) * 0.225f);
+                c.dot(p.x, p.y, woodD, e >= 5 ? 2 : 1);
+            }
+        // brows: heavy, slanting down to the middle (lower still when it charges)
+        float bl = charge ? 0.04f : 0.0f;
+        float bw = std::max(0.03f, 1.6f / tp);
+        line(fx - 0.19f, fy - 0.19f + bl * 0.4f, fx - 0.04f, fy - 0.11f + bl, bw, solid(ink));
+        line(fx + 0.19f, fy - 0.19f + bl * 0.4f, fx + 0.04f, fy - 0.11f + bl, bw, solid(ink));
+        // eyes under them
+        if (hurt) {
+            line(fx - 0.15f, fy - 0.04f, fx - 0.06f, fy - 0.05f, bw * 0.7f, solid(ink));
+            line(fx + 0.06f, fy - 0.05f, fx + 0.15f, fy - 0.04f, bw * 0.7f, solid(ink));
+        } else {
+            float er = charge ? 0.055f : 0.045f;
+            ell(fx - 0.1f, fy - 0.03f, er, er * 0.9f, solid(eye));
+            ell(fx + 0.1f, fy - 0.03f, er, er * 0.9f, solid(eye));
+            c.dot(P(fx - 0.11f, fy - 0.05f).x, P(fx - 0.11f, fy - 0.05f).y, dial, 1);
+            c.dot(P(fx + 0.09f, fy - 0.05f).x, P(fx + 0.09f, fy - 0.05f).y, dial, 1);
         }
+        // the hands make the scowl: twenty past eight, an upside-down V
+        float hw = std::max(0.02f, 1.0f / tp);
+        line(fx, fy + 0.07f, fx - 0.13f, fy + 0.17f, hw, solid(ink));
+        line(fx, fy + 0.07f, fx + 0.16f, fy + 0.19f, hw, solid(ink));
+        circ(fx, fy + 0.07f, std::max(0.025f, 1.2f / tp), solid(brass));
     }
-    // brow and eyes
-    float ey = frame == RF_CHARGE ? 0.6f : 0.58f;
-    c.rect(1.1f + lean, ey - 0.13f, 0.5f, 0.07f, solid(deep));
-    float eh = frame == RF_CHARGE ? 0.1f : 0.07f;
-    if (e <= 2) {
-        c.rect(1.2f + lean, ey - eh / 2, 0.12f, eh + 0.02f, solid(eye));
-        c.rect(1.44f + lean, ey - eh / 2, 0.1f, eh + 0.02f, solid(eye));
-    } else {
-        c.ellipse(1.27f + lean, ey, 0.08f, eh, solid(eye));
-        c.ellipse(1.5f + lean, ey + 0.01f, 0.07f, eh * 0.9f, solid(eye));
+    // a charge: dust kicked up behind
+    if (charge && e >= 2) {
+        c.circle(0.3f, 1.9f, 0.08f, solid(woodL));
+        c.circle(0.16f, 1.86f, 0.06f, solid(woodL));
     }
-    // near arm and fist
-    c.capsule(1.36f + lean, 0.95f, 1.64f + lean + step, 1.42f, 0.17f, lit(fogL));
-    c.circle(1.66f + lean + step, 1.48f, 0.2f, lit(fogL));
 }
 
 void drawBoss(Canvas& c, int frame)
