@@ -11,13 +11,13 @@ void PlayerTuning::load()
     const Config& c = config();
     runSpeed = c.f("player.run_speed", 7.5f);
     accelGround = c.f("player.accel_ground", 70.0f);
-    accelAir = c.f("player.accel_air", 45.0f);
-    gravity = c.f("player.gravity", 52.0f);
-    jumpSpeed = c.f("player.jump_speed", 19.0f);
+    accelAir = c.f("player.accel_air", 60.0f);
+    gravity = c.f("player.gravity", 50.0f);
+    jumpSpeed = c.f("player.jump_speed", 18.8f);
     jumpCut = c.f("player.jump_cut_speed", 7.0f);
     maxFall = c.f("player.max_fall", 22.0f);
-    coyote = c.f("player.coyote_time", 0.1f);
-    jumpBuffer = c.f("player.jump_buffer", 0.12f);
+    coyote = c.f("player.coyote_time", 0.14f);
+    jumpBuffer = c.f("player.jump_buffer", 0.16f);
     doubleJumpSpeed = c.f("abilities.double_jump_speed", 16.5f);
     dashSpeed = c.f("abilities.dash_speed", 21.0f);
     dashTime = c.f("abilities.dash_time", 0.2f);
@@ -32,6 +32,8 @@ void PlayerTuning::load()
     attackTime = c.f("player.attack_time", 0.18f);
     attackCooldown = c.f("player.attack_cooldown", 0.35f);
     speedBoost = c.f("powerups.speed_mult", 1.4f);
+    wallJumpLock = c.f("abilities.wall_jump_lock", 0.14f);
+    wallJumpGrace = c.f("abilities.wall_jump_grace", 0.1f);
 }
 
 bool boxHitsSolid(const Level& level, float x, float y, float w, float h, int player, bool solo)
@@ -53,6 +55,8 @@ void Player::spawnAt(float px, float feetY)
     pounding = gliding = wallSliding = false;
     onGround = false;
     airJumps = 0;
+    wallGrace = 0;
+    lastWallDir = 0;
 }
 
 void Player::update(const PlayerInput& in, Level& level, bool solo, bool attackUnlocked, float dt, const PlayerTuning& t)
@@ -68,20 +72,35 @@ void Player::update(const PlayerInput& in, Level& level, bool solo, bool attackU
     int move = (in.right ? 1 : 0) - (in.left ? 1 : 0);
 
     // ---- abilities and attack
+    // Movement abilities need no extra button: double jump and wall jump are the jump button,
+    // glide is holding jump while falling, ground pound is a fresh press of down in the air.
+    // The ability button is only for dash and the time-slow pulse:
+    // standing still on the ground = time-slow (if ready), otherwise dash.
+    const bool downPressed = in.down && !downWas;
+    downWas = in.down;
+    const bool air = !onGround;
+    if (canAct && downPressed && air && has[AB_GROUND_POUND] && !pounding && dashTime <= 0) {
+        pounding = true;
+        vy = 0;
+    }
     if (canAct && in.abilityPressed) {
-        bool air = !onGround;
+        const bool slowReady = has[AB_TIME_SLOW] && slowCooldown <= 0;
+        const bool dashReady = has[AB_DASH] && dashCooldown <= 0 && dashTime <= 0;
         if (in.down) {
+            // old Down + Ability combo still works (the autoplay bots use it), but nobody needs it
             if (air && has[AB_GROUND_POUND] && !pounding) { pounding = true; dashTime = 0; vy = 0; }
-            else if (has[AB_TIME_SLOW] && slowCooldown <= 0) evSlowRequest = true;
-        } else {
-            if (has[AB_DASH] && dashCooldown <= 0 && dashTime <= 0) {
-                dashTime = t.dashTime;
-                dashCooldown = t.dashCooldown;
-                if (move) facing = move;
-                evDash = true;
-                pounding = false;
-            } else if (air && has[AB_GROUND_POUND] && !pounding) { pounding = true; vy = 0; }
-            else if (!has[AB_DASH] && !has[AB_GROUND_POUND] && has[AB_TIME_SLOW] && slowCooldown <= 0) evSlowRequest = true;
+            else if (slowReady) evSlowRequest = true;
+        } else if (slowReady && (!has[AB_DASH] || (!air && move == 0))) {
+            evSlowRequest = true;
+        } else if (dashReady) {
+            dashTime = t.dashTime;
+            dashCooldown = t.dashCooldown;
+            if (move) facing = move;
+            evDash = true;
+            pounding = false;
+        } else if (!has[AB_DASH] && air && has[AB_GROUND_POUND] && !pounding) {
+            pounding = true;   // no dash yet: the ability button also pounds in the air
+            vy = 0;
         }
     }
     if (canAct && attackUnlocked && in.attackPressed && attackCooldown <= 0) {
@@ -116,12 +135,15 @@ void Player::update(const PlayerInput& in, Level& level, bool solo, bool attackU
             jumpBuffer = coyote = 0;
             onGround = false;
             evJump = true;
-        } else if (canAct && has[AB_WALL_JUMP] && wallDir != 0) {
+        } else if (canAct && has[AB_WALL_JUMP] && (wallDir != 0 || (wallGrace > 0 && lastWallDir != 0))) {
+            int wd = wallDir != 0 ? wallDir : lastWallDir;
             vy = -t.wallJumpVy;
-            vx = -wallDir * t.wallJumpVx;
-            facing = -wallDir;
-            wallLock = 0.16f;
+            vx = -wd * t.wallJumpVx;
+            facing = -wd;
+            wallLock = t.wallJumpLock;
             jumpBuffer = 0;
+            wallGrace = 0;
+            lastWallDir = 0;
             airJumps = 0;
             evWallJump = true;
         } else if (canAct && has[AB_DOUBLE_JUMP] && airJumps < 1) {
@@ -191,6 +213,9 @@ void Player::update(const PlayerInput& in, Level& level, bool solo, bool attackU
         if (boxHitsSolid(level, x + 0.06f, y + 0.1f, w, h - 0.3f, pid, solo)) wallDir = 1;
         else if (boxHitsSolid(level, x - 0.06f, y + 0.1f, w, h - 0.3f, pid, solo)) wallDir = -1;
     }
+    if (wallDir != 0) { lastWallDir = wallDir; wallGrace = t.wallJumpGrace; }
+    else if (onGround) { lastWallDir = 0; wallGrace = 0; }
+    else wallGrace = std::max(0.0f, wallGrace - dt);
 
     // ---- animation frame
     using namespace art;
