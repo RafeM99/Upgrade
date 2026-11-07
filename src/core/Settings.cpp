@@ -8,18 +8,17 @@
 
 namespace {
 
-// key, section, number of choices, default. The defaults are the game's original look.
+// key, section, number of choices, default. The defaults are the game's own look.
 const SettingInfo INFO[SET_COUNT] = {
     {"fullscreen", 0, 2, 0},
     {"vsync", 0, 2, 1},
     {"fps_cap", 0, 4, 1},        // 30 / 60 / 120 / unlimited
     {"show_fps", 0, 2, 0},
-    {"retro", 1, 3, 2},          // off / light / full
-    {"bloom", 1, 2, 1},
+    {"retro", 1, 3, 0},          // off / light / full (off: every stage drawn clean)
+    {"bloom", 1, 2, 0},          // 2.5D and 3D glow
     {"beat_pulse", 1, 3, 2},     // off / low / full
     {"shake", 1, 3, 2},          // off / 50% / 100%
     {"particles", 1, 3, 1},      // low / normal / high
-    {"pixel_scale", 1, 2, 0},    // sharp / integer only
     {"brightness", 1, 9, 4},     // 80% .. 120% in 5% steps
     {"volume", 2, 11, 10},       // 0% .. 100% in 10% steps
 };
@@ -79,7 +78,6 @@ std::string Settings::valueText(int id) const
     case SET_BEAT: { const char* k[3] = {"opt_off", "opt_low", "opt_full"}; return T(k[v]); }
     case SET_SHAKE: return v == 0 ? std::string(T("opt_off")) : pct(v * 50);
     case SET_PARTICLES: { const char* k[3] = {"opt_low", "opt_normal", "opt_high"}; return T(k[v]); }
-    case SET_PIXEL_SCALE: return T(v ? "opt_integer" : "opt_sharp");
     case SET_BRIGHTNESS: return pct(80 + v * 5);
     case SET_VOLUME: return pct(v * 10);
     }

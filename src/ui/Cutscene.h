@@ -1,6 +1,8 @@
-// Cutscene.h (akshat): Pokemon-style story scenes. A dialogue box with a typewriter and
-// voice blips, big pixel portraits of whoever is talking, and a wild-battle style
-// "VS" intro for the bosses. Scenes are written in assets/cutscenes.txt.
+// Cutscene.h (akshat): Pokemon-style boss scenes. A wild-battle style "VS" intro when a boss
+// appears, then a dialogue box with a typewriter, voice blips and big portraits of whoever is
+// talking (from the current stage's sprite sheets); a short talk when the boss is beaten.
+// Scenes are written in assets/cutscenes.txt. The story itself (prologue, memory cards, ending)
+// is told by ui/Story; these scenes only belong to the three bosses.
 // While a scene is active the Game stops updating the world (it keeps drawing it).
 #pragma once
 #include "raylib.h"
@@ -17,7 +19,11 @@ class Game;
 class Cutscene {
 public:
     void load(const std::string& path);
-    void resetRun() { played_.clear(); }   // every scene may play again (new run)
+    void unload();
+    void resetRun() { played_.clear(); queue_.clear(); then_.clear(); cur_ = nullptr; }   // new run
+
+    // The scene id of the boss of stage `kind` ("school_bell", "last_train", "hourglass"), or "".
+    static std::string bossId(int kind);
 
     // Queue a scene. Each plays once per run. Returns false when it will not play
     // (unknown, already played, or cutscenes are off in an automated test run).
@@ -57,7 +63,7 @@ private:
     std::string rightWho_;        // who stands in the right portrait slot
     float rightIn_ = 0, leftIn_ = 0;
     float stashBanner_ = 0;
-    Texture2D oneBit_[4]{};       // 1-bit portraits made from the 8-bit sheets (gran, sam, alarm, hourglass)
+    Texture2D hourglass_{};       // stage 6 has no boss sprite sheet: the Hourglass's portrait
 
     void begin(Game& g, const Scene* s);
     void finish(Game& g);

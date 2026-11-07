@@ -2,12 +2,13 @@
 // Saved to settings.ini next to the executable, never to assets/config.ini.
 // Each option is a small index into a list of choices; the getters turn that into
 // the number the renderer, camera, particles or window actually use.
+// No pixel-scaling option: the renderer always scales the pixel stages by a whole number.
 #pragma once
 #include <string>
 
 enum SettingId {
     SET_FULLSCREEN, SET_VSYNC, SET_FPS_CAP, SET_SHOW_FPS,                                  // display
-    SET_RETRO, SET_BLOOM, SET_BEAT, SET_SHAKE, SET_PARTICLES, SET_PIXEL_SCALE, SET_BRIGHTNESS,   // graphics
+    SET_RETRO, SET_BLOOM, SET_BEAT, SET_SHAKE, SET_PARTICLES, SET_BRIGHTNESS,   // graphics
     SET_VOLUME,                                                                            // audio
     SET_COUNT
 };
@@ -40,12 +41,11 @@ public:
     bool vsync() const { return v_[SET_VSYNC] != 0; }
     int fpsCap() const;                    // 0 = unlimited
     bool showFps() const { return v_[SET_SHOW_FPS] != 0; }
-    float retro() const;                   // 0, 0.5, 1: LCD grid / scanlines / vignette strength
+    float retro() const;                   // 0, 0.5, 1: LCD grid / scanlines / vignette strength (off = main's clean look)
     bool bloom() const { return v_[SET_BLOOM] != 0; }
     float beatMul() const;                 // 0, 0.5, 1
     float shakeMul() const;                // 0, 0.5, 1
     float particleMul() const;             // 0.4, 1, 1.75
-    bool integerScale() const { return v_[SET_PIXEL_SCALE] != 0; }
     float brightness() const;              // 0.8 .. 1.2
     float volume() const;                  // 0 .. 1
 

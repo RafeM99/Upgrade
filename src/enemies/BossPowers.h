@@ -6,7 +6,10 @@
 //   3 The Storm          HEAVY RAIN     time drags for the players in the rain (they move slowly)
 //   4 The Last Train     ECHOES         every charge is followed by echoes of itself on the same line
 //   5 The Scarecrow      HARVEST RUSH   the day races by: it calls crows and they fly fast
-//   6 The Forgetting     PULL BACK      pulls the players back to where they were a few seconds ago
+//   6 The Hourglass      SANDS RUN BACK pulls the players back to where they were a few seconds ago
+//
+// Only stages 2, 4 and 6 have a boss by default ([boss] stages in config.ini); the others keep
+// their powers in case a stage is given a boss again.
 //
 // Every active power is announced first: the boss stops and pulses, and the HUD names it.
 // How strong they are depends on the difficulty (title screen, --difficulty, [game] difficulty).

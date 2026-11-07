@@ -108,7 +108,7 @@ void Game::applyBossPower()
         particles.burst(boss.x, boss.y, 30, Color{240, 200, 110, 255}, 7, 0.6f, 0.16f);
         break;
     }
-    case 6: { // the Forgetting pulls the players back a few seconds
+    case 6: { // the Hourglass runs its sand back: the players lose a few seconds
         const int back = (int)std::lround(tu.pullBack * 10);
         for (int p = 0; p < 2; ++p) {
             pullPath_[p].clear();

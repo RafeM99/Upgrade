@@ -73,31 +73,35 @@ power_name_3 = HEAVY RAIN! Time drags!
 power_name_4 = ECHOES of the last train!
 power_warn_5 = The sun is sinking fast...
 power_name_5 = HARVEST RUSH! The crows fly fast!
-power_warn_6 = It is pulling you back...
-power_name_6 = PULLED BACK! It took your last few seconds!
+power_warn_6 = The sand is running back...
+power_name_6 = SANDS RUN BACK! It took your last few seconds!
 
 difficulty_label = DIFFICULTY
 difficulty_0 = GENTLE
 difficulty_1 = MEDIUM
 difficulty_2 = HARD
+
+# boss scenes (akshat): the dialogue lines themselves live in assets/cutscenes.txt
+cutscene_skip = Hold JUMP to skip  .  ESC skips all
 difficulty_desc_0 = Boss powers are short and clearly announced. Up / Down to change
 difficulty_desc_1 = Boss powers can hurt you if you ignore them. Up / Down to change
 difficulty_desc_2 = Strong, frequent powers, and every boss takes one more hit. Up / Down to change
-# One boss for each memory: the Forgetting takes the shape of something in it.
+# Three memories have a boss ([boss] stages in config.ini: 2, 4 and 6): the Forgetting takes the
+# shape of something in it. Names 0, 1, 3 and 5 are only used if a stage is added there.
 boss_name_0 = THE 3 A.M. CLOCK
 boss_name_1 = THE EMPTY SHIRT
 boss_name_2 = THE SCHOOL BELL
 boss_name_3 = THE STORM
 boss_name_4 = THE LAST TRAIN
 boss_name_5 = THE SCARECROW
-boss_name_6 = THE FORGETTING
+boss_name_6 = THE HOURGLASS
 boss_says_0 = "Up you get, Edie. You're late for work. Late, late, late."
 boss_says_1 = "He isn't coming in, Edie. Let the wind have him."
 boss_says_2 = "Whose little boy is this? Nobody's. Ring him away."
 boss_says_3 = "Blow the tent down. Blow the whole night away."
 boss_says_4 = "Miss me, Edie, and you never meet him."
 boss_says_5 = "Stay in the field. Stay twelve. Stay nobody's."
-boss_says_6 = "Let go of the first one, and all the rest will follow."
+boss_says_6 = "Every grain is a day, Edie. Look how few are left at the top."
 
 powerup_0 = KEEPSAKE LOCKET
 powerup_desc_0 = Protects you from one hit.
@@ -211,3 +215,44 @@ end_4 = GRAN: Look at you. When did you get so tall?
 end_5 = SAM: A while ago. Sit down, I'll tell you all about it.
 end_close_1 = Alzheimer's takes the newest memories first. The oldest ones stay the longest.
 end_close_2 = Ask about the old days. Sit, and listen. They are still in there.
+
+# ---- settings menu (akshat)
+title_settings = O / Tab / Select: Settings
+settings_item = Settings
+settings = SETTINGS
+settings_display = DISPLAY
+settings_graphics = GRAPHICS
+settings_audio = AUDIO
+settings_back = Back
+settings_back_desc = Save your settings and go back.
+settings_hint = Up/Down choose   Left/Right change   Enter toggle   Esc back
+set_fullscreen = Fullscreen
+set_fullscreen_desc = Fill the whole screen (borderless).
+set_vsync = VSync
+set_vsync_desc = Sync frames to the monitor to stop tearing.
+set_fps_cap = Frame cap
+set_fps_cap_desc = Most frames drawn per second. The game runs at 60.
+set_show_fps = Show FPS
+set_show_fps_desc = Frames per second in the bottom-left corner.
+set_retro = Retro screen effects
+set_retro_desc = LCD grid, CRT scanlines and a vignette.
+set_bloom = Bloom
+set_bloom_desc = Bright light glows in the 2.5D and 3D stages.
+set_beat_pulse = Beat pulse
+set_beat_pulse_desc = The screen brightens on each beat of the music.
+set_shake = Screen shake
+set_shake_desc = How hard the camera shakes on big hits.
+set_particles = Particles
+set_particles_desc = Sparks, dust and bursts. Low suits slow machines.
+set_brightness = Brightness
+set_brightness_desc = Make the whole picture darker or brighter.
+set_volume = Master volume
+set_volume_desc = Music and sound effects together.
+opt_on = On
+opt_off = Off
+opt_light = Light
+opt_full = Full
+opt_low = Low
+opt_normal = Normal
+opt_high = High
+opt_unlimited = Unlimited

@@ -2,6 +2,7 @@
 #include "core/Config.h"
 #include "core/Events.h"
 #include "core/Game.h"
+#include "core/Settings.h"
 #include "core/Strings.h"
 #include "player/Abilities.h"
 #include "raylib.h"
@@ -708,6 +709,7 @@ void Hud::drawTitle(Game& g)
     text(T("title_controls_p1"), 640, 560, 15, fade(P_COL[0], 0.95f), true);
     text(T("title_controls_p2"), 640, 586, 15, fade(P_COL[1], 0.95f), true);
     text(T("title_controls_pad"), 640, 612, 15, fade(WHITE, 0.7f), true);
+    text(T("title_settings"), 640, 644, 15, fade(hexc(0xb8c0f0), 0.8f), true);   // akshat
     text(T("title_credit"), 640, 680, 15, fade(WHITE, 0.5f), true);
 }
 
@@ -716,13 +718,66 @@ void Hud::drawPause(Game& g)
     setup(g);
     DrawRectangleRec(R(0, 0, 1280, 720), fade(BLACK, 0.6f));
     text(T("pause"), 640, 220, 60, WHITE, true);
-    const char* items[3] = {"resume", "restart", "quit"};
-    for (int i = 0; i < 3; ++i) {
+    const char* items[4] = {"resume", "settings_item", "restart", "quit"};
+    for (int i = 0; i < 4; ++i) {
         bool sel = g.pauseItem == i;
         std::string s = std::string(sel ? "> " : "  ") + T(items[i]) + (sel ? " <" : "  ");
         text(s, 640, 330 + i * 50, 30, sel ? hexc(0xf7d73a) : fade(WHITE, 0.8f), true);
     }
-    text(T("pause_hint"), 640, 520, 20, fade(WHITE, 0.6f), true);
+    text(T("pause_hint"), 640, 560, 20, fade(WHITE, 0.6f), true);
+}
+
+// Settings (akshat): a pixel panel over the dimmed game (or title), sections with headers, the
+// chosen row highlighted with its value as "< Full >", and what the option does along the bottom.
+void Hud::drawSettings(Game& g)
+{
+    setup(g);
+    bool overGame = g.settingsFrom != Screen::Title;
+    DrawRectangleRec(R(0, 0, 1280, 720), fade(BLACK, overGame ? 0.6f : 0.72f));
+    const Color yellow = hexc(0xf7d73a), ink = hexc(0x0f0d1a), edge = hexc(0x26305e);
+    // panel: a hard pixel border
+    DrawRectangleRec(R(292, 28, 696, 664), fade(ink, 0.97f));
+    DrawRectangleRec(R(292, 28, 696, 4), edge);
+    DrawRectangleRec(R(292, 688, 696, 4), edge);
+    DrawRectangleRec(R(292, 28, 4, 664), edge);
+    DrawRectangleRec(R(984, 28, 4, 664), edge);
+    text(T("settings"), 640, 50, 40, WHITE, true);
+
+    const char* headers[3] = {"settings_display", "settings_graphics", "settings_audio"};
+    float y = 108;
+    int lastSection = -1;
+    for (int i = 0; i <= SET_COUNT; ++i) {
+        bool back = i == SET_COUNT;
+        int section = back ? 3 : Settings::sectionOf(i);
+        if (section != lastSection) {
+            lastSection = section;
+            if (back) y += 12;
+            else {
+                y += 8;
+                text(T(headers[section]), 324, y, 16, hexc(0xf28cb4));
+                DrawRectangleRec(R(324, y + 22, 632, 2), fade(edge, 0.9f));
+                y += 30;
+            }
+        }
+        bool sel = g.settingsItem == i;
+        if (sel) {
+            DrawRectangleRec(R(312, y - 5, 656, 30), fade(yellow, 0.14f));
+            DrawRectangleRec(R(312, y - 5, 5, 30), yellow);
+        }
+        Color c = sel ? yellow : fade(WHITE, 0.8f);
+        if (back) {
+            text(std::string(sel ? "> " : "  ") + T("settings_back") + (sel ? " <" : "  "), 640, y, 20, c, true);
+        } else {
+            std::string key = Settings::info(i).key;
+            text(T("set_" + key), 340, y, 20, c);
+            std::string v = settings().valueText(i);
+            text(sel ? "<  " + v + "  >" : v, 830, y, 20, c, true);
+        }
+        y += 30;
+    }
+    std::string desc = g.settingsItem < SET_COUNT ? std::string("set_") + Settings::info(g.settingsItem).key + "_desc" : "settings_back_desc";
+    text(T(desc), 640, 624, 16, fade(WHITE, 0.85f), true);
+    text(T("settings_hint"), 640, 660, 14, fade(WHITE, 0.5f), true);
 }
 
 void Hud::drawEnding(Game& g)

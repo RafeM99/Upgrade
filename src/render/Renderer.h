@@ -20,8 +20,7 @@ public:
     void drawWorld(Game& g);                    // world into the era render texture(s)
     void present(Game& g, float flash, float desat);   // render texture(s) to the screen
     void drawTitleBackground(Game& g, float t); // animated era-cycling backdrop
-    Rectangle screenRect() const;               // where the game image sits in the window (UI space)
-    Rectangle imageRect() const;                // the world image itself: screenRect, or whole-number scaled (setting)
+    Rectangle screenRect() const;               // where the game image sits in the window
 
     // Transition timeline, shared with Game so the sweep and the era switch line up.
     static constexpr float kSwitchAt = 0.35f;   // seconds into the transition: era changes here
@@ -37,8 +36,7 @@ private:
     int locHazeCol_ = -1, locHazeAmt_ = -1;
     int locEra_ = -1, locTime_ = -1, locSize_ = -1, locOut_ = -1, locFlash_ = -1, locDesat_ = -1, locPal_ = -1;
     int locMosaic_ = -1, locGlitch_ = -1, locBeat_ = -1;
-    int locRetro_ = -1, locBloom_ = -1, locBright_ = -1;
-    bool inWorld_ = false;                       // drawing the game (not the title): integer scaling applies
+    int locRetro_ = -1, locBloom_ = -1, locBright_ = -1;   // player settings (core/Settings.h)
     int renderEra_ = 0;
     int oldEra_ = -1;                            // also drawn this frame (transition), or -1
     void ensureTargets();

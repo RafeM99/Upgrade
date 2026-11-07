@@ -2,12 +2,14 @@
 #include "core/Config.h"
 #include "core/Events.h"
 #include "core/Paths.h"
+#include "core/Settings.h"
 #include "core/Strings.h"
 #include "rlgl.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 namespace {
 constexpr float DT = 1.0f / 60.0f;
@@ -18,25 +20,48 @@ bool overlap(float ax, float ay, float aw, float ah, float bx, float by, float b
 {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
+
+// Any key or pad button went down this frame. With a frame cap above 60, some frames run no
+// update tick; a press on such a frame gets one tick early so it is never lost (akshat).
+bool anythingPressed()
+{
+    for (int k = KEY_SPACE; k <= KEY_KB_MENU; ++k) if (IsKeyPressed(k)) return true;
+    for (int p = 0; p < 2; ++p)
+        if (IsGamepadAvailable(p))
+            for (int b = GAMEPAD_BUTTON_LEFT_FACE_UP; b <= GAMEPAD_BUTTON_RIGHT_THUMB; ++b) if (IsGamepadButtonPressed(p, b)) return true;
+    return false;
+}
 }  // namespace
 
 // ------------------------------------------------------------------ setup
 void Game::init(const Options& o)
 {
     opt = o;
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
+    // automated runs (--frames / --autoplay) open no visible window; screenshots still work
+    const bool hidden = opt.maxFrames > 0 || opt.autoplay;
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | (hidden ? FLAG_WINDOW_HIDDEN : 0));
     InitWindow(opt.width, opt.height, "Upgrade");
     SetExitKey(KEY_NULL);   // Esc opens the pause menu instead of quitting
     SetTargetFPS(60);
 
     config().load(assetPath("config.ini"));
     strings().load(assetPath("strings.txt"));
+    cutscene.load(assetPath("cutscenes.txt"));   // akshat: the boss scenes
     input.load();
     ptune.load();
     etune.load();
     art.load();
     renderer.init();
     audio.init();
+    // player settings (akshat): automated runs ignore settings.ini so screenshots are reproducible
+    const bool testRun = opt.autoplay || opt.maxFrames > 0 || !opt.shot.empty() || opt.shotEvery > 0;
+    if (!testRun) settings().load(Settings::defaultPath());
+    for (const auto& kv : opt.setOverrides) {
+        size_t eq = kv.find('=');
+        if (eq == std::string::npos || !settings().setFromString(kv.substr(0, eq), kv.substr(eq + 1)))
+            TraceLog(LOG_WARNING, "UPGRADE: unknown --set %s", kv.c_str());
+    }
+    applySettings(true);
 
     std::string log;
     int n = loadChunks(assetPath("chunks"), chunks, log);
@@ -71,6 +96,7 @@ void Game::init(const Options& o)
     }
     if (!opt.startOnTitle || opt.autoplay) startRun();
     if (opt.ending) startEnding();
+    if (opt.openSettings) openSettings();
 }
 
 bool Game::storyOn() const { return opt.story && config().b("story.enabled", true); }
@@ -79,6 +105,7 @@ void Game::shutdown()
 {
     audio.shutdown();
     story.unload();
+    cutscene.unload();
     renderer.shutdown();
     art.unload();
     CloseWindow();
@@ -96,6 +123,8 @@ void Game::startRun()
     powerups.clear();
     particles.clear();
     boss = Boss();
+    audio.setBoss(false);
+    cutscene.resetRun();   // akshat: every boss scene may play again
     bossBeatenThisEra = false;
     powers.reset();
     clearHistory();
@@ -164,16 +193,23 @@ void Game::run()
             firstTick_ = false;
             for (auto& in : inputs_) { in.jumpPressed = in.attackPressed = in.abilityPressed = in.any = false; }
         }
+        if (ticks == 0 && !opt.autoplay && opt.maxFrames == 0 && anythingPressed()) {   // high frame caps: borrow the next tick for this press
+            update(DT);
+            acc_ -= DT;
+            firstTick_ = false;
+            for (auto& in : inputs_) { in.jumpPressed = in.attackPressed = in.abilityPressed = in.any = false; }
+        }
         audio.update(frameDt);
 
         // ---- draw
         float flash = 0, desat = 0;
-        const bool storyScreen = screen == Screen::Ending || screen == Screen::Story;
-        if (screen == Screen::Title) renderer.drawTitleBackground(*this, time);
+        const Screen under = screen == Screen::Settings ? settingsFrom : screen;   // what shows behind the settings menu
+        const bool storyScreen = under == Screen::Ending || under == Screen::Story;
+        if (under == Screen::Title) renderer.drawTitleBackground(*this, time);
         else if (!storyScreen) {
             renderer.drawWorld(*this);
             // a short white pop right at the switch; the sweep does the rest
-            if (transActive) flash = 0.7f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.15f);
+            if (transActive) flash = 0.12f * std::max(0.0f, 1.0f - std::fabs(transT - Renderer::kSwitchAt) / 0.12f);
             if (lostTimer > 0) desat = std::min(1.0f, (1.5f - lostTimer) * 2);
             for (int p = 0; p < 2 && !solo(); ++p) (void)p;
         }
@@ -203,10 +239,15 @@ void Game::run()
             audio.setMusicDuck(0.45f);
         }
         if (screen == Screen::Title) hud.drawTitle(*this);
-        else if (screen == Screen::Playing) { hud.drawPlaying(*this); story.drawBars(*this); }
+        else if (screen == Screen::Playing) { hud.drawPlaying(*this); story.drawBars(*this); cutscene.draw(*this); }
         else if (screen == Screen::Paused) { hud.drawPlaying(*this); story.drawBars(*this); hud.drawPause(*this); }
+        else if (screen == Screen::Settings) {
+            if (under == Screen::Paused) { hud.drawPlaying(*this); story.drawBars(*this); }
+            hud.drawSettings(*this);
+        }
         else if (screen == Screen::Story) story.drawCard(*this);
         else story.drawEnding(*this);
+        if (settings().showFps()) DrawFPS(8, GetScreenHeight() - 26);
         ++frameNo_;
         bool last = opt.maxFrames > 0 && frameNo_ >= opt.maxFrames;
         bool periodic = opt.shotEvery > 0 && frameNo_ % opt.shotEvery == 0 && !opt.shotPrefix.empty();
@@ -241,6 +282,7 @@ void Game::update(float dt)
         break;
     }
     case Screen::Paused: updatePause(); break;
+    case Screen::Settings: updateSettings(); break;
     case Screen::Story: updateStory(dt); break;
     case Screen::Ending: updateEnding(dt); break;
     }
@@ -268,7 +310,13 @@ void Game::updateTitle()
     for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
     if (d != difficulty) { difficulty = d; audio.play("select"); return; }
     bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
-    for (int k = KEY_A; k <= KEY_Z && !go; ++k) go = IsKeyPressed(k) && k != KEY_P;
+    if (IsKeyPressed(KEY_O) || IsKeyPressed(KEY_TAB) ||
+        (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT))) {   // Settings (akshat)
+        audio.play("select");
+        openSettings();
+        return;
+    }
+    for (int k = KEY_A; k <= KEY_Z && !go; ++k) go = IsKeyPressed(k) && k != KEY_P && k != KEY_O;
     if (go) {
         audio.play("select");
         startRun();
@@ -279,13 +327,70 @@ void Game::updatePause()
 {
     if (!firstTick_) return;
     if (input.pausePressed()) { screen = Screen::Playing; audio.setMusicDuck(1); return; }
-    if (input.menuUp()) { pauseItem = (pauseItem + 2) % 3; audio.play("select"); }
-    if (input.menuDown()) { pauseItem = (pauseItem + 1) % 3; audio.play("select"); }
+    if (input.menuUp()) { pauseItem = (pauseItem + 3) % 4; audio.play("select"); }
+    if (input.menuDown()) { pauseItem = (pauseItem + 1) % 4; audio.play("select"); }
     if (input.menuSelect()) {
+        if (pauseItem == 1) { audio.play("select"); openSettings(); return; }   // music stays ducked
         audio.setMusicDuck(1);
         if (pauseItem == 0) screen = Screen::Playing;
-        else if (pauseItem == 1) startRun();
-        else { screen = Screen::Title; players[1].joined = false; time = 0; era = 0; audio.setEra(0); }
+        else if (pauseItem == 2) startRun();
+        else { screen = Screen::Title; players[1].joined = false; time = 0; era = 0; audio.setEra(0); audio.setBoss(false); }
+    }
+}
+
+// ------------------------------------------------------------------ settings (akshat)
+void Game::openSettings()
+{
+    settingsFrom = screen == Screen::Playing ? Screen::Paused : screen;   // from play: Back lands on pause
+    if (settingsFrom != Screen::Title && settingsFrom != Screen::Paused) settingsFrom = Screen::Title;
+    if (settingsFrom == Screen::Paused) audio.setMusicDuck(0.35f);
+    screen = Screen::Settings;
+    settingsItem = 0;
+}
+
+void Game::applySettings(bool window)
+{
+    const Settings& s = settings();
+    SetMasterVolume(s.volume());
+    if (!window) return;
+    if (s.vsync() != IsWindowState(FLAG_VSYNC_HINT)) {
+        if (s.vsync()) SetWindowState(FLAG_VSYNC_HINT);
+        else ClearWindowState(FLAG_VSYNC_HINT);
+    }
+    SetTargetFPS(s.fpsCap());
+    // Borderless fullscreen: reliable on macOS (no mode switch), and raylib restores the
+    // windowed size and position when it is turned off.
+    if (IsWindowState(FLAG_WINDOW_HIDDEN)) return;   // automated run: never take over the screen
+    if (s.fullscreen() != IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE)) ToggleBorderlessWindowed();
+}
+
+void Game::updateSettings()
+{
+    if (!firstTick_) return;
+    const int rows = SET_COUNT + 1;   // every setting, then Back
+    bool leave = input.menuBack();
+    if (input.menuUp()) { settingsItem = (settingsItem + rows - 1) % rows; audio.play("select"); }
+    if (input.menuDown()) { settingsItem = (settingsItem + 1) % rows; audio.play("select"); }
+    if (settingsItem < SET_COUNT) {
+        int dir = input.menuRight() ? 1 : (input.menuLeft() ? -1 : 0);
+        if (!dir && input.menuSelect()) {   // Enter: flip a toggle, or cycle round the choices
+            int n = Settings::info(settingsItem).count;
+            settings().set(settingsItem, (settings().get(settingsItem) + 1) % n);
+            dir = 2;
+        }
+        int before = settings().get(settingsItem);
+        if (dir == 1 || dir == -1) settings().step(settingsItem, dir);
+        if (dir == 2 || settings().get(settingsItem) != before) {
+            applySettings(settingsItem <= SET_SHOW_FPS);   // window changes only for display rows
+            audio.play("select");
+        }
+    } else if (input.menuSelect()) leave = true;
+    if (leave) {
+        // test runs never write settings.ini
+        if (!opt.autoplay && opt.maxFrames == 0 && !settings().save(Settings::defaultPath()))
+            TraceLog(LOG_WARNING, "UPGRADE: could not save settings.ini");
+        audio.play("select");
+        screen = settingsFrom;
     }
 }
 
@@ -352,6 +457,8 @@ void Game::joinPlayer2()
 // ------------------------------------------------------------------ gameplay
 void Game::updatePlaying(float dt)
 {
+    // akshat: a boss scene freezes the whole world (it is still drawn behind the dialogue)
+    if (cutscene.active()) { cutscene.update(*this, dt, firstTick_); return; }
     if (firstTick_ && input.pausePressed() && !opt.autoplay) {
         screen = Screen::Paused;
         pauseItem = 0;
@@ -364,23 +471,24 @@ void Game::updatePlaying(float dt)
     // hit-pause: a tiny freeze on big hits for punch
     if (hitPause > 0) { hitPause -= dt; return; }
 
-    // ---- era transition: gameplay is frozen while the world upgrades
+    // ---- era transition (akshat): seamless. The run never stops: the world upgrades around the
+    // players while they keep moving. They can't be hurt during it and the Wall eases back.
+    // The memory card opens once the sweep has finished.
     if (transActive) {
         transT += dt;
         if (!transSwitched && transT >= Renderer::kSwitchAt) switchEra(transFromEra + 1);
-        if (!transSwitched) cam.addShake(0.4f * transT / Renderer::kSwitchAt);   // the old world shudders
+        if (!transSwitched) cam.addShake(0.08f * transT / Renderer::kSwitchAt);   // a light shudder
         if (transSwitched && art::SWING[era] != art::SWING[transFromEra]) {
-            float k = std::min(1.0f, std::max(0.0f, (transT - 0.9f) / 2.6f));
+            float k = std::min(1.0f, std::max(0.0f, (transT - 0.6f) / 2.6f));
             cam.swing = art::SWING[transFromEra] + (art::SWING[era] - art::SWING[transFromEra]) * k;
         }
-        cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
-        cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
+        for (auto& pl : players) if (pl.joined) pl.invuln = std::max(pl.invuln, 0.3f);
+        wallX -= dt * 2.0f;
         if (transT >= transLen) {
             transActive = false;
             cam.swing = art::SWING[era];
             if (storyOn()) pendingCards = {era};   // the next memory's card, photographed in its new look
         }
-        return;
     }
 
     // ---- memory lost: the world goes grey, then both respawn together
@@ -551,15 +659,14 @@ void Game::updatePlaying(float dt)
             particles.burst(boss.x, boss.y, 80, Color{220, 180, 255, 255}, 12, 1.4f, 0.25f);
             score += 500;
             events().bossDefeated.emit();
-            if (era < art::LAST_ERA && storyOn())
-                story.showBars(T("story_she_remembers"), T("memory_title_" + std::to_string(era)),
-                               T("remembered_" + std::to_string(era)), 5.0f);
+            audio.setBoss(false);
         }
         if (boss.defeated) {
             boss.active = false;
             bossBeatenThisEra = true;
-            if (era < art::LAST_ERA) beginEraTransition();
-            else startEnding();
+            // akshat: a few words with the beaten boss, then the memory comes back
+            cutscene.play(*this, "boss_" + Cutscene::bossId(boss.kind) + "_defeat");
+            cutscene.then([this] { memoryRestored(); });
             return;
         }
     }
@@ -748,20 +855,26 @@ void Game::updatePlaying(float dt)
         bar = boss.active ? bar : std::min(100.0f, bar + (lead - bestX) * config().f("memory.passive_per_tile", 0.03f) * fillSpeed_);
         bestX = lead;
     }
-    if (opt.fill && !boss.active) bar = std::min(100.0f, bar + dt * 12);
+    if (opt.fill && !boss.active && !transActive) bar = std::min(100.0f, bar + dt * 12);
+    // the next memory never fills up during the upgrade itself (akshat: the run keeps going now)
+    if (transActive && transSwitched) bar = std::min(bar, 60.0f);
 
-    // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
+    // ---- bar full: on a boss stage the Forgetting takes a shape (the boss), then the memory
+    // returns. The other stages upgrade straight away.
     if (bar >= 100.0f && !boss.active && !transActive) {
-        if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
+        if (config().b("boss.enabled", true) && bossStage(era) && !bossBeatenThisEra) {
             boss.start(cam.x, tier(), config().i("boss.base_hits", 2) + powerTuning().extraHits, config().i("boss.hits_per_era", 1), era);
             startBossPowers();
-            audio.play("boss_appear");
             cam.addShake(0.6f);
-            if (storyOn()) story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
-            else showBanner(T("boss_name_" + std::to_string(era)), T("boss_hint_short"), 2.5f);
+            audio.setBoss(true);
             events().bossAppeared.emit();
-        } else if (era < art::LAST_ERA) beginEraTransition();
-        else startEnding();
+            // akshat: the wild-battle VS intro and a few words; when it does not play, the bars
+            if (!cutscene.play(*this, "boss_" + Cutscene::bossId(era) + "_intro")) {
+                audio.play("boss_appear");
+                if (storyOn()) story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
+                else showBanner(T("boss_name_" + std::to_string(era)), T("boss_hint_short"), 2.5f);
+            }
+        } else memoryRestored();
     }
 }
 
@@ -954,13 +1067,36 @@ void Game::collectPowerUp(int p, PowerUp& pu)
 }
 
 // ------------------------------------------------------------------ eras
+bool Game::bossStage(int e) const
+{
+    // [boss] stages = 2,4,6: three bosses, like a normal game (akshat)
+    std::string list = config().s("boss.stages", "2,4,6");
+    size_t i = 0;
+    while (i < list.size()) {
+        size_t j = list.find(',', i);
+        if (j == std::string::npos) j = list.size();
+        std::string n = list.substr(i, j - i);
+        if (n.find_first_of("0123456789") != std::string::npos && std::atoi(n.c_str() + n.find_first_of("0123456789")) == e) return true;
+        i = j + 1;
+    }
+    return false;
+}
+
+void Game::memoryRestored()
+{
+    if (era >= art::LAST_ERA) { startEnding(); return; }
+    beginEraTransition();
+    if (storyOn())
+        story.showBars(T("story_she_remembers"), T("memory_title_" + std::to_string(era)), T("remembered_" + std::to_string(era)), transLen);
+}
+
 void Game::beginEraTransition()
 {
     transActive = true;
     transT = 0;
     transSwitched = false;
     transFromEra = era;
-    transLen = art::SWING[era + 1] != art::SWING[era] ? 4.4f : 3.4f;   // the camera swing takes longer
+    transLen = art::SWING[era + 1] != art::SWING[era] ? 3.6f : 2.2f;   // the camera swing takes longer
     audio.play("era_up");
     TraceLog(LOG_INFO, "UPGRADE: era transition %d -> %d at frame %d", era, era + 1, frameNo_);
 }

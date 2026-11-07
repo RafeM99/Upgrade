@@ -115,7 +115,7 @@ void Models3D::begin(Game& g, const Camera3D& cam)
         col[p] = p == 0 ? Vector3{1.0f, 0.6f, 0.25f} : Vector3{0.3f, 0.6f, 1.0f};
         rad[p] = 5.0f;
     }
-    if (g.boss.active) { pos[2] = {g.boss.x, Y3(g.boss.y), 2.0f}; col[2] = {0.8f, 0.5f, 1.0f}; rad[2] = 7.0f; }
+    if (g.boss.active) { pos[2] = {g.boss.x, Y3(g.boss.y), 2.0f}; col[2] = {1.0f, 0.75f, 0.35f}; rad[2] = 7.0f; }   // the Hourglass glows gold
     SetShaderValueV(sh_, locLightPos_, pos, SHADER_UNIFORM_VEC3, 4);
     SetShaderValueV(sh_, locLightCol_, col, SHADER_UNIFORM_VEC3, 4);
     SetShaderValueV(sh_, locLightRad_, rad, SHADER_UNIFORM_FLOAT, 4);
@@ -521,32 +521,93 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
     }
 }
 
+// The final boss (akshat): THE HOURGLASS, time running out. Two carved wooden plates, four
+// turned posts, two glass bulbs that glow faintly, gold sand that drains from the top bulb as it
+// takes hits, a falling stream and one glaring eye in the top sand. Hurt / rest flashing and the
+// toon outline as the other models; its SANDS RUN BACK power spins it right over.
 void Models3D::drawBoss(Game& g)
 {
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
     bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
-    auto col = [&](unsigned h) {
+    auto col = [&](unsigned h, float alpha = 1.0f) {
         Color c = hexc(h);
         if (flash) c = mixc(c, hexc(0xfff8e0), 0.5f);
-        return withA(c, a);
+        return withA(c, a * alpha);
     };
-    float cx = b.x, cy = Y3(b.y) + 0.2f;
-    float slam = b.state == 3 ? 0.25f : 0.0f, wob = std::sin(b.t * 3) * 0.08f;
-    Matrix root = T(cx, cy + wob, 0.4f);
+    // pose: bob while it hovers, lean dizzily while it rests (stomp me), shiver before a power,
+    // and turn right over while the sand runs back
+    float wob = std::sin(b.t * 3) * 0.08f;
+    float roll = std::sin(b.t * 1.7f) * 0.06f;
+    if (b.state == 3) roll = 0.32f;
+    if (b.state == 2) roll = b.toX > b.x ? -0.18f : 0.18f;
+    if (g.powers.warning()) roll += std::sin(g.time * 40) * 0.07f;
+    if (g.powers.pullT > 0) roll += 2 * PI * std::min(1.0f, std::max(0.0f, 1 - g.powers.pullT / 0.7f));
+    float squash = b.state == 3 ? 0.9f : 1.0f;
+    Matrix root = then(then(then(S(1, squash, 1), MatrixRotateZ(roll)), MatrixRotateY(-0.25f)), T(b.x, Y3(b.y) + 0.1f + wob, 0.4f));
     auto at = [&](Matrix m) { return then(m, root); };
-    for (int i = 0; i < 6; ++i) {   // tendrils
-        float x = -1.0f + i * 0.4f, sway = std::sin(i * 1.7f + b.t * 3) * 0.35f;
-        part(cyl_, at(then(then(then(S(0.1f, 1.0f, 0.1f), T(0, -1.0f, 0)), MatrixRotateZ(sway)), T(x, -0.6f + slam, std::cos(i * 2.0f) * 0.4f))),
-             col(i % 2 ? 0x6a2c6e : 0x26305e));
+
+    const unsigned H_WOOD = 0x8a4a22, H_WOOD_DK = 0x5e2f14, H_GOLD = 0xd8a640, H_SAND = 0xf2a21c, H_SAND_DK = 0xc87818;
+    const float HALF = 1.45f;        // centre to the outer face of a plate
+    const float BULB = 1.22f;        // centre to where a bulb meets its plate
+    // ---- the plates: a carved slab with a gold band and a round boss on the inside
+    for (int s = -1; s <= 1; s += 2) {
+        float y = s * (HALF - 0.1f);
+        part(cube_, at(then(S(2.0f, 0.2f, 1.25f), T(0, y, 0))), col(H_WOOD));
+        part(cube_, at(then(S(2.1f, 0.06f, 1.35f), T(0, y - s * 0.07f, 0))), col(H_GOLD), 0.15f);
+        part(cyl_, at(then(S(0.78f, 0.08f, 0.78f), T(0, s > 0 ? y - 0.18f : y + 0.1f, 0))), col(H_WOOD_DK));
+        for (int k = -1; k <= 1; k += 2)   // knob feet / finials
+            for (int m = -1; m <= 1; m += 2)
+                part(sphere_, at(then(S(0.13f, 0.13f, 0.13f), T(k * 0.88f, y + s * 0.16f, m * 0.5f))), col(H_WOOD_DK));
     }
-    part(sphere_, at(then(S(1.25f, 1.1f - slam * 0.4f, 1.0f), T(0, 0, 0))), col(0x26305e));
-    part(torus_, at(then(then(S(0.55f, 0.55f, 0.55f), MatrixRotateX(PI / 2)), T(0, 0, 0.35f))), col(0x8a3a9e), 0.3f);
-    part(sphere_, at(then(S(0.62f, 0.42f - slam * 0.3f, 0.3f), T(0, 0.02f, 0.85f))), col(0xfaf3e6), 0.2f);
-    if (b.state != 5 && b.hurt <= 0) {
-        part(sphere_, at(then(S(0.26f, 0.26f, 0.12f), T(0.1f, 0.02f, 1.08f))), col(0xf7d73a), 0.6f);
-        part(sphere_, at(then(S(0.12f, 0.12f, 0.08f), T(0.12f, 0.02f, 1.16f))), col(0x0f0d1a));
+    // ---- four turned posts with a bead in the middle
+    for (int k = -1; k <= 1; k += 2)
+        for (int m = -1; m <= 1; m += 2) {
+            float px = k * 0.82f, pz = m * 0.46f;
+            part(cyl_, at(then(S(0.075f, 2 * (HALF - 0.2f), 0.075f), T(px, -(HALF - 0.2f), pz))), col(H_WOOD));
+            part(sphere_, at(then(S(0.12f, 0.16f, 0.12f), T(px, 0, pz))), col(H_WOOD_DK));
+        }
+
+    // ---- the sand: the top drains as the boss takes hits; the bottom heap grows
+    float left = b.maxHp > 0 ? std::max(0.0f, (float)b.hp / (float)b.maxHp) : 1.0f;
+    float ft = 0.3f + 0.7f * left;
+    float topH = 0.95f * ft, topR = 0.6f * ft;   // inverted cone, its point at the neck
+    part(cone_, at(then(then(S(topR, topH, topR), MatrixRotateX(PI)), T(0, topH + 0.06f, 0))), col(H_SAND), 0.45f, false);
+    part(cyl_, at(then(S(topR, 0.02f, topR), T(0, topH + 0.05f, 0))), col(H_SAND_DK), 0.45f, false);   // the sand's surface
+    float heapH = 0.28f + 0.5f * (1 - ft);
+    part(cone_, at(then(S(0.68f, heapH, 0.68f), T(0, -BULB, 0))), col(H_SAND), 0.45f, false);
+    // the stream and the grains falling down it (it stops while the boss lies dizzy or dies)
+    if (b.state != 5) {
+        float streamTop = 0.06f, streamBot = -BULB + heapH - 0.05f;
+        part(cyl_, at(then(S(0.035f, streamTop - streamBot, 0.035f), T(0, streamBot, 0))), col(0xffd560), 0.6f, false);
+        for (int i = 0; i < 4; ++i) {
+            float f = std::fmod(g.time * 1.6f + i * 0.25f, 1.0f);
+            float y = streamTop + (streamBot - streamTop) * f;
+            part(sphere_, at(then(S(0.05f, 0.05f, 0.05f), T(std::sin(i * 2.3f) * 0.04f, y, 0.02f))), col(0xffe080), 0.7f, false);
+        }
     }
+    // ---- one glaring eye in the top sand, turned towards the camera
+    {
+        float ey = 0.06f + topH * 0.66f, ez = topR * 0.66f * 0.8f;
+        if (b.state == 5 || b.hurt > 0 || b.state == 3) {   // screwed shut / dizzy
+            part(cube_, at(then(then(S(0.34f, 0.06f, 0.05f), MatrixRotateZ(0.35f)), T(0, ey, ez + 0.05f))), col(0x0f0d1a), 0, false);
+            part(cube_, at(then(then(S(0.34f, 0.06f, 0.05f), MatrixRotateZ(-0.35f)), T(0, ey, ez + 0.05f))), col(0x0f0d1a), 0, false);
+        } else {
+            float look = std::sin(b.t * 0.9f) * 0.05f;
+            part(sphere_, at(then(S(0.22f, 0.2f, 0.1f), T(0, ey, ez))), col(0xfaf3e6), 0.35f);
+            part(sphere_, at(then(S(0.12f, 0.12f, 0.06f), T(look, ey - 0.01f, ez + 0.07f))), col(0xe0303a), 0.6f, false);
+            part(sphere_, at(then(S(0.055f, 0.07f, 0.04f), T(look, ey - 0.01f, ez + 0.11f))), col(0x0f0d1a), 0, false);
+            // a heavy frown above it: the glare
+            part(cube_, at(then(then(S(0.46f, 0.08f, 0.06f), MatrixRotateZ(-0.3f)), T(0.0f, ey + 0.23f, ez + 0.14f))), col(0x2a1206), 0, false);
+        }
+    }
+    // ---- glass last, see-through and faintly lit from inside (no outline on glass)
+    const float glassA = 0.2f;
+    part(cone_, at(then(then(S(0.72f, BULB, 0.72f), MatrixRotateX(PI)), T(0, BULB, 0))), col(0xd8ecff, glassA), 0.35f, false);
+    part(cone_, at(then(S(0.72f, BULB, 0.72f), T(0, -BULB, 0))), col(0xd8ecff, glassA), 0.35f, false);
+    part(sphere_, at(then(S(0.62f, 0.5f, 0.62f), T(0, 0.72f, 0))), col(0xe8f4ff, glassA * 0.5f), 0.4f, false);
+    part(sphere_, at(then(S(0.62f, 0.5f, 0.62f), T(0, -0.72f, 0))), col(0xe8f4ff, glassA * 0.5f), 0.4f, false);
+    part(cube_, at(then(S(0.05f, 0.7f, 0.02f), T(-0.3f, 0.75f, 0.55f))), col(0xffffff, 0.5f), 1.0f, false);   // glint
 }
 
 void Models3D::drawFragment(float x, float y, float t, float alpha)

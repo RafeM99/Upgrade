@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/Strings.h"
 #include "raylib.h"
+#include "core/Paths.h"
 #include "render/ArtSpec.h"
 
 #include <algorithm>
@@ -61,24 +62,35 @@ struct Voice { const char* id; float pitch, cps; unsigned col; };
 const Voice VOICES[] = {
     {"gran", 0.82f, 40, 0xf28a1e},
     {"sam", 1.32f, 44, 0x3c9cf0},
-    {"alarm", 0.62f, 30, 0xe04848},
+    {"school_bell", 1.18f, 34, 0xd8a030},
+    {"last_train", 0.62f, 30, 0x3a9a5c},
     {"hourglass", 0.5f, 26, 0xc89a50},
     {"narrator", 1.0f, 40, 0xb8b0c8},
 };
 const Voice& voice(const std::string& id)
 {
     for (const auto& v : VOICES) if (id == v.id) return v;
-    return VOICES[4];
+    return VOICES[5];
 }
-bool isBoss(const std::string& id) { return id == "alarm" || id == "hourglass"; }
+// The three bosses and the stage each belongs to (Boss::kind).
+int bossKindOf(const std::string& id) { return id == "school_bell" ? 2 : id == "last_train" ? 4 : id == "hourglass" ? 6 : -1; }
+bool isBoss(const std::string& id) { return bossKindOf(id) >= 0; }
 std::string speakerName(const std::string& id)
 {
     if (id == "gran") return T("p1_name");
     if (id == "sam") return T("p2_name");
-    if (id == "alarm") return T("boss_name_0");
-    if (id == "hourglass") return T("boss_name_1");
+    if (isBoss(id)) return T("boss_name_" + std::to_string(bossKindOf(id)));
     return "";
 }
+// The VS band colour behind each boss.
+unsigned bandColour(const std::string& id)
+{
+    if (id == "school_bell") return 0xc8862a;
+    if (id == "last_train") return 0x2a6e44;
+    return 0x7a4ab8;
+}
+// Dialogue-box look for each stage: 0 1-bit / 4-shade, 1 8-bit, 2 16 / 32-bit, 3 2.5D / 3D.
+int boxStyle(int era) { return era <= 1 ? 0 : era == 2 ? 1 : era <= 4 ? 2 : 3; }
 
 std::string trim(std::string s)
 {
@@ -92,67 +104,52 @@ std::string trim(std::string s)
 void sprite(const Texture2D& tex, Rectangle src, int era, float cx, float bottom, float heightUI, bool flip, Color tint)
 {
     float scale = heightUI * S / src.height;
-    if (era < 3) scale = std::max(1.0f, std::round(scale));
+    if (art::lowRes(era)) scale = std::max(1.0f, std::round(scale));
     float w = src.width * scale, h = src.height * scale;
     if (flip) src.width = -src.width;
     float x = std::round(OX + cx * S - w / 2), y = std::round(OY + bottom * S - h);
     DrawTexturePro(tex, src, Rectangle{x, y, w, h}, {0, 0}, 0, tint);
 }
 
-// The 1-bit sprites are only 8 x 12 pixels, too small to read as a portrait. In that era the
-// portrait is the 8-bit sheet pushed through the 1-bit palette instead (made once, on first use).
-Texture2D* g_oneBit = nullptr;
-Texture2D makeOneBit(const Texture2D& src)
-{
-    Image img = LoadImageFromTexture(src);
-    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    Color* px = (Color*)img.data;
-    for (int i = 0; i < img.width * img.height; ++i) {
-        Color c = px[i];
-        if (c.a < 128) { px[i] = Color{0, 0, 0, 0}; continue; }
-        float lum = (0.3f * c.r + 0.59f * c.g + 0.11f * c.b) / 255.0f;
-        static const float bayer[4] = {0.2f, 0.6f, 0.8f, 0.4f};   // 2x2 ordered dither, like the 1-bit world
-        int x = i % img.width, y = i / img.width;
-        float th = 0.15f + 0.6f * bayer[(y % 2) * 2 + (x % 2)];
-        px[i] = lum > th ? Color{235, 235, 225, 255} : Color{16, 18, 22, 255};
-    }
-    Texture2D t = LoadTextureFromImage(img);
-    UnloadImage(img);
-    SetTextureFilter(t, TEXTURE_FILTER_POINT);
-    return t;
-}
+// A boss sheet is one row of square frames (float, float, hurt, slam).
+Rectangle squareFrame(const Texture2D& t, int f) { float h = (float)t.height; return Rectangle{f * h, 0, h, h}; }
+
+Texture2D* g_hourglass = nullptr;   // the Cutscene's own Hourglass portrait (stage 6 has no boss sheet)
 
 void portrait(Game& g, const std::string& who, float cx, float bottom, float h, bool flip, Color tint, bool talking, float t,
               bool hurt)
 {
     int e = g.era;
     const EraArt& A = g.art.era[e];
-    if (e == 0 && g_oneBit) {
-        int i = who == "gran" ? 0 : who == "sam" ? 1 : who == "alarm" ? 2 : who == "hourglass" ? 3 : -1;
-        if (i < 0) return;
-        Texture2D& tex = g_oneBit[i];
-        if (tex.id == 0) tex = makeOneBit(i < 2 ? g.art.era[1].player[i] : g.art.era[1].bossKind[i - 2]);
-        int fr = i < 2 ? (talking ? art::PF_IDLE0 + ((int)(t * 5) % 2) : art::PF_IDLE0)
-                       : (hurt ? art::XF_HURT : (talking ? art::XF_FLOAT0 + ((int)(t * 4) % 2) : art::XF_FLOAT0));
-        float fw = i < 2 ? art::PLAYER_FW : art::BOSS_FS, fh = i < 2 ? art::PLAYER_FH : art::BOSS_FS;
-        sprite(tex, frameRect(tex, fr, fw, fh, 1), 1, cx, bottom, h, flip, tint);
-        return;
-    }
     if (who == "gran" || who == "sam") {
         const Texture2D& tex = A.player[who == "gran" ? 0 : 1];
         int fr = talking ? art::PF_IDLE0 + ((int)(t * 5) % 2) : art::PF_IDLE0;
         sprite(tex, frameRect(tex, fr, art::PLAYER_FW, art::PLAYER_FH, e), e, cx, bottom, h, flip, tint);
     } else if (isBoss(who)) {
-        const Texture2D& tex = A.bossKind[who == "alarm" ? 0 : 1];
-        int fr = hurt ? art::XF_HURT : (talking ? art::XF_FLOAT0 + ((int)(t * 4) % 2) : art::XF_FLOAT0);
-        sprite(tex, frameRect(tex, fr, art::BOSS_FS, art::BOSS_FS, e), e, cx, bottom, h, flip, tint);
+        // this memory's own boss sheet; the full-3D stage has none, so the Hourglass brings its own
+        const bool own = A.storyBoss.id && bossKindOf(who) == e;
+        const Texture2D* tex = own ? &A.storyBoss : nullptr;
+        bool smooth = false;
+        if (!tex && who == "hourglass" && g_hourglass) {
+            if (g_hourglass->id == 0) {
+                *g_hourglass = LoadTexture(assetPath("art/era3/enemy_boss_hourglass.png").c_str());
+                SetTextureFilter(*g_hourglass, TEXTURE_FILTER_BILINEAR);
+            }
+            if (g_hourglass->id) { tex = g_hourglass; smooth = true; }
+        }
+        if (!tex) tex = A.storyBoss.id ? &A.storyBoss : &A.boss;
+        // the hourglass sheet's fourth frame is its dizzy face; the others' is their grey hurt frame
+        int hurtFr = smooth ? art::XF_SLAM : art::XF_HURT;
+        int fr = hurt ? hurtFr : (talking && !smooth ? art::XF_FLOAT0 + ((int)(t * 4) % 2) : art::XF_FLOAT0);
+        sprite(*tex, squareFrame(*tex, fr), smooth ? art::LAST_ERA : e, cx, bottom, h, flip, tint);
     }
 }
 
 // The dialogue box, restyled per era.
 struct BoxStyle { Color text; bool shadow; };
-BoxStyle drawBox(int era, float x, float y, float w, float h)
+BoxStyle drawBox(int stage, float x, float y, float w, float h)
 {
+    const int era = boxStyle(stage);
     if (era == 0) {   // 1-bit: cream and black, double pixel border
         DrawRectangleRec(R(x, y, w, h), hexc(0x101216));
         DrawRectangleRec(R(x + 6, y + 6, w - 12, h - 12), hexc(0xebebe1));
@@ -187,8 +184,9 @@ BoxStyle drawBox(int era, float x, float y, float w, float h)
     return {hexc(0xfff8ee), true};
 }
 
-void nameTab(int era, const std::string& name, unsigned colHex, float x, float y)
+void nameTab(int stage, const std::string& name, unsigned colHex, float x, float y)
 {
+    const int era = boxStyle(stage);
     float w = textW(name, 26) + 40, h = 40;
     Color col = hexc(colHex);
     if (era == 0) {
@@ -233,6 +231,17 @@ void drawBars(float p, bool in)
 }  // namespace
 
 // ------------------------------------------------------------------ script file
+std::string Cutscene::bossId(int kind)
+{
+    return kind == 2 ? "school_bell" : kind == 4 ? "last_train" : kind == 6 ? "hourglass" : "";
+}
+
+void Cutscene::unload()
+{
+    if (hourglass_.id) UnloadTexture(hourglass_);
+    hourglass_ = Texture2D{};
+}
+
 void Cutscene::load(const std::string& path)
 {
     scenes_.clear();
@@ -433,14 +442,15 @@ void Cutscene::update(Game& g, float dt, bool firstTick)
 
     // ---- the wild-battle intro
     if (phase_ == PH_FLASH) {
-        const bool clock = cur_->vs == "alarm";
+        // the bell clangs high, the train's whistle-dong sits low, the hourglass lowest of all
+        const float dongPitch = cur_->vs == "school_bell" ? 1.25f : cur_->vs == "last_train" ? 0.85f : 0.7f;
         float prev = phaseT_ - dt;
         if (prev < FLASH_END && phaseT_ >= FLASH_END) g.audio.play("swipe");
         if (prev < SLAM_AT && phaseT_ >= SLAM_AT) {
             slammed_ = true;
             shake_ = 1;
             g.audio.play("slam");
-            g.audio.play("dong", 1.0f, clock ? 1.0f : 0.7f);
+            g.audio.play("dong", 1.0f, dongPitch);
         }
         if (phaseT_ > BANDS_END && (int)((phaseT_ - BANDS_END) / 0.45f) > ticks_) {   // the clock ticks while you stare
             ++ticks_;
@@ -485,7 +495,7 @@ void Cutscene::draw(Game& g)
 {
     if (!cur_) return;
     setup(g);
-    g_oneBit = oneBit_;
+    g_hourglass = &hourglass_;
     const int era = g.era;
     const bool vs = !cur_->vs.empty();
     float sx = shake_ > 0 ? std::sin(t_ * 70) * 14 * shake_ : 0, sy = shake_ > 0 ? std::cos(t_ * 53) * 10 * shake_ : 0;
@@ -509,12 +519,11 @@ void Cutscene::draw(Game& g)
     }
 
     if (vsScreen) {
-        const bool clock = cur_->vs == "alarm";
         float bt = phase_ == PH_FLASH ? phaseT_ - WIPE_END : 10.0f;
         float k = easeOut(bt / (BANDS_END - WIPE_END));
         DrawRectangleRec(R(0, 0, 1280, 720), BLACK);
         // top band: the boss, sliding in from the right
-        Color bandB = clock ? hexc(0xc83c3c) : hexc(0x7a4ab8);
+        Color bandB = hexc(bandColour(cur_->vs));
         float ox = (1 - k) * 1400 + sx;
         quad({120 + ox, 70 + sy}, {1400 + ox, 70 + sy}, {1400 + ox, 290 + sy}, {60 + ox, 290 + sy}, bandB);
         for (int i = 0; i < 7; ++i) {   // speed lines
@@ -525,7 +534,7 @@ void Cutscene::draw(Game& g)
         float bob = bossTalk && typing ? std::sin(t_ * 10) * 6 : 0;
         portrait(g, cur_->vs, 1010 + ox, 300 + sy + bob, 270, true, WHITE, bossTalk, t_, false);
         // bottom band: Gran and Sam, sliding in from the left
-        Color bandH = hexc(era == 0 ? 0x4a4a52 : 0x2f6fd0);
+        Color bandH = hexc(era <= 1 ? 0x4a4a52 : 0x2f6fd0);
         float hx = -(1 - k) * 1400 + sx;
         quad({-120 + hx, 310 + sy}, {1220 + hx, 310 + sy}, {1160 + hx, 520 + sy}, {-120 + hx, 520 + sy}, bandH);
         for (int i = 0; i < 7; ++i) {

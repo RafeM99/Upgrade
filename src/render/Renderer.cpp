@@ -1,6 +1,8 @@
 #include "render/Renderer.h"
 #include "core/Game.h"
+#include "core/Config.h"
 #include "core/Paths.h"
+#include "core/Settings.h"
 #include "render/ArtSpec.h"
 #include "rlgl.h"
 
@@ -156,6 +158,10 @@ void Renderer::init()
     locGlitch_ = GetShaderLocation(post_, "glitch");
     locDesat_ = GetShaderLocation(post_, "desat");
     locPal_ = GetShaderLocation(post_, "palette");
+    locBeat_ = GetShaderLocation(post_, "beat");
+    locRetro_ = GetShaderLocation(post_, "retro");
+    locBloom_ = GetShaderLocation(post_, "bloom");
+    locBright_ = GetShaderLocation(post_, "brightness");
     float pal[48];
     for (int i = 0; i < 16; ++i) {
         pal[i * 3 + 0] = ((PALETTE16[i] >> 16) & 255) / 255.0f;
@@ -653,6 +659,13 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locGlitch_, &glitch, SHADER_UNIFORM_FLOAT);
+    // player settings (akshat): the beat pulse, retro screen, bloom and brightness
+    float beat = g.screen == Screen::Playing ? g.audio.beatPulse() * config().f("audio.beat_pulse", 1.0f) * settings().beatMul() : 0.0f;
+    float retro = settings().retro(), bloom = settings().bloom() ? 1.0f : 0.0f, bright = settings().brightness();
+    SetShaderValue(post_, locBeat_, &beat, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locRetro_, &retro, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locBloom_, &bloom, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(post_, locBright_, &bright, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(post_);
     DrawTexturePro(rt_[e].texture, Rectangle{0, 0, (float)rtW_[e], -(float)rtH_[e]}, dst, {0, 0}, 0, WHITE);
     EndShaderMode();
@@ -694,17 +707,17 @@ void Renderer::present(Game& g, float flash, float desat)
     // Before the switch: the old era powers down, going blocky and torn.
     if (g.transActive && !g.transSwitched) {
         float k = std::min(1.0f, g.transT / kSwitchAt);
-        blitEra(g, renderEra_, dst, flash, desat, 1.0f + k * k * 7.0f, k * 0.9f);
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + k * k * 1.5f, k * 0.35f);   // akshat: lighter glitch, the run keeps going
         return;
     }
 
     float p = sweepProgress(g);
     if (oldEra_ >= 0 && p >= 0.0f && p < 1.0f) {
         float e = p * p * (3 - 2 * p);   // ease in and out
-        blitEra(g, oldEra_, dst, 0.0f, desat, 8.0f, 0.5f);
+        blitEra(g, oldEra_, dst, 0.0f, desat, 2.5f, 0.2f);
         float edge = dst.x + dst.width * e;
         BeginScissorMode((int)dst.x, (int)dst.y, std::max(0, (int)(edge - dst.x)), (int)dst.height);
-        blitEra(g, renderEra_, dst, flash, desat, 1.0f + 3.0f * (1.0f - e), 0.0f);   // sharpens as it goes
+        blitEra(g, renderEra_, dst, flash, desat, 1.0f + 1.5f * (1.0f - e) * (1.0f - e), 0.0f);   // sharpens as it goes
         EndScissorMode();
         drawSweep(g, dst, e);
         return;

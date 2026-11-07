@@ -8,6 +8,10 @@
 // Pixels are scaled "sharp": every source pixel becomes an even block on screen, with only a
 // one-pixel soft edge, so the art stays crisp at any window size.
 // mosaic and glitch drive the era-upgrade transition.
+// Player settings (akshat, core/Settings.h): retro adds each stage's screen (LCD grid, CRT
+// lines, vignette) on top of the clean look; bloom lights up 2.5D and 3D; beat pulses the
+// brightness with the music; brightness scales everything. At their defaults (0, 0, -, 1)
+// only the beat pulse differs from the clean look.
 in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
@@ -21,6 +25,10 @@ uniform float mosaic;   // >= 1: source pixels per block, for the transition
 uniform float glitch;   // 0..1: torn scanlines as the old era shuts down
 uniform vec3 palette[16];
 uniform vec3 shades[4];   // the 4-shade greys, dark to light
+uniform float beat;       // 0..1: peaks on each beat of the music (already scaled by the Beat pulse setting)
+uniform float retro;      // 0..1 setting: LCD grid, scanlines and vignette strength
+uniform float bloom;      // 0 or 1 setting: glow around bright light in 2.5D and 3D
+uniform float brightness; // setting, 1 = as authored
 out vec4 finalColor;
 
 float bayer4(vec2 p)
@@ -86,6 +94,37 @@ void main()
     } else if (era == 3 || era == 4) {
         c = floor(c * 31.0 + 0.5) / 31.0;   // 15-bit colour
     }
+
+    // ---- Retro screen effects (setting): the screen each stage would have been played on
+    if (retro > 0.0) {
+        if (era == 0) {          // handheld LCD: a faint gap between pixels
+            if (fine && (cell.x < 0.12 || cell.y < 0.12)) c = mix(c, vec3(0.063, 0.071, 0.086), 0.35 * retro);
+        } else if (era == 1) {   // dot-matrix LCD: pixel gaps, each dot casting a little shadow
+            if (fine && (cell.x < 0.14 || cell.y < 0.14)) c = mix(c, shades[0], 0.25 * retro);
+        } else if (era == 2) {   // CRT: dark gaps between rows, a touch of phosphor glow in the middle
+            if (fine) c *= mix(1.0 - 0.16 * retro, 1.0 + 0.04 * retro, smoothstep(0.0, 0.35, cell.y) * smoothstep(1.0, 0.65, cell.y));
+        } else if (era <= 4) {   // 16/32-bit: soft scanlines
+            if (fine) c *= mix(1.0 - 0.12 * retro, 1.0, smoothstep(0.0, 0.3, cell.y));
+        }
+        c *= mix(1.0 - 0.3 * retro, 1.0, clamp(vig, 0.0, 1.0));   // vignette
+    }
+
+    // ---- Bloom (setting): bright light bleeds into its surroundings in the full-colour stages
+    if (bloom > 0.0 && era >= 5) {
+        vec2 texel = 1.0 / texSize;
+        vec3 glow = vec3(0.0);
+        for (int y = -2; y <= 2; ++y) {
+            for (int x = -2; x <= 2; ++x) {
+                vec3 s = texture(texture0, uv + vec2(float(x), float(y)) * texel * 4.0).rgb;
+                float l = dot(s, vec3(0.299, 0.587, 0.114));
+                glow += s * smoothstep(0.72, 1.0, l);
+            }
+        }
+        c += glow / 25.0 * 0.9 * bloom;
+    }
+
+    c *= 1.0 + beat * (era == 0 ? 0.04 : 0.07);
+    c *= brightness;
     float g = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(g), desat);
     c = mix(c, vec3(1.0), clamp(flash, 0.0, 1.0));

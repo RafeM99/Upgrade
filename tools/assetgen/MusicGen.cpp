@@ -1,11 +1,13 @@
 // MusicGen.cpp (akshat): the procedural music engine. One song ("the memory", A minor) re-arranged
-// for the hardware of each era, plus two boss themes:
+// for the hardware of each sound set, plus three boss themes (stages map to sets via art::AUDIO_SET):
 //   era 0  1-bit   ZX-Spectrum-style beeper: one square channel, fake chords by fast arpeggio, mono
 //   era 1  8-bit   NES-style: 2 pulse channels (duty 12.5/25/50%), 4-bit triangle bass, LFSR noise drums
 //   era 2  16-bit  SNES/Genesis-style: FM e-piano + FM brass, slap bass, strings, sampled-style kit, echo
 //   era 3  2.5D    modern EDM/synthwave: supersaws, pluck lead, sub + reese, sidechain, big reverb
-//   boss era 1     The Alarm Clock: NES, ringing-bell arpeggios, relentless ticking
-//   boss era 3     The Hourglass: choir, orchestral hits, the melody re-harmonised over Am-Bb-C-E7, sand
+//   boss set 1     The School Bell (stage 2): NES, ringing-bell trills, "ding-ding" bell calls, ticking
+//   boss set 2     The Last Train (stage 4): FM, shuffled chug-a-chug kit, two-tone FM-brass horn, steam
+//                  whistle glides, galloping slap bass, the melody quoted on brass + strings, ticking
+//   boss set 3     The Hourglass (stage 6, final): choir, orchestral hits, the melody re-harmonised over Am-Bb-C-E7, sand
 // Synthesis: PolyBLEP oscillators, ADSR, TPT state-variable filters, unison with stereo spread, delayed
 // vibrato, portamento, 2-op FM, sidechain keyed to the kick, ping-pong delay, Freeverb-style reverb and
 // a look-ahead limiter. Everything renders at 44.1 kHz stereo; each loop is a whole number of bars from
@@ -1418,8 +1420,8 @@ void arrangeEra3(const Song& s, Mix& m)
     m.send(1.0f, 0.3f, 0.35f, 0.3f);
 }
 
-// ------------------------------------------------------------------ boss: The Alarm Clock (NES)
-Song alarmSong()
+// ------------------------------------------------------------------ boss: The School Bell (NES)
+Song schoolBellSong()
 {
     Song s(musicspec::BOSS_BPM[1]);
     s.add(B_INTRO, 4, {AM});
@@ -1429,7 +1431,7 @@ Song alarmSong()
     return s;
 }
 
-void arrangeAlarm(const Song& s, Mix& m)
+void arrangeSchoolBell(const Song& s, Mix& m)
 {
     const double e = s.e;
     const int N = (int)s.bars.size();
@@ -1462,7 +1464,7 @@ void arrangeAlarm(const Song& s, Mix& m)
     }
     m.send(1.0f, 0);
 
-    std::vector<Note> bass, bells, bells2, lead, stabs;
+    std::vector<Note> bass, bells, bells2, lead, stabs, dings;
     for (int b = 0; b < N; ++b) {
         const Bar& B = s.bars[b];
         const int R = B.ch.root;
@@ -1474,12 +1476,20 @@ void arrangeAlarm(const Song& s, Mix& m)
                 if (B.sec == B_A && k == 7) p = approach(R, nextRoot(s, b));
                 bass.push_back({s.t(b, k), e * 0.85, (float)p});
             }
-        // the alarm bell: 32nd-note trill between the chord's top two tones, rings for two beats
+        // the school bell: 32nd-note trill between the chord's top two tones, rings for two beats
         const int hi = B.ch.v.back() + 12, lo = B.ch.v[B.ch.v.size() - 2] + 12;
         auto ring = [&](std::vector<Note>& dst, double from, int count, float vel, int shift) {
             for (int k = 0; k < count; ++k)
                 dst.push_back({from + k * e / 4, e / 4 * 0.9, (float)((k % 2 ? lo : hi) + shift), vel * (1.0f - 0.4f * k / count)});
         };
+        // "ding-ding": the class-change bell, two struck strokes on the chord's top tone
+        auto ding = [&](int step, float vel) {
+            dings.push_back({s.t(b, step), e * 1.6, (float)(B.ch.v.back() + 24), vel});
+            dings.push_back({s.t(b, step + 1), e * 2.6, (float)(B.ch.v.back() + 24), vel * 0.9f});
+        };
+        if (B.sec == B_INTRO && B.idx < 2) ding(0, 1.0f);
+        if (B.sec == B_A && B.idx % 4 == 2) ding(4, 0.8f);
+        if (B.sec == B_B && B.idx % 2 == 0) ding(0, 0.55f);
         switch (B.sec) {
         case B_INTRO: if (B.idx >= 2) ring(bells, s.t(b), 16, 0.8f, 0); break;
         case B_A:
@@ -1504,7 +1514,199 @@ void arrangeAlarm(const Song& s, Mix& m)
     renderNotes(m.tmp, ps, stabs, 34);
     pb.pan = 0.25f; pb.gain = 0.08f;
     renderNotes(m.tmp, pb, bells2, 35);
+    Patch pd = nesPulse(0.125f, 0.11f, 0.1f); pd.a = 0.001f; pd.d = 0.22f; pd.s = 0.0f; pd.r = 0.12f; pd.osc2 = 0.5f; pd.osc2semi = 19; pd.osc2duty = 0.25f;
+    renderNotes(m.tmp, pd, dings, 36);
     m.send(1.0f, 0);
+}
+
+// ------------------------------------------------------------------ boss: The Last Train (16-bit FM)
+// Steam whistle: two pipes a minor third apart (a chime whistle) with breath noise at the pitch;
+// slides up into the note, droops at the end.
+void steamWhistle(Stereo& o, double t, double dur, float g, float m0, float m1, float pan = 0)
+{
+    Rng a((uint32_t)(t * 1097) + 67);
+    size_t i0 = (size_t)std::llround(t * SR), n = (size_t)(dur * SR);
+    float p1 = 0, p2 = 0, gl, gr, f = mtof(m0);
+    panGains(pan, gl, gr);
+    SVF nf;
+    for (size_t i = 0; i < n; ++i) {
+        float tt = (float)i / SR, k = (float)i / n;
+        if ((i & 15) == 0) {
+            float m = m1 + (m0 - m1) * std::exp(-tt / 0.14f);
+            if (k > 0.7f) m -= 2.0f * (k - 0.7f) / 0.3f * (k - 0.7f) / 0.3f;
+            m += 0.08f * std::sin(TAU * 5.2f * tt);
+            f = mtof(m);
+            nf.set(f, 6.0f);
+        }
+        p1 += f / SR; if (p1 >= 1) p1 -= 1;
+        p2 += f * 1.18921f / SR; if (p2 >= 1) p2 -= 1;
+        float v = std::sin(TAU * p1) + 0.7f * std::sin(TAU * p2) + 0.12f * std::sin(TAU * 2 * p1) + nf.bp(a.next()) * 0.9f;
+        float env = std::min(1.0f, tt / 0.05f) * std::min(1.0f, (float)(n - i) / (0.12f * SR));
+        o.add(i0 + i, v * env * g * gl, v * env * g * gr);
+    }
+}
+
+Song trainSong()
+{
+    Song s(musicspec::BOSS_BPM[2]);
+    s.add(B_INTRO, 4, {AM});
+    s.add(B_A, 8, {AM, AM, FM, EMAJ});
+    s.add(B_B, 8, {AM, FM, CMAJ, E7}, [](int i) { return bossMelody(i % 64); });
+    s.add(B_C, 4, {FMAJ7, FMAJ7, E7B9, E7B9});
+    return s;
+}
+
+void arrangeTrain(const Song& s, Mix& m)
+{
+    const double e = s.e, sx = e * 0.5 * 0.28;   // 16th swing: the off-16ths are late (chug-a-chug shuffle)
+    const int N = (int)s.bars.size();
+    auto sw = [&](int bar, int k16) { return s.t(bar) + k16 * e * 0.5 + (k16 % 2 ? sx : 0.0); };
+    // ---- kick + the chug (dry-ish)
+    for (int b = 0; b < N; ++b) {
+        const Bar& B = s.bars[b];
+        const double t0 = s.t(b);
+        auto K = [&](double t, float g = 0.85f) { kick(m.tmp, t, g, 180, 52, 0.025f, 0.24f, 0.5f, 2.4f); m.kicks.push_back(t); };
+        // the chug: every 16th on a hat, the 1st and 3rd of each beat also a brushy steam chuff
+        int dens = B.sec == B_INTRO ? std::min(B.idx, 2) : 2;   // the train pulls away: chug .. chug-a .. chug-a-chug
+        for (int k = 0; k < 16; ++k) {
+            int pos = k % 4;
+            if (dens == 0 && pos != 0) continue;
+            if (dens == 1 && pos % 2) continue;
+            float acc = pos == 0 ? 1.0f : pos == 2 ? 0.7f : 0.42f;
+            if (B.sec == B_C) acc *= 1.0f + 0.08f * B.idx;
+            double t = sw(b, k);
+            hat(m.tmp, t, 0.075f * acc, pos == 0 ? 0.045f : 0.02f, pos % 2 ? 0.3f : -0.15f, 6000);
+            if (pos % 2 == 0) snare(m.tmp, t, 0.14f * acc, 230, 0.05f, 0.012f, 2600, pos ? 0.25f : -0.25f);
+        }
+        switch (B.sec) {
+        case B_INTRO: if (B.idx >= 2) { K(t0, 0.75f); K(t0 + 4 * e, 0.75f); } break;
+        case B_A: K(t0); K(t0 + 3 * e, 0.55f); K(t0 + 4 * e); if (B.idx % 2) K(t0 + 7 * e, 0.6f); break;
+        case B_B: for (int k = 0; k < 4; ++k) K(t0 + 2 * k * e); K(t0 + 7 * e, 0.6f); if (B.idx == 0) crash(m.tmp, t0, 0.28f); break;
+        case B_C: for (int k = 0; k < 4; ++k) if (!(B.idx == 3 && k == 3)) K(t0 + 2 * k * e, 0.65f + 0.08f * B.idx); break;
+        default: break;
+        }
+        if (B.sec == B_A && B.idx == 0) crash(m.tmp, t0, 0.25f);
+    }
+    m.send(1.0f, 0.06f);
+    m.buildDuck(s.beat * 0.55);
+
+    // ---- backbeat, rolls, toms, hits, the clock, whistles (roomy)
+    for (int b = 0; b < N; ++b) {
+        const Bar& B = s.bars[b];
+        const double t0 = s.t(b);
+        auto S = [&](double t, float g = 0.5f) { snare(m.tmp, t, g, 205, 0.14f, 0.06f, 1000); };
+        // the clock keeps time over the train: tick-tock, doubling to 16ths in the build
+        if (B.sec == B_C && B.idx >= 2) for (int k = 0; k < 16; ++k) wood(m.tmp, t0 + k * e / 2, 0.16f + 0.04f * (B.idx - 2), k % 2 ? 1700.0f : 2300.0f, k % 2 ? 0.3f : -0.3f);
+        else tickTock(m.tmp, t0, s.beat, 1, B.sec == B_INTRO ? 0.32f : 0.2f);
+        switch (B.sec) {
+        case B_INTRO:
+            if (B.idx == 0) steamWhistle(m.tmp, t0, s.barLen() * 0.9, 0.1f, 76, 81, -0.2f);
+            if (B.idx == 3) for (int k = 0; k < 8; ++k) S(t0 + 4 * e + k * e / 2, 0.15f + 0.04f * k);
+            break;
+        case B_A:
+            S(t0 + 2 * e); S(t0 + 6 * e);
+            if (B.idx == 0) orchHit(m.tmp, t0, B.ch, 0.22f, 700 + b);
+            if (B.idx == 7) { const float th[4] = {196, 165, 131, 110}; for (int k = 0; k < 4; ++k) tom(m.tmp, t0 + 6 * e + k * e / 2, 0.42f, th[k], 0.2f, 0.4f - 0.25f * k); }
+            break;
+        case B_B:
+            S(t0 + 2 * e); S(t0 + 6 * e, 0.55f);
+            if (B.idx % 4 == 0) orchHit(m.tmp, t0, B.ch, 0.24f, 800 + b);
+            if (B.idx == 3) steamWhistle(m.tmp, t0 + 4 * e, 4 * e, 0.07f, 79, 83, 0.3f);
+            if (B.idx == 7) for (int k = 0; k < 4; ++k) S(t0 + 6 * e + k * e / 2, 0.28f + 0.07f * k);
+            break;
+        case B_C:
+            if (B.idx == 0) { riser(m.tmp, t0, s.barLen() * 4 - s.beat, 0.4f); orchHit(m.tmp, t0, B.ch, 0.24f, 900 + b); }
+            if (B.idx < 2) { S(t0 + 2 * e); S(t0 + 6 * e); }
+            else if (B.idx == 2) { for (int k = 0; k < 8; ++k) S(t0 + k * e, 0.22f + 0.03f * k); steamWhistle(m.tmp, t0, s.barLen() * 1.5, 0.11f, 74, 81, -0.2f); }
+            else for (int k = 0; k < 12; ++k) S(t0 + k * e / 2, 0.24f + 0.025f * k);
+            break;
+        default: break;
+        }
+    }
+    m.send(1.0f, 0.22f, 0.05f);
+
+    // ---- galloping slap bass: 8th + two 16ths per beat (the wheels on the rails)
+    std::vector<Note> bass;
+    for (int b = 0; b < N; ++b) {
+        const Bar& B = s.bars[b];
+        const int R = B.ch.root, ap = approach(R, nextRoot(s, b));
+        auto put = [&](double t, double len, int p, float v = 1) { bass.push_back({t, len * 0.85, (float)p, v}); };
+        if (B.sec == B_INTRO) {
+            if (B.idx >= 2) for (int j = 0; j < 4; ++j) put(s.t(b, 2 * j), e, R, 0.7f);
+            continue;
+        }
+        if (B.sec == B_C) {
+            for (int k = 0; k < 8; ++k) if (!(B.idx == 3 && k >= 6)) put(s.t(b, k), e, R + (k % 2) * 12, k % 2 ? 0.75f : 1.0f);
+            continue;
+        }
+        for (int j = 0; j < 4; ++j) {
+            put(sw(b, 4 * j), e, R, 1.0f);
+            put(sw(b, 4 * j + 2), e * 0.5, j == 3 ? ap : R + 12, 0.75f);
+            put(sw(b, 4 * j + 3), e * 0.5, j == 3 ? ap : R + 7, 0.7f);
+        }
+    }
+    Patch sb; sb.wave = W_FM; sb.fmRatio = 1; sb.fmIndex = 3.8f; sb.fmDecay = 0.05f; sb.fmSus = 0.2f; sb.sub = 0.5f;
+    sb.a = 0.002f; sb.d = 0.2f; sb.s = 0.5f; sb.r = 0.04f; sb.gain = 0.31f;
+    renderNotes(m.tmp, sb, bass, 51);
+    m.send(1.0f, 0.02f, 0, 0.3f);
+
+    // ---- strings pad + e-piano off-beat stabs + swung FM arpeggio
+    std::vector<Note> pad, ep, arp, bassDrone;
+    for (int b = 0; b < N; ++b) {
+        const Bar& B = s.bars[b];
+        for (int n : B.ch.v) pad.push_back({s.t(b), s.barLen() * 0.98, (float)n, B.sec == B_B ? 1.0f : B.sec == B_INTRO && B.idx < 2 ? 0.6f : 0.8f});
+        if (B.sec == B_INTRO && B.idx < 2) bassDrone.push_back({s.t(b), s.barLen() * 0.97, (float)B.ch.root, 0.55f});
+        if (B.sec == B_A)
+            for (int k = 1; k < 8; k += 2)
+                for (size_t q = 0; q < B.ch.v.size(); ++q) ep.push_back({s.t(b, k), e * 0.55, (float)B.ch.v[q], 0.6f, -1, q % 2 ? 0.3f : -0.3f});
+        if (B.sec == B_A || (B.sec == B_C && B.idx < 3))
+            for (int k = 0; k < 16; ++k) arp.push_back({sw(b, k), e * 0.4, (float)arpNote(B.ch, k, 12), k % 4 == 0 ? 1.0f : 0.65f});
+    }
+    renderNotes(m.tmp, strings(0.045f), pad, 52);
+    Patch dr = strings(0.07f); dr.cutoff = 900; dr.a = 0.2f;   // low rumble while the train pulls out
+    renderNotes(m.tmp, dr, bassDrone, 58);
+    m.send(1.0f, 0.3f, 0, 0.3f);
+    renderNotes(m.tmp, fmPiano(), ep, 53);
+    m.send(1.0f, 0.18f, 0.15f, 0.25f);
+    Patch mar; mar.wave = W_FM; mar.fmRatio = 4; mar.fmIndex = 1.3f; mar.fmDecay = 0.05f;
+    mar.a = 0.002f; mar.d = 0.2f; mar.s = 0.0f; mar.r = 0.08f; mar.gain = 0.085f; mar.pan = 0.35f;
+    renderNotes(m.tmp, mar, arp, 54);
+    m.send(1.0f, 0.15f, 0.3f, 0.2f);
+
+    // ---- the train horn: a two-tone FM-brass dyad, short blast then a long one that sags (Doppler)
+    std::vector<Note> horn;
+    auto call = [&](int bar, double step, float vel) {
+        const int lo = 57, hi = 63;   // A3 + Eb4: the uneasy tritone of a diesel horn
+        for (int p : {lo, hi, lo + 12}) {
+            float v = p == lo + 12 ? vel * 0.35f : vel;
+            horn.push_back({s.t(bar, step), e * 1.4, (float)p, v});
+            horn.push_back({s.t(bar, step + 2), e * 4.5, (float)p - 1.0f, v, (float)p});   // glides down a semitone
+        }
+    };
+    for (int b = 0; b < N; ++b) {
+        const Bar& B = s.bars[b];
+        if (B.sec == B_INTRO && B.idx == 1) call(b, 0, 1.0f);
+        if (B.sec == B_A && B.idx % 4 == 0) call(b, 0, 0.9f);
+        if (B.sec == B_C && B.idx == 0) call(b, 0, 1.0f);
+        if (B.sec == B_C && B.idx == 3) call(b, 0, 0.8f);
+    }
+    Patch hp = fmBrass(); hp.fmIndex = 3.4f; hp.a = 0.04f; hp.vib = 0.03f; hp.glide = 1.0f; hp.gain = 0.09f; hp.r = 0.18f;
+    renderNotes(m.tmp, hp, horn, 55);
+    m.send(1.0f, 0.3f, 0.12f, 0.2f);
+
+    // ---- the melody, dramatic: FM brass lead with strings an octave up behind it
+    std::vector<Note> lead, hiStr;
+    for (const LN& l : lineOf(s, false)) {
+        lead.push_back({s.t(l.bar, l.step), l.len * e * 0.92, (float)l.pitch, 1.0f});
+        hiStr.push_back({s.t(l.bar, l.step), l.len * e * 0.98, (float)l.pitch + 12, 0.8f});
+    }
+    linkGlides(lead, e * 0.3);
+    Patch br = fmBrass(); br.gain = 0.16f;
+    renderNotes(m.tmp, br, lead, 56);
+    m.send(1.0f, 0.24f, 0.3f);
+    Patch hs = strings(0.05f); hs.a = 0.06f; hs.cutoff = 4200;
+    renderNotes(m.tmp, hs, hiStr, 57);
+    m.send(1.0f, 0.35f, 0.15f, 0.2f);
 }
 
 // ------------------------------------------------------------------ boss: The Hourglass (modern)
@@ -1679,7 +1881,12 @@ int generateMusic(const std::string& dir)
         if (!musicspec::HAS_BOSS[era]) { std::remove((d + "music_boss.qoa").c_str()); continue; }
         if (era == 1) {
             FxSettings bf; bf.masterLp = 15000; bf.drive = 1.3f;
-            n += renderTrack(alarmSong(), arrangeAlarm, bf, d + "music_boss") ? 1 : 0;
+            n += renderTrack(schoolBellSong(), arrangeSchoolBell, bf, d + "music_boss") ? 1 : 0;
+        } else if (era == 2) {
+            Song ts = trainSong();
+            FxSettings bf; bf.room = 0.72f; bf.damp = 0.5f; bf.wet = 0.8f; bf.delay = ts.e * 3; bf.delayFb = 0.34f; bf.delayLp = 3000;
+            bf.masterLp = 13000; bf.drive = 1.6f;
+            n += renderTrack(ts, arrangeTrain, bf, d + "music_boss") ? 1 : 0;
         } else {
             Song hs = hourglassSong();
             FxSettings bf; bf.room = 0.92f; bf.damp = 0.35f; bf.delay = hs.e * 3; bf.delayFb = 0.35f; bf.delayLp = 4500; bf.drive = 1.8f;

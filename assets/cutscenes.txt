@@ -1,67 +1,56 @@
-# cutscenes.txt (akshat): the story scenes. Pokemon-style dialogue boxes.
+# cutscenes.txt (akshat): the boss scenes, Pokemon-style (ui/Cutscene.cpp).
+# The story itself (prologue, a memory card after every upgrade, the ending album) is told by
+# ui/Story with the words in strings.txt. These scenes belong only to the three bosses.
 #
 # FORMAT
-#   [scene_name]            starts a scene. Add  vs=alarm  or  vs=hourglass  for the
-#                           boss "VS" encounter intro:  [boss_alarm_intro vs=alarm]
+#   [scene_name]            starts a scene. Add  vs=<boss>  for the wild-battle "VS" intro.
 #   speaker: text           one line of dialogue. Long text wraps and pages by itself.
-#   Speakers: gran, sam, alarm, hourglass, narrator.
+#   Speakers: gran, sam, school_bell, last_train, hourglass, narrator.
 #   A line with no "speaker:" is spoken by the narrator. Lines starting with # are comments.
 #
 # The game plays these scene names (each once per run):
-#   intro                      a run starts
-#   era_1, era_2, era_3        right after the world upgrades into that era
-#   boss_alarm_intro / _defeat      The Alarm Clock (end of 8-bit)
-#   boss_hourglass_intro / _defeat  The Hourglass (end of 2.5D, the final boss)
-#   ending                     just before the ending slideshow
+#   boss_<id>_intro    the boss appears (stage 2 school_bell, stage 4 last_train, stage 6 hourglass)
+#   boss_<id>_defeat   the boss is beaten, before the world upgrades (or the ending)
+# Which stages have a boss: [boss] stages in config.ini.
 # Remove a scene (or all its lines) and the game just skips it.
 
-[intro]
-gran: Sam? Is that you, love? Everything's gone all grey. Like an old photo left in the sun.
-sam: It's me, Gran. You're having one of your foggy days. That's okay. I've got you.
-gran: Something's behind us. It's eating the street. It's eating Tuesday!
-sam: That's the Forgetting. We keep running right, and we stay ahead of it.
-gran: Running? At my age? ...Oh, go on then. Hold my cardigan.
-sam: Jump on the little Forgetting things. They drop bits of you. We'll put you back together.
+# ---- Stage 2, 8-bit: Sam's first day at school (2006)
+[boss_school_bell_intro vs=school_bell]
+school_bell: DING-A-LING! Nine o'clock! Late, late, LATE! Little boys who dawdle get left behind!
+gran: I know you. You rang every morning for six years, and I was never once late.
+sam: I was. Every day. You carried my shoes so I'd run faster.
+school_bell: Time waits for nobody, Edith! I'll ring every minute right out of you!
+gran: It's Edie. And I've waited at that gate longer than you've been hanging up there. Come on, Sam.
 
-[era_1]
-gran: Colour! I remember colour! And this is... my old school. I hated maths.
-sam: You told me you were top of the class.
-gran: Top of the class at hating maths, love.
+[boss_school_bell_defeat]
+school_bell: Dong... three o'clock... home time...
+gran: Three o'clock. I told him I'd be right here.
+sam: And you were, Gran. Every single day.
 
-[era_2]
-gran: Listen to that music! I had this on a cassette. Wore it out dancing.
-sam: Mum says you met Grandad at a dance.
-gran: He stepped on my foot. Twice. I married him anyway.
+# ---- Stage 4, 32-bit: the train to the city (1964)
+[boss_last_train_intro vs=last_train]
+last_train: ALL ABOARD! Departing in ten seconds! Nine! Eight! Miss me, Edie, and you never meet him!
+gran: Arthur's on that train. In a borrowed suit, two sizes too big.
+sam: Then we're not missing it. How long have we got?
+last_train: Sixty years, give or take! Seven! Six! TOOT TOOT!
+gran: Sixty years is plenty. Mind the gap, Sam.
 
-[era_3]
-gran: Oh. It all looks so real now. Like I could reach out and touch it.
-sam: This is when you had Mum. And then, a bit later, me.
-gran: Then this is the best bit. Don't let go of my hand, Sam.
+[boss_last_train_defeat]
+last_train: Hsssss... this service is delayed... due to... sentiment...
+gran: He stood up and gave me his seat. He said he'd get off wherever I did.
+sam: And did he?
+gran: Every stop, love. Every stop for sixty years.
 
-[boss_alarm_intro vs=alarm]
-alarm: BRRRIIIIING! UP! UP! UP! You're LATE! You are ALWAYS late!
-gran: Oh no. The school-morning clock. I could never find both shoes.
-alarm: Five more minutes? There are NEVER five more minutes!
-sam: Gran, when it gets dizzy, we jump on its head. Watch the shockwaves!
-
-[boss_alarm_defeat]
-alarm: Brr... ring... five... more... minutes...
-gran: Take ten, dear. I've got all the time in the world today.
-sam: The memory's coming back! Keep going!
-
+# ---- Stage 6, full 3D: home, the oldest memory (1951). The final boss.
 [boss_hourglass_intro vs=hourglass]
-hourglass: Every grain that falls, you forget. A name. A face. A Tuesday.
-sam: Leave her alone! She's still in there!
-hourglass: The sand always runs out, child. Always.
-gran: Then I'll turn you over and start again. Come on, Sam.
+hourglass: Trickle, trickle. Every grain is a day, Edie. Look how few are left at the top.
+gran: Oh, I know you. You sat on Mother's mantelpiece and never said a word.
+sam: Gran, it's running out. It wants the oldest one. The cottage.
+hourglass: The oldest go last. But they all go. Then I turn over, and start again with nothing.
+gran: Then I'll hold on to the bit that matters. Hold my hand, Sam. Tight.
 
 [boss_hourglass_defeat]
-hourglass: But... the sand... it was supposed to run out...
-gran: It does, dear. That's why you hold on to the people while it falls.
-
-[ending]
-gran: Sam. I know you. I know all of it. Your mum's first word was "no".
-sam: You remember!
-gran: For now. Maybe not tomorrow. That's alright.
-sam: Then I'll remind you tomorrow. And the day after that.
-gran: That's my boy. Now put the kettle on.
+hourglass: You can't stop the sand, Edie... nobody can...
+gran: No. But I can sit with it a while. With him.
+sam: The cottage is still there, Gran. Your mum's at the gate.
+gran: Then let's not keep her waiting. Tea's at five.
