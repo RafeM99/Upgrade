@@ -1,8 +1,6 @@
 build/
-out/
-cmake-build-*/
-.vs/
-.vscode/
-.idea/
+build-*/
 .DS_Store
 *.swp
+.vscode/
+.idea/

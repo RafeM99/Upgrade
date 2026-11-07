@@ -1,0 +1,100 @@
+# Upgrade: every line the players read. key = text. "\n" makes a new line.
+# The writer owns this file. The two characters: Player 1 is Gran, Player 2 is Sam, her grandson.
+
+title = UPGRADE
+title_sub = Two of you. One memory. Get it back before it fades.
+title_start = Press any button to start
+title_join = Player 2: press any of your buttons to join
+title_p2_ready = Player 2 is here!
+title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
+title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
+title_controls_pad = Gamepads: stick move, A jump, X attack, B ability. Start or Esc pauses.
+title_credit = GameJam 2026 . theme: Time
+
+p1_name = GRAN
+p2_name = SAM
+p2_join_1 = Player 2?
+p2_join_2 = Press any of your buttons to join
+p2_joined = SAM REMEMBERS
+p2_joined_sub = Two of you now. Stay close.
+
+bar_label = MEMORY
+score = SCORE
+era_name_0 = 1-BIT . EARLY CHILDHOOD
+era_name_1 = 8-BIT . SCHOOL YEARS
+era_name_2 = 16-BIT . TEENAGE YEARS
+era_name_3 = 2.5D . GROWN UP
+start_hint = Run right. Jump on the Forgetting. Collect what it drops.
+controls_hint = Jump on enemies to break them. Their fragments fill the Memory Bar. Stay ahead of the Wall.
+
+memory_restored = MEMORY RESTORED:
+memory_1 = The first bike ride
+memory_2 = The treehouse
+memory_3 = The phone call
+memory_4 = Home
+new_ability = NEW ABILITIES
+
+ability_double_jump = Double jump
+ability_dash = Dash
+ability_ground_pound = Ground pound
+ability_wall_jump = Wall jump
+ability_glide = Glide
+ability_time_slow = Time-slow pulse
+ability_short_double_jump = 2xJUMP
+ability_short_dash = DASH
+ability_short_ground_pound = POUND
+ability_short_wall_jump = WALL
+ability_short_glide = GLIDE
+ability_short_time_slow = SLOW
+no_abilities = run . jump . stomp
+
+faded = FADED
+faded_hint = Touch your partner to remember!
+faded_hint_solo = ...
+status_shield = LOCKET
+status_speed = FAST
+status_magnet = LULLABY
+
+memory_lost = THE MEMORY SLIPS
+memory_lost_sub = Both of you faded. Hold on to each other.
+memory_lost_sub_solo = You faded. The memory slips a little further away.
+
+boss_appear = THE FORGETTING GATHERS
+boss_sub = Jump on it when it lands!
+boss_name = THE FORGETTING
+boss_hint = NOW! Jump on it!
+boss_defeated = IT REMEMBERS
+
+powerup_0 = KEEPSAKE LOCKET
+powerup_desc_0 = Protects you from one hit.
+powerup_1 = HOURGLASS
+powerup_desc_1 = The Forgetting Wall falls back and slows down.
+powerup_2 = LULLABY
+powerup_desc_2 = Fragments fly to you from far away.
+powerup_3 = OLD PHOTOGRAPH
+powerup_desc_3 = A whole piece of the memory comes back.
+powerup_4 = OLD TRAINERS
+powerup_desc_4 = Run faster for a while.
+
+pause = PAUSED
+resume = Resume
+restart = Restart
+quit = Quit to title
+pause_hint = Up/Down to choose, Enter or Space to pick
+
+ending_caption_0 = The first bike ride
+ending_sub_0 = "Don't let go!"  "I let go ages ago. You're doing it yourself."
+ending_caption_1 = The treehouse
+ending_sub_1 = We built it together, one summer. It's still there.
+ending_caption_2 = The phone call
+ending_sub_2 = Every Sunday, even when he moved far away.
+ending_caption_3 = Home
+ending_sub_3 = And then one day, she forgot his name.
+ending_reveal_1 = Player 1 was Gran.
+ending_reveal_2 = Player 2 was Sam, her grandson.
+ending_reveal_3 = The memories were hers. He came back to find them with her.
+ending_reveal_4 = "There you are, Sam. I remember."
+credits_title = UPGRADE
+credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
+thanks = Thank you for remembering.
+ending_continue = Press any button

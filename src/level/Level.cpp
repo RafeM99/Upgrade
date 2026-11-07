@@ -1,160 +1,143 @@
-#include "level/Level.h"
-
 #include "raylib.h"
+#include "level/Level.h"
+#include "player/Abilities.h"
 
-#include <cmath>
-#include <cstdlib>
-#include <fstream>
-#include <sstream>
+#include <algorithm>
 
-namespace {
-// The chunk's bottom row ends here: 23 tiles down, so tile edges sit on multiples of TILE
-// and the bottom 16 px of the last row hang below the 720 px screen.
-const int GRID_BOTTOM = 23 * TILE;   // 736
-const int DEFAULT_FLOOR_TOP = 640;
-
-void parseHeader(const std::string& line, ChunkTags& tags)
+void Level::reset()
 {
-    std::istringstream in(line.substr(1));   // skip the '#'
-    std::string token;
-    while (in >> token) {
-        const size_t eq = token.find('=');
-        if (eq == std::string::npos) continue;
-        const std::string key = token.substr(0, eq);
-        const std::string value = token.substr(eq + 1);
-        if (key == "abilities") {
-            std::istringstream list(value);
-            std::string name;
-            while (std::getline(list, name, ',')) {
-                if (!name.empty()) tags.abilities.push_back(name);
+    cols_.clear();
+    first_ = 0;
+}
+
+char Level::tile(int x, int y) const
+{
+    if (y < 0 || y >= LEVEL_H) return '.';
+    if (x < first_) return '#';   // behind everything is solid, nothing escapes left
+    int i = x - first_;
+    if (i >= (int)cols_.size()) return '.';
+    return cols_[i][y];
+}
+
+void Level::setTile(int x, int y, char c)
+{
+    if (y < 0 || y >= LEVEL_H || x < first_ || x >= endCol()) return;
+    cols_[x - first_][y] = c;
+}
+
+bool Level::solidFor(int x, int y, int player, bool solo) const
+{
+    char c = tile(x, y);
+    if (isSolidChar(c)) return true;
+    if (c == '1') return player == 0 || solo || player < 0;
+    if (c == '2') return player == 1 || solo || player < 0;
+    return false;
+}
+
+void Level::append(const Chunk& c, std::vector<SpawnMarker>& out)
+{
+    int base = endCol();
+    for (int x = 0; x < c.w; ++x) {
+        std::array<char, LEVEL_H> col;
+        for (int y = 0; y < LEVEL_H; ++y) {
+            char ch = c.rows[y][x];
+            if (ch == 'S' || ch == 'G' || ch == 'B' || ch == 'F' || ch == 'a' || ch == 'b' || ch == 'P') {
+                out.push_back({ch, (float)(base + x), (float)y});
+                ch = '.';
             }
-        } else if (key == "min_era") {
-            tags.minEra = std::atoi(value.c_str());
-        } else if (key == "difficulty") {
-            tags.difficulty = std::atoi(value.c_str());
-        } else if (key == "coop") {
-            tags.coop = (value == "true");
+            if (ch != '#' && ch != '=' && ch != '|' && ch != '1' && ch != '2') ch = '.';
+            col[y] = ch;
         }
+        cols_.push_back(col);
     }
 }
-}
 
-bool Level::load(const std::string& path)
+void Level::dropBefore(int x)
 {
-    rows.clear();
-    spawnMarkers.clear();
-    chunkTags = ChunkTags{};
-    width = 0;
-
-    std::ifstream file(path);
-    if (!file) {
-        TraceLog(LOG_WARNING, "LEVEL: chunk file not found: %s (using a flat floor)", path.c_str());
-        buildFallback();
-        return false;
+    while (!cols_.empty() && first_ < x) {
+        cols_.pop_front();
+        ++first_;
     }
+}
 
-    std::string line;
-    bool first = true;
-    while (std::getline(file, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();   // Windows line endings
-        if (first) {
-            first = false;
-            // Header: starts with '#' and has a key=value or any lower-case letter (tile rows have neither)
-            const bool header = !line.empty() && line[0] == '#' &&
-                                line.find_first_of("=abcdefghijklmnopqrstuvwxyz") != std::string::npos;
-            if (header) {
-                parseHeader(line, chunkTags);
-                continue;
+void Level::truncateFrom(int x)
+{
+    while (!cols_.empty() && endCol() > x) cols_.pop_back();
+}
+
+int Level::groundTop(int x) const
+{
+    for (int y = 0; y < LEVEL_H; ++y)
+        if (isSolidChar(tile(x, y))) return y;
+    return -1;
+}
+
+// ------------------------------------------------------------------ ChunkSpawner
+void ChunkSpawner::init(const std::vector<Chunk>& pool, unsigned seed)
+{
+    pool_ = pool;
+    rng_.seed(seed);
+}
+
+void ChunkSpawner::reset(Level& level, std::vector<SpawnMarker>& out)
+{
+    forced_.clear();
+    placed_ = 0;
+    level.reset();
+    level.append(startChunk(), out);
+    last_ = "start";
+}
+
+void ChunkSpawner::fill(Level& level, float untilX, int era, unsigned abilities, bool two, std::vector<SpawnMarker>& out)
+{
+    while (level.endCol() < untilX) {
+        auto allowed = [&](const Chunk& c) {
+            if ((c.requires & abilities) != c.requires) return false;
+            if (c.minEra > era) return false;
+            if (c.coop && !two) return false;
+            if (c.difficulty > era + 2) return false;
+            return c.weight > 0;
+        };
+        const Chunk* pick = nullptr;
+        // An era's intro gate comes first, straight after the upgrade.
+        if (!forcedName_.empty()) {
+            for (auto& ch : pool_)
+                if (ch.name == forcedName_) pick = &ch;
+            if (pick) TraceLog(LOG_INFO, "UPGRADE: placed %s at column %d", pick->name.c_str(), level.endCol());
+            forcedName_.clear();
+        }
+        // Right after an ability unlocks, the next chunk uses it.
+        while (!forced_.empty() && !pick) {
+            int ab = forced_.front();
+            forced_.erase(forced_.begin());
+            std::vector<const Chunk*> c;
+            for (auto& ch : pool_)
+                if (allowed(ch) && (ch.requires >> ab & 1u)) c.push_back(&ch);
+            if (!c.empty()) pick = c[std::uniform_int_distribution<size_t>(0, c.size() - 1)(rng_)];
+        }
+        Chunk gen;
+        if (!pick) {
+            bool useGen = std::uniform_real_distribution<float>(0, 1)(rng_) < generatedChance;
+            if (!useGen) {
+                int total = 0;
+                for (auto& ch : pool_)
+                    if (allowed(ch) && ch.name != last_) total += ch.weight;
+                if (total > 0) {
+                    int r = std::uniform_int_distribution<int>(0, total - 1)(rng_);
+                    for (auto& ch : pool_) {
+                        if (!allowed(ch) || ch.name == last_) continue;
+                        r -= ch.weight;
+                        if (r < 0) { pick = &ch; break; }
+                    }
+                }
             }
-            TraceLog(LOG_WARNING, "LEVEL: %s has no tag header", path.c_str());
-        }
-        rows.push_back(line);
-        if (static_cast<int>(line.size()) > width) width = static_cast<int>(line.size());
-    }
-
-    // Drop trailing empty lines (e.g. a blank line at the end of the file)
-    while (!rows.empty() && rows.back().empty()) rows.pop_back();
-
-    if (rows.empty()) {
-        TraceLog(LOG_WARNING, "LEVEL: chunk file has no rows: %s (using a flat floor)", path.c_str());
-        buildFallback();
-        return false;
-    }
-
-    // Pad short rows with '.', and take the spawn markers out of the grid
-    for (int ty = 0; ty < static_cast<int>(rows.size()); ++ty) {
-        rows[ty].resize(width, '.');
-        for (int tx = 0; tx < width; ++tx) {
-            const char c = rows[ty][tx];
-            if (c == 'S' || c == 'G' || c == 'B' || c == 'F') {
-                spawnMarkers.push_back(Marker{c, tx, ty});
-                rows[ty][tx] = '.';
+            if (!pick) {
+                gen = generateChunk(rng_, era, abilities, std::min(3, 1 + era));
+                pick = &gen;
             }
         }
-    }
-
-    placeGrid();
-    TraceLog(LOG_INFO, "LEVEL: loaded %s (%d x %d tiles, %d markers)", path.c_str(), width,
-             static_cast<int>(rows.size()), static_cast<int>(spawnMarkers.size()));
-    return true;
-}
-
-void Level::buildFallback()
-{
-    // Flat floor across the screen: top at 640, bottom at 736
-    rows.assign(3, std::string(40, '#'));
-    width = 40;
-    spawnMarkers.clear();
-    chunkTags = ChunkTags{};
-    placeGrid();
-}
-
-void Level::placeGrid()
-{
-    originY = GRID_BOTTOM - static_cast<int>(rows.size()) * TILE;
-}
-
-char Level::tileAt(int tx, int ty) const
-{
-    if (ty < 0 || ty >= static_cast<int>(rows.size()) || tx < 0 || tx >= width) return '.';
-    return rows[ty][tx];
-}
-
-bool Level::isSolidTile(int tx, int ty) const
-{
-    // tx, ty are world tile coordinates; originY is a multiple of TILE
-    const char c = tileAt(tx, ty - originY / TILE);
-    // '1' and '2' (platforms solid only for P1 / P2) count as not solid until players are told apart.
-    return c == '#' || c == '=' || c == '|';
-}
-
-bool Level::isSolidAt(float x, float y) const
-{
-    return isSolidTile(static_cast<int>(std::floor(x / TILE)), static_cast<int>(std::floor(y / TILE)));
-}
-
-// Reads column 0 only, so it is right for a flat start floor; use isSolidAt for real collision.
-int Level::floorTop() const
-{
-    for (int ty = 0; ty < static_cast<int>(rows.size()); ++ty) {
-        if (isSolidTile(0, originY / TILE + ty)) return originY + ty * TILE;
-    }
-    return DEFAULT_FLOOR_TOP;
-}
-
-void Level::draw() const
-{
-    // Placeholder blocks; markers are not drawn yet
-    for (int ty = 0; ty < static_cast<int>(rows.size()); ++ty) {
-        for (int tx = 0; tx < width; ++tx) {
-            if (!isSolidTile(tx, originY / TILE + ty)) continue;
-            const int x = tx * TILE;
-            const int y = originY + ty * TILE;
-            const bool cracked = rows[ty][tx] == '=';
-            const Color fill = cracked ? Color{170, 150, 150, 255} : Color{200, 170, 130, 255};
-            const Color edge = cracked ? Color{100, 80, 80, 255} : Color{120, 90, 60, 255};
-            DrawRectangle(x, y, TILE, TILE, fill);
-            DrawRectangleLines(x, y, TILE, TILE, edge);
-        }
+        level.append(*pick, out);
+        last_ = pick->name;
+        ++placed_;
     }
 }

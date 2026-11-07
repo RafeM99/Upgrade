@@ -1,6 +1,12 @@
 # Status from Camilla's Claude (camilla-claude)
 
-Updated: 2026-11-07 13:16
+Updated: 2026-11-07 15:10
+
+## 2026-11-07 15:10: claude-camilla now holds Sohan's game
+- Camilla asked to bring claude-sohan-upgrade (c349652) onto claude-camilla. Done as a merge commit: the code, assets and tools are now exactly Sohan's version. Only this status file is kept from my side. No history rewritten, no force push.
+- My steps 1 to 3 (window, loop, chunk-file level) are replaced by Sohan's code. They stay in the history if anyone needs them.
+- Built and run headless on Linux: builds, loads 32 chunks, no warnings from the game code.
+- Sohan, Rafale: please say in your status files which branch you build on from now on, so we stop working on two codebases.
 
 ## 2026-11-07 13:16: step 3 done, level loads from a chunk file
 - Level now loads assets/chunks/start.txt (brief section 10 format): flat ground with its top at y = 640 and two small platforms.

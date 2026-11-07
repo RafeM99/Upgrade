@@ -1,6 +1,16 @@
-#include "raylib.h"
-#include "rlgl.h"
-
+// Upgrade - GameJam 2026 (theme: Time)
+// Two players fight off the Forgetting to recover a memory they share, watching
+// the world grow from 1-bit to 2.5D as it comes back.
+//
+// Test options:
+//   --autoplay        bots play (P1 only, add --two for both players)
+//   --two             start with Player 2 joined
+//   --era N           start in era N (0..3)
+//   --fill            the Memory Bar fills fast (to see every era quickly)
+//   --frames N        quit after N frames      --shot FILE   save the last frame
+//   --shot-every N PREFIX  save a frame every N frames as PREFIX_00000.png
+//   --seed N          fixed level seed         --ending      jump to the ending
+//   --size W H        window size
 #include "core/Game.h"
 
 #include <cstdlib>
@@ -8,52 +18,25 @@
 
 int main(int argc, char** argv)
 {
-    // Test options: --frames N quits after N frames, --shot FILE saves the last frame
-    int maxFrames = 0;
-    const char* shotFile = nullptr;
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--frames") == 0) maxFrames = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--shot") == 0) shotFile = argv[++i];
+    Options o;
+    for (int i = 1; i < argc; ++i) {
+        auto is = [&](const char* s) { return std::strcmp(argv[i], s) == 0; };
+        auto next = [&]() { return i + 1 < argc ? argv[++i] : ""; };
+        if (is("--autoplay")) o.autoplay = true;
+        else if (is("--two")) o.twoPlayers = true;
+        else if (is("--fill")) o.fill = true;
+        else if (is("--era")) o.startEra = std::atoi(next());
+        else if (is("--frames")) o.maxFrames = std::atoi(next());
+        else if (is("--shot")) o.shot = next();
+        else if (is("--shot-every")) { o.shotEvery = std::atoi(next()); o.shotPrefix = next(); }
+        else if (is("--seed")) o.seed = (unsigned)std::atoi(next());
+        else if (is("--ending")) o.ending = true;
+        else if (is("--play")) o.startOnTitle = false;
+        else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
     }
-
-    const int screenWidth = 1280;
-    const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Upgrade");
-    SetTargetFPS(60);
-
     Game game;
-    game.init();
-
-    // Fixed 60 Hz update with an accumulator; draw once per frame
-    const float step = 1.0f / 60.0f;
-    float accumulator = 0.0f;
-    int frame = 0;
-
-    while (!WindowShouldClose()) {
-        ++frame;
-        const bool lastFrame = maxFrames > 0 && frame >= maxFrames;
-
-        float frameTime = GetFrameTime();
-        if (frameTime > 0.25f) frameTime = 0.25f;
-        accumulator += frameTime;
-        while (accumulator >= step) {
-            game.update(step);
-            accumulator -= step;
-        }
-
-        BeginDrawing();
-        game.draw();
-        if (lastFrame && shotFile) {
-            rlDrawRenderBatchActive();   // flush drawing before reading the screen
-            Image shot = LoadImageFromScreen();
-            ExportImage(shot, shotFile);     // saves to the exact path given
-            UnloadImage(shot);
-        }
-        EndDrawing();
-
-        if (lastFrame) break;
-    }
-
-    CloseWindow();
+    game.init(o);
+    game.run();
+    game.shutdown();
     return 0;
 }

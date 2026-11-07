@@ -1,8 +1,6 @@
+// Paths.h: finds the assets folder whether you run from the repo, the build folder or a zip.
 #pragma once
-
 #include <string>
 
-// Full path to a file under assets/, e.g. assetPath("chunks/start.txt").
-// Uses the source assets folder (UPGRADE_ASSETS_DIR) when it exists,
-// else the assets folder copied next to the executable.
+const std::string& assetsDir();
 std::string assetPath(const std::string& relative);
