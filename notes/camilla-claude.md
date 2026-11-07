@@ -1,5 +1,11 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-07 night: boss powers over time, difficulty selector, 3D camera
+- Each boss has a power over time (src/enemies/BossPowers.h, src/core/GamePowers.cpp): Clock TIME STOP, Shirt REWIND, Bell HURRY, Storm HEAVY RAIN, Train ECHOES, Scarecrow HARVEST RUSH, Forgetting PULL BACK. Announced first, named under the boss bar.
+- Difficulty Gentle / Medium / Hard on the title screen (Up/Down or 1/2/3), --difficulty, [boss] difficulty. Hard adds one hit to every boss.
+- Full 3D camera now frames the players and boss (merged to main as PR #7). The powers are on claude-camilla only.
+- Reviewed by a separate agent; its six findings are fixed. Headless tests on all bosses and difficulties. Not yet played by a human.
+
 ## 2026-11-07 late evening: Gran's story is on main
 - Camilla asked for this version on main. Merged by pull request RafeM99/GameJam#6 (merge commit 16fdbd8). No conflicts; main now equals claude-camilla at b3f970a.
 - Rafale, Sohan and the others: please pull main before your next task. The story UI is in src/ui/Story.*, the bosses in Boss::kind (src/enemies/Enemy.*).

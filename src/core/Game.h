@@ -125,7 +125,9 @@ private:
     PlayerInput inputs_[2];
     bool firstTick_ = true;
     bool prologueSeen_ = false;
-    std::vector<Vector2> history_[2], pullPath_[2];   // where the players have been (for the pull back)
+    struct Trace { float x, y; bool grounded; };
+    std::vector<Trace> history_[2];      // where the players have been (for the pull back)
+    std::vector<Vector2> pullPath_[2];
     float historyClock_ = 0;
     static constexpr float kPullTime = 0.7f;
     void startBossPowers();

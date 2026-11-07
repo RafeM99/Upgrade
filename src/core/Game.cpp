@@ -401,7 +401,12 @@ void Game::updatePlaying(float dt)
         Player& pl = players[p];
         if (!pl.joined) continue;
         // the Clock's TIME STOP and the Forgetting's pull back hold the players still
-        if ((powers.freezeT > 0 || powers.pullT > 0) && pl.alive()) { pl.vx = pl.vy = 0; continue; }
+        if ((powers.freezeT > 0 || powers.pullT > 0) && pl.alive()) {
+            pl.vx = pl.vy = 0;
+            pl.dashTime = pl.attackTime = 0;   // no dash shield or attack hitbox frozen in place
+            pl.pounding = false;
+            continue;
+        }
         // the Storm's HEAVY RAIN: time drags for the players
         pl.update(inputs_[p], level, soloNow, attackUnlocked, powers.rainT > 0 ? dt * powers.rainK : dt, ptune);
         if (pl.evJump) audio.play("jump", 0.7f);
@@ -631,6 +636,7 @@ void Game::updatePlaying(float dt)
         if (slowTime > 0) speed *= slowK;
         if (wallSlowTime > 0) speed *= config().f("powerups.hourglass_slow_factor", 0.3f);
         if (time < config().f("wall.start_delay", 4.0f)) speed = 0;
+        if (powers.freezeT > 0 || powers.pullT > 0) speed = 0;   // the Wall waits while a boss holds you still
         wallSpeedNow = speed;
         wallX += speed * dt;
     }

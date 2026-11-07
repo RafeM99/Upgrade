@@ -49,8 +49,13 @@ void Game::recordHistory(float dt)
     if (historyClock_ < 0.1f) return;
     historyClock_ = 0;
     for (int p = 0; p < 2; ++p) {
-        if (!players[p].joined) { history_[p].clear(); continue; }
-        history_[p].push_back({players[p].x, players[p].y});
+        const Player& pl = players[p];
+        if (!pl.joined || !pl.alive()) { history_[p].clear(); continue; }
+        // a jump of more than a few tiles in 0.1 s is a respawn or a revive: the old path no longer counts
+        if (!history_[p].empty() && std::fabs(history_[p].back().x - pl.x) + std::fabs(history_[p].back().y - pl.y) > 3.0f)
+            history_[p].clear();
+        if (pl.y > LEVEL_H) continue;
+        history_[p].push_back({pl.x, pl.y, pl.onGround});
         if (history_[p].size() > 60) history_[p].erase(history_[p].begin());
     }
 }
@@ -74,8 +79,14 @@ void Game::applyBossPower()
     switch (k) {
     case 0:   // the clock stops time: the players freeze where they stand
         powers.freezeT = tu.freeze;
-        for (auto& pl : players)
-            if (pl.alive()) particles.burst(pl.cx(), pl.cy(), 16, Color{235, 235, 225, 255}, 4, 0.5f, 0.12f);
+        for (auto& pl : players) {
+            if (!pl.alive()) continue;
+            particles.burst(pl.cx(), pl.cy(), 16, Color{235, 235, 225, 255}, 4, 0.5f, 0.12f);
+            // Gentle: nothing can hurt a frozen player (invuln does not tick while frozen)
+            if (!tu.attackWhileFrozen) pl.invuln = std::max(pl.invuln, 0.3f);
+        }
+        // Medium / Hard: the clock goes straight for you while you can't move
+        if (tu.attackWhileFrozen && boss.state == 1) boss.stateTime = 99.0f;
         break;
     case 2:   // the bell: everything runs fast
         powers.hurryT = tu.hurryT;
@@ -103,12 +114,23 @@ void Game::applyBossPower()
             pullPath_[p].clear();
             Player& pl = players[p];
             if (!pl.alive() || history_[p].size() < 2) continue;
-            int idx = std::max(0, (int)history_[p].size() - 1 - back);
-            // never back towards the Forgetting Wall: keep a clear six tiles from it
-            while (idx < (int)history_[p].size() - 1 && history_[p][idx].x < wallX + 6.0f) ++idx;
+            const auto& h = history_[p];
+            // Land only where the player stood on ground that is still there (a pound may have
+            // broken it since), and never back towards the Forgetting Wall: six clear tiles.
+            auto safe = [&](const Trace& s) {
+                if (!s.grounded || s.x < wallX + 6.0f) return false;
+                for (float fx : {s.x + 0.1f, s.x + pl.w - 0.1f}) {
+                    int gt = level.groundTop((int)std::floor(fx));
+                    if (gt >= 0 && std::fabs(gt - (s.y + pl.h)) < 0.3f) return true;
+                }
+                return false;
+            };
+            int idx = std::max(0, (int)h.size() - 1 - back);
+            while (idx < (int)h.size() - 1 && !safe(h[idx])) ++idx;
+            if (idx >= (int)h.size() - 1) continue;   // nowhere safe to go back to: this player stays
             pl.invuln = std::max(pl.invuln, kPullTime + 0.3f);   // nothing hurts you while you are pulled
             pullPath_[p].push_back({pl.x, pl.y});
-            for (int i = (int)history_[p].size() - 1; i >= idx; --i) pullPath_[p].push_back(history_[p][i]);
+            for (int i = (int)h.size() - 1; i >= idx; --i) pullPath_[p].push_back({h[i].x, h[i].y});
             particles.burst(pl.cx(), pl.cy(), 24, Color{200, 150, 255, 255}, 6, 0.6f, 0.14f);
         }
         powers.pullT = kPullTime;
@@ -202,8 +224,9 @@ void Game::updateBossPowers(float dt)
         }
         if (boss.state != 2 && !boss.landed) powers.curPath.clear();
     }
+    const float slowK = slowTime > 0 ? config().f("abilities.time_slow_factor", 0.3f) : 1.0f;
     for (auto& e : powers.echoes) {
-        e.t += dt;
+        e.t += dt * slowK;   // Sam's time-slow pulse slows the echoes too
         if (!e.active()) continue;
         Vector2 c = e.pos();
         float bw = boss.w * 0.85f, bh = boss.h * 0.85f;
@@ -213,8 +236,8 @@ void Game::updateBossPowers(float dt)
             if (tu.echoHurts) {
                 if (pl.invuln <= 0 && pl.dashTime <= 0) hurtPlayer(p, false);
             } else {
-                pl.vx = (pl.cx() < c.x ? -1.0f : 1.0f) * 9.0f;
-                pl.vy = std::min(pl.vy, -5.0f);
+                pl.vx = 9.0f;   // always forward, never towards the Forgetting Wall
+                pl.vy = std::min(pl.vy, -8.0f);
                 pl.wallLock = 0.2f;
             }
         }
