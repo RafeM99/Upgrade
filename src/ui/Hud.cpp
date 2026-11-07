@@ -615,6 +615,13 @@ void bossBar(Game& g, int top)
         std::string hnt = T("boss_hint");
         txt(hnt, (W - textW(hnt, th.ts)) / 2, y + h + 2 * U, th.ts, fade(th.era == 6 ? th.fg : (th.era == 1 ? th.fg : WHITE), blink(g, 8)));
     }
+    // the boss's time power: its warning, then its name
+    if (g.powers.labelT > 0 && !g.powers.label.empty()) {
+        const std::string& pl = g.powers.label;
+        int py = y + h + 2 * U + capH(th.ts) + 3 * U;
+        Color pc = th.era <= 1 ? th.fg : (th.era == 6 ? hexc(0x8a3ab0) : hexc(0xe0b0ff));
+        txt(pl, (W - textW(pl, th.ts)) / 2, py, th.ts, pc);
+    }
 }
 
 void banner(Game& g)
@@ -694,6 +701,10 @@ void Hud::drawTitle(Game& g)
     text(T("title_start"), 640, 400, 28, fade(WHITE, 0.55f + 0.45f * std::sin(g.time * 4)), true);
     std::string p2 = g.players[1].joined ? T("title_p2_ready") : T("title_join");
     text(p2, 640, 450, 20, g.players[1].joined ? P_COL[1] : fade(WHITE, 0.8f), true);
+    // difficulty: how strong the bosses' time powers are
+    std::string diff = std::string(T("difficulty_label")) + "   < " + T("difficulty_" + std::to_string(g.difficulty)) + " >";
+    text(diff, 640, 494, 20, hexc(0xffd890), true);
+    text(T("difficulty_desc_" + std::to_string(g.difficulty)), 640, 522, 15, fade(WHITE, 0.75f), true);
     text(T("title_controls_p1"), 640, 560, 15, fade(P_COL[0], 0.95f), true);
     text(T("title_controls_p2"), 640, 586, 15, fade(P_COL[1], 0.95f), true);
     text(T("title_controls_pad"), 640, 612, 15, fade(WHITE, 0.7f), true);

@@ -42,15 +42,24 @@ The story has its own UI (`src/ui/Story.*`), separate from the level HUD:
 - the ending: an album of the seven photographs, then the present day.
 
 Each memory has its own boss, the Forgetting in the shape of something from it:
-| Stage | Memory | Boss | How it fights |
-|---|---|---|---|
-| 1-bit | The night she got lost | The 3 a.m. Clock | ticks from place to place |
-| 4-shade | Arthur's shirts | The Empty Shirt | flutters wide, glides in on the wind |
-| 8-bit | Sam's first day at school | The School Bell | rings when it lands and throws you back |
-| 16-bit | The camping trip | The Storm | aims longer, strikes like lightning, rains flyers |
-| 32-bit | The train to the city | The Last Train | drops at one side, charges along the ground |
-| 2.5D | The hay meadow | The Scarecrow | calls crows |
-| 3D | Home | The Forgetting | as before |
+| Stage | Memory | Boss | How it fights | Its power over time |
+|---|---|---|---|---|
+| 1-bit | The night she got lost | The 3 a.m. Clock | ticks from place to place | TIME STOP: freezes you for a moment |
+| 4-shade | Arthur's shirts | The Empty Shirt | flutters wide, glides in on the wind | REWIND: takes back a hit unless you hit it again quickly |
+| 8-bit | Sam's first day at school | The School Bell | rings when it lands and throws you back | HURRY: the whole world runs fast |
+| 16-bit | The camping trip | The Storm | aims longer, strikes like lightning, rains flyers | HEAVY RAIN: time drags, you move slowly |
+| 32-bit | The train to the city | The Last Train | drops at one side, charges along flat ground | ECHOES: copies of each charge follow it down the line |
+| 2.5D | The hay meadow | The Scarecrow | calls crows | HARVEST RUSH: more crows, flying fast |
+| 3D | Home | The Forgetting | as before | PULL BACK: drags you back to where you stood seconds ago |
+
+Powers are announced first: the boss stops and pulses, and the line under its health bar names what is coming.
+
+### Difficulty
+Choose on the title screen with Up / Down (or 1, 2, 3), or start with `--difficulty gentle|medium|hard`.
+The default is `[boss] difficulty` in `assets/config.ini`. All the numbers are in `POWER_TUNING` in `src/enemies/BossPowers.h`.
+- Gentle: powers are short and clearly announced; a frozen player cannot be hurt.
+- Medium: powers last longer and can hurt you (the clock attacks while you are frozen, echoes hurt).
+- Hard: stronger and more frequent powers, and every boss takes one more hit.
 
 All the words are in `assets/strings.txt`. `--no-story` (or `[story] enabled = 0`) turns the story UI off.
 
@@ -86,6 +95,6 @@ cmake --build build --target assetgen
 ## Test options
 `--autoplay` (bots play), `--two` (P2 joined), `--fill` (bar fills fast), `--era N` (start in stage 0-6:
 0 1-bit, 1 4-shade, 2 8-bit, 3 16-bit, 4 32-bit, 5 2.5D, 6 3D),
-`--no-story`, `--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
+`--no-story`, `--difficulty gentle|medium|hard`, `--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
 Example: `./build/upgrade --autoplay --two --fill --era 4` shows the 2.5D swing and then the full 3D stage.
 The Memory Bar speed is `memory.fill_speed` in `assets/config.ini` (2.0 = twice the old speed).

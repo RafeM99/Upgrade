@@ -48,6 +48,7 @@ void Game::init(const Options& o)
     spawner.generatedChance = config().f("level.generated_chunk_chance", 0.3f);
     spawner.stageShare = config().f("level.stage_chunk_share", 0.6f);
     fillSpeed_ = std::max(0.1f, config().f("memory.fill_speed", 1.0f));
+    difficulty = opt.difficulty >= 0 ? opt.difficulty : difficultyFromString(config().s("boss.difficulty", "gentle"), DIFF_GENTLE);
 
     players[0].index = 0;
     players[1].index = 1;
@@ -96,6 +97,8 @@ void Game::startRun()
     particles.clear();
     boss = Boss();
     bossBeatenThisEra = false;
+    powers.reset();
+    clearHistory();
     transActive = false;
     lostTimer = 0;
     slowTime = wallSlowTime = 0;
@@ -229,7 +232,14 @@ void Game::update(float dt)
     bannerT = std::max(0.0f, bannerT - dt);
     switch (screen) {
     case Screen::Title: updateTitle(); break;
-    case Screen::Playing: story.updateBars(dt); updatePlaying(dt); break;
+    case Screen::Playing: {
+        story.updateBars(dt);
+        // the School Bell's HURRY: the whole world runs fast for a few seconds
+        float k = powers.hurryT > 0 ? powers.hurryK : 1.0f;
+        powers.hurryT = std::max(0.0f, powers.hurryT - dt);
+        updatePlaying(dt * k);
+        break;
+    }
     case Screen::Paused: updatePause(); break;
     case Screen::Story: updateStory(dt); break;
     case Screen::Ending: updateEnding(dt); break;
@@ -245,6 +255,18 @@ void Game::updateTitle()
         audio.play("join");
         return;
     }
+    // difficulty: Up / Down (arrows or d-pad) or 1 / 2 / 3. These keys never start the game.
+    int d = difficulty;
+    bool padUp = false, padDown = false;
+    for (int p = 0; p < 2; ++p)
+        if (IsGamepadAvailable(p)) {
+            padUp |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_UP);
+            padDown |= IsGamepadButtonPressed(p, GAMEPAD_BUTTON_LEFT_FACE_DOWN);
+        }
+    if (IsKeyPressed(KEY_UP) || padUp) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
+    if (IsKeyPressed(KEY_DOWN) || padDown) d = (d + 1) % DIFF_COUNT;
+    for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
+    if (d != difficulty) { difficulty = d; audio.play("select"); return; }
     bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
     for (int k = KEY_A; k <= KEY_Z && !go; ++k) go = IsKeyPressed(k) && k != KEY_P;
     if (go) {
@@ -378,7 +400,15 @@ void Game::updatePlaying(float dt)
     for (int p = 0; p < 2; ++p) {
         Player& pl = players[p];
         if (!pl.joined) continue;
-        pl.update(inputs_[p], level, soloNow, attackUnlocked, dt, ptune);
+        // the Clock's TIME STOP and the Forgetting's pull back hold the players still
+        if ((powers.freezeT > 0 || powers.pullT > 0) && pl.alive()) {
+            pl.vx = pl.vy = 0;
+            pl.dashTime = pl.attackTime = 0;   // no dash shield or attack hitbox frozen in place
+            pl.pounding = false;
+            continue;
+        }
+        // the Storm's HEAVY RAIN: time drags for the players
+        pl.update(inputs_[p], level, soloNow, attackUnlocked, powers.rainT > 0 ? dt * powers.rainK : dt, ptune);
         if (pl.evJump) audio.play("jump", 0.7f);
         if (pl.evDoubleJump) { audio.play("double_jump", 0.8f); particles.burst(pl.cx(), pl.bottom(), 10, P_SPARK[p], 4, 0.4f, 0.12f); }
         if (pl.evWallJump) { audio.play("wall_jump", 0.8f); particles.burst(pl.cx() + pl.facing * -0.4f, pl.cy(), 8, WHITE, 3, 0.3f, 0.1f); }
@@ -429,7 +459,8 @@ void Game::updatePlaying(float dt)
     }
 
     // ---- enemies
-    for (auto& e : enemies) updateEnemy(e, level, players, dt, tier(), slowK, etune);
+    const float rushK = powers.rushT > 0 ? powers.rushK : 1.0f;   // the Scarecrow's HARVEST RUSH
+    for (auto& e : enemies) updateEnemy(e, level, players, dt, tier(), slowK * rushK, etune);
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const Enemy& e) {
         return e.remove || e.x < wallX - 6;
     }), enemies.end());
@@ -484,6 +515,7 @@ void Game::updatePlaying(float dt)
 
     // ---- boss
     if (boss.active) {
+        if (bossHeldByPower() && boss.state == 1) boss.stateTime = 0;   // it waits while its power plays out
         boss.update(dt, cam.left(), cam.right(), level, players, tier(), slowK);
         if (boss.landed && boss.kind == 2) {
             // the school bell rings as it lands: anyone standing close is thrown back (no harm done)
@@ -531,6 +563,9 @@ void Game::updatePlaying(float dt)
             return;
         }
     }
+
+    updateBossPowers(dt);
+    recordHistory(dt);
 
     // ---- fragments drift to the nearest player and fill the bar
     const float magnetR = config().f("memory.fragment_magnet_radius", 2.8f);
@@ -601,6 +636,7 @@ void Game::updatePlaying(float dt)
         if (slowTime > 0) speed *= slowK;
         if (wallSlowTime > 0) speed *= config().f("powerups.hourglass_slow_factor", 0.3f);
         if (time < config().f("wall.start_delay", 4.0f)) speed = 0;
+        if (powers.freezeT > 0 || powers.pullT > 0) speed = 0;   // the Wall waits while a boss holds you still
         wallSpeedNow = speed;
         wallX += speed * dt;
     }
@@ -717,7 +753,8 @@ void Game::updatePlaying(float dt)
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
-            boss.start(cam.x, tier(), config().i("boss.base_hits", 2), config().i("boss.hits_per_era", 1), era);
+            boss.start(cam.x, tier(), config().i("boss.base_hits", 2) + powerTuning().extraHits, config().i("boss.hits_per_era", 1), era);
+            startBossPowers();
             audio.play("boss_appear");
             cam.addShake(0.6f);
             if (storyOn()) story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
@@ -870,6 +907,8 @@ void Game::memoryLost()
 
 void Game::respawnAfterLoss()
 {
+    clearHistory();
+    powers.freezeT = powers.pullT = 0;
     if (!boss.active) bar = std::max(0.0f, bar - config().f("memory.lost_penalty", 10.0f));
     // find solid ground a little ahead of the wall
     int x = (int)std::max(cam.x - 3, wallX + 10);
@@ -944,6 +983,8 @@ void Game::switchEra(int newEra)
     transSwitched = true;
     era = std::min(art::LAST_ERA, newEra);
     bar = 0;
+    powers.reset();
+    clearHistory();
     bossBeatenThisEra = false;
     unlockAbilitiesFor(era);
     // The level just past the screen is rebuilt so the new era's intro gate comes next.
