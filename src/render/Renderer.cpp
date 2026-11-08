@@ -141,6 +141,8 @@ Color hexc(unsigned h, unsigned char a = 255) { return Color{(unsigned char)(h >
 
 }  // namespace
 
+static void drawHitboxes(Game& g);   // --hitboxes overlay (below)
+
 // ------------------------------------------------------------------ setup
 void Renderer::init()
 {
@@ -548,39 +550,113 @@ void Renderer::drawEra(Game& g, int era, float swing)
         if (e.owner >= 0 && !e.dead) ring(e.cx(), e.cy(), fs * 0.6f, e.owner == 0 ? Color{255, 150, 60, 200} : Color{80, 160, 255, 200});
     }
 
-    // ---- boss
+    // ---- boss (akshat, boss rework): telegraphs, the boss, its shots, the parry flash, the opening
     if (g.boss.active) {
         const Boss& b = g.boss;
-        if (b.aiming()) {   // warning marker where it will land
-            float k = b.state == 6 ? 0.5f + 0.5f * std::sin(g.time * 20) : 1.0f;
-            Color wc = era == 0 ? Color{235, 235, 225, (unsigned char)(255 * k)} : Color{255, 70, 90, (unsigned char)(255 * k)};
-            ring(b.toX, b.toY + b.h / 2 - 0.2f, 1.3f, wc);
-            ring(b.toX, b.toY + b.h / 2 - 0.2f, 0.7f, wc);
-            solidQuad(b.toX - 1.3f, b.toY + b.h / 2 - 0.15f, 2.6f, 0.12f, 0.3f, wc);
-            if (b.kind == 4 && b.charge) {   // the last train: mark the whole stretch of line it will charge along
-                float x0 = std::min(b.fromX, b.toX), x1 = std::max(b.fromX, b.toX);
-                solidQuad(x0, b.toY + b.h / 2 - 0.15f, x1 - x0, 0.12f, 0.3f, wc);
+        const bool mono = era == 0;
+        auto C = [&](unsigned h, float a) { return mono ? Color{235, 235, 225, (unsigned char)(255 * a)} : hexc(h, (unsigned char)(255 * a)); };
+        if (b.aiming()) {
+            float k = b.state == BS_AIM ? 0.5f + 0.5f * std::sin(g.time * 20) : 1.0f;
+            Color wc = C(0xff465a, k);
+            if (b.kind == 4 && b.charge) {
+                // the last train: the whole line it will run along flashes, with arrows
+                float x0 = std::min(b.fromX, b.toX) - 1.4f, x1 = std::max(b.fromX, b.toX) + 1.4f;
+                float dir = b.toX > b.fromX ? 1.0f : -1.0f;
+                solidQuad(x0, b.floorY - 0.14f, x1 - x0, 0.14f, 0.3f, wc);
+                solidQuad(x0, b.floorY - 2.0f, x1 - x0, 0.06f, 0.3f, C(0xff465a, k * 0.5f));
+                for (float ax = x0 + 1.0f; ax < x1 - 0.5f; ax += 2.0f) {
+                    float ph = std::fmod(g.time * 2.5f, 1.0f) * 2.0f * dir;
+                    float cx = ax + ph;
+                    if (cx < x0 || cx > x1) continue;
+                    solidQuad(cx - 0.25f, b.floorY - 1.1f, 0.5f, 0.12f, 0.3f, C(0xffd25a, k));
+                    solidQuad(cx + dir * 0.15f - 0.06f, b.floorY - 1.25f, 0.12f, 0.42f, 0.3f, C(0xffd25a, k));
+                }
+            } else {
+                // where it will come down: rings and a bar on the floor
+                ring(b.toX, b.floorY - 0.2f, b.kind == 6 ? 2.4f : 1.3f, wc);
+                ring(b.toX, b.floorY - 0.2f, b.kind == 6 ? 1.4f : 0.7f, wc);
+                float hw = b.kind == 6 ? 2.4f : 1.3f;
+                solidQuad(b.toX - hw, b.floorY - 0.15f, 2 * hw, 0.12f, 0.3f, wc);
             }
         }
         if (g.powers.warning()) {   // a power is coming: the boss pulses like a ticking clock
             float k = std::fmod(g.time * 2.5f, 1.0f);
-            Color pc = era == 0 ? Color{235, 235, 225, (unsigned char)(255 * (1 - k))} : Color{200, 150, 255, (unsigned char)(255 * (1 - k))};
+            Color pc = mono ? Color{235, 235, 225, (unsigned char)(255 * (1 - k))} : Color{200, 150, 255, (unsigned char)(255 * (1 - k))};
             ring(b.x, b.y, 1.6f + k * 2.6f, pc);
             ring(b.x, b.y, 1.6f + std::fmod(k + 0.5f, 1.0f) * 2.6f, pc);
         }
         if (full3D) models_.drawBoss(g);
-        int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
+        int fr = b.state == BS_DYING || b.hurt > 0 || b.stunned() ? XF_HURT : (b.state == BS_ATTACK ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
-        if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
-        if (b.state == 3 && (int)(g.time * 8) % 2 == 0) tint = Color{255, 255, 200, 255};   // flashing = stomp me
+        if (b.state == BS_DYING) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
+        if (b.hurt > 0 && (int)(g.time * 30) % 2 == 0) tint = Color{255, 200, 200, 255};
         const Texture2D& bossTex = A.storyBoss.id ? A.storyBoss : A.boss;   // each memory's own boss
-        if (!full3D) sprite(bossTex, frameRect(bossTex, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+        if (!full3D) {
+            // the bell swings and tips over: turn the sprite about the boss centre (y down, so the
+            // 3D turn is the other way round)
+            rlDrawRenderBatchActive();
+            rlPushMatrix();
+            rlTranslatef(b.x, Y3(b.y), 0);
+            rlRotatef(-b.tilt * RAD2DEG, 0, 0, 1);
+            rlTranslatef(-b.x, -Y3(b.y), 0);
+            sprite(bossTex, frameRect(bossTex, fr, BOSS_FS, BOSS_FS, era), b.x - BOSS_FS / 2, b.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS, 0.0f, tint, true);
+            rlDrawRenderBatchActive();
+            rlPopMatrix();
+        }
         // the Last Train's echoes: see-through copies running its last charge again
         for (const auto& e : g.powers.echoes) {
             if (!e.active() || full3D) continue;
             Vector2 c = e.pos();
             sprite(bossTex, frameRect(bossTex, XF_FLOAT0, BOSS_FS, BOSS_FS, era), c.x - BOSS_FS / 2, c.y - BOSS_FS / 2 - 0.2f, BOSS_FS, BOSS_FS,
                    0.01f, Color{200, 220, 255, 110}, true);
+        }
+        // ---- the opening: the weak point glows, a ring closes in as the stun runs out, stars spin
+        if (b.stunned()) {
+            HitBox w = b.weakBox();
+            float r = std::max(w.w, w.h) * 0.62f;
+            float pulse = 0.5f + 0.5f * std::sin(g.time * 14);
+            Color gold = C(0xffe070, 0.6f + 0.4f * pulse);
+            ring(w.cx(), w.cy(), r, gold, 0.9f);
+            ring(w.cx(), w.cy(), r + 0.08f, gold, 0.9f);
+            ring(w.cx(), w.cy(), r + 0.2f + 0.8f * b.stunLeft(), C(0xffffff, 0.5f + 0.5f * b.stunLeft()), 0.9f);
+            HitBox bb = b.bounds();
+            for (int k = 0; k < 3; ++k) {   // dizzy stars
+                float a = g.time * 4 + k * 2.094f;
+                float sx = bb.cx() + std::cos(a) * bb.w * 0.4f, sy = bb.y - 0.3f + std::sin(a) * 0.25f;
+                solidQuad(sx - 0.14f, sy - 0.04f, 0.28f, 0.08f, 0.9f, C(0xfff0a0, 1));
+                solidQuad(sx - 0.04f, sy - 0.14f, 0.08f, 0.28f, 0.9f, C(0xfff0a0, 1));
+            }
+        }
+        // ---- its shots: rings of sound, clock-coal, steam, lost moments
+        for (const auto& s : b.shots) {
+            const float z = 0.5f;
+            Color rc = s.reflected ? C(0xffffff, 1) : C(0xffd25a, 1);
+            if (s.type == SHOT_RING_GROUND || s.type == SHOT_RING_AIR) {
+                float wob = std::sin(s.t * 18) * 0.04f;
+                ring(s.x, s.y, s.r + wob, rc, z);
+                ring(s.x, s.y, s.r * 0.7f - wob, rc, z);
+                ring(s.x, s.y, s.r * 0.4f, s.reflected ? rc : C(0xffffff, 0.8f), z);
+            } else if (s.type == SHOT_COAL) {
+                solidQuad(s.x - s.r, s.y - s.r, 2 * s.r, 2 * s.r, z, s.reflected ? C(0xffffff, 1) : C(0x2a2228, 1));
+                solidQuad(s.x - s.r * 0.45f, s.y - s.r * 0.45f, s.r * 0.9f, s.r * 0.9f, z + 0.01f, C(0xff8a2a, 0.7f + 0.3f * std::sin(s.t * 20)));
+                ring(s.x, s.y, s.r * 1.3f, s.reflected ? rc : C(0xff8a2a, 0.8f), z);
+            } else if (s.type == SHOT_STEAM) {
+                for (int k = 0; k < 3; ++k) {
+                    float ox = std::sin(s.t * 4 + k * 2) * 0.15f, oy = std::cos(s.t * 3 + k) * 0.12f, rr = s.r * (0.55f + 0.15f * k);
+                    solidQuad(s.x + ox - rr, s.y + oy - rr, 2 * rr, 2 * rr, z, s.reflected ? C(0xffffff, 0.9f) : C(0xe6e6f0, 0.75f));
+                }
+                ring(s.x, s.y, s.r, C(0xffffff, 0.8f), z);
+            } else {
+                if (full3D) DrawSphere(Vector3{s.x, Y3(s.y), 0.5f}, s.r * 0.75f, s.reflected ? WHITE : hexc(0x9a6aff, 230));
+                else solidQuad(s.x - s.r * 0.7f, s.y - s.r * 0.7f, 1.4f * s.r, 1.4f * s.r, z, s.reflected ? C(0xffffff, 1) : C(0x9a6aff, 0.9f));
+                ring(s.x, s.y, s.r + 0.05f * std::sin(s.t * 10), s.reflected ? rc : C(0xd8c0ff, 1), z + 0.02f);
+            }
+        }
+        // ---- the parry flash
+        if (b.deflectT > 0) {
+            float k = 1 - b.deflectT / 0.4f;
+            ring(b.deflectX, b.deflectY, 0.3f + k * 1.6f, C(0xffffff, 1 - k), 0.9f);
+            ring(b.deflectX, b.deflectY, 0.15f + k * 0.9f, C(0xfff0a0, 1 - k), 0.9f);
         }
     }
 
@@ -650,12 +726,54 @@ void Renderer::drawEra(Game& g, int era, float swing)
             }
         }
     }
+    if (g.opt.hitboxes) drawHitboxes(g);   // --hitboxes (akshat, boss rework)
     rlEnableDepthMask();
     EndShaderMode();
     EndMode3D();
     rlDisableDepthTest();
     rlSetClipPlanes(0.01, 1000.0);
     EndTextureMode();
+}
+
+// ------------------------------------------------------------------ --hitboxes (akshat, boss rework)
+// Every hit box as an outline in front of the world: players green (their attack yellow, the
+// parry window faint yellow), enemies orange, the boss body red (bright while it hurts), its weak
+// point cyan (bright while open), its shots magenta (white once deflected).
+static void drawHitboxes(Game& g)
+{
+    rlDrawRenderBatchActive();
+    rlDisableDepthTest();
+    const float z = 0.4f, t = 0.05f;   // the depth the boss model and sprites sit at (matters in 3D)
+    auto box = [&](float x, float y, float w, float h, Color c) {
+        solidQuad(x, y, w, t, z, c);
+        solidQuad(x, y + h - t, w, t, z, c);
+        solidQuad(x, y, t, h, z, c);
+        solidQuad(x + w - t, y, t, h, z, c);
+    };
+    auto hb = [&](const HitBox& b, Color c) { box(b.x, b.y, b.w, b.h, c); };
+    for (const auto& pl : g.players) {
+        if (!pl.joined) continue;
+        box(pl.x, pl.y, pl.w, pl.h, Color{60, 255, 90, 255});
+        if (pl.attackTime > 0) {
+            float ax = pl.facing > 0 ? pl.x + pl.w : pl.x - 1.3f;
+            box(ax, pl.y, 1.3f, pl.h, Color{255, 230, 40, 255});
+            box(ax - 0.3f, pl.y - 0.4f, 1.9f, pl.h + 0.8f, Color{255, 230, 40, 110});
+        }
+    }
+    for (const auto& e : g.enemies) if (!e.dead) box(e.x, e.y, e.w, e.h, Color{255, 150, 40, 255});
+    const Boss& b = g.boss;
+    if (b.active) {
+        HitBox bx[3];
+        int n = b.bodyBoxes(bx);
+        for (int i = 0; i < n; ++i) hb(bx[i], b.dangerous() ? Color{255, 40, 40, 255} : Color{255, 110, 110, 170});
+        hb(b.weakBox(), b.vulnerable() ? Color{40, 255, 255, 255} : Color{40, 200, 220, 120});
+        for (const auto& s : b.shots) hb(s.box(), s.reflected ? WHITE : Color{255, 60, 255, 255});
+        for (const auto& e : g.powers.echoes)
+            if (e.active()) { Vector2 c = e.pos(); box(c.x - 1.32f, c.y - 0.86f, 2.64f, 1.94f, Color{120, 160, 255, 200}); }
+        solidQuad(b.x - 0.1f, b.y - 0.01f, 0.2f, 0.02f, z, WHITE);   // its centre
+        solidQuad(b.x - 0.01f, b.y - 0.1f, 0.02f, 0.2f, z, WHITE);
+    }
+    rlDrawRenderBatchActive();
 }
 
 // ------------------------------------------------------------------ to the screen

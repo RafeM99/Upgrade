@@ -10,6 +10,7 @@ std::string key(const std::string& speaker, const std::string& text);
 void play(const std::string& speaker, const std::string& text);   // stops whatever was speaking
 void stop();
 bool playing();
+float length(const std::string& speaker, const std::string& text);   // seconds; 0 when the line has no clip
 void setVolume(float v);   // 0..1, on top of the master volume
 void shutdown();           // unload every cached clip (before CloseAudioDevice)
 }  // namespace vo

@@ -162,8 +162,11 @@ void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool outline)
     SetShaderValue(sh_, locOutline_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
+static Vector3 g_camPos{0, 0, 50};   // boss rework: where the 3D camera is (to place the eye's hit box)
+
 void Models3D::begin(Game& g, const Camera3D& cam)
 {
+    g_camPos = cam.position;
     rlDrawRenderBatchActive();
     SetShaderValue(sh_, locView_, &cam.position, SHADER_UNIFORM_VEC3);
     Vector3 pos[4]{}, col[4]{};
@@ -755,21 +758,35 @@ void Models3D::drawForgetting(Game& g)
 {
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
-    bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
+    bool flash = b.hurt > 0 && (int)(g.time * 30) % 2 == 0;
     Color tint = withA(flash ? Color{255, 210, 220, 255} : WHITE, a);
 
     float t = b.t;
     float bob = std::sin(t * 2.2f) * 0.15f;
-    float slam = b.state == 3 ? 1.0f : 0.0f;
+    // boss rework: the tentacles splay on the floor as a slam lands and stay stuck while it is
+    // stunned; the eye faces the way the Boss says (its weak-point box follows the same side)
+    float slam = (b.state == BS_STUN || (b.state == BS_ATTACK && b.stateTime > b.swoopLen() * 0.6f)) ? 1.0f : 0.0f;
+    if (b.state == BS_STUN) bob *= 0.3f;
     const float k = 1.8f;    // size in the level
-    // turned toward the camera and a little toward the nearest player
-    float px = g.players[0].cx();
-    if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) px = g.players[1].cx();
-    float yaw = px < b.x ? -PI / 2 - 0.7f : -PI / 2 + 0.7f;
+    float yaw = b.face < 0 ? -PI / 2 - 0.7f : -PI / 2 + 0.7f;
     float tilt = std::sin(t * 1.3f) * 0.06f;
     Matrix root = then(then(then(S(k, k, k), MatrixRotateX(tilt)), MatrixRotateY(yaw)), T(b.x, Y3(b.y) + 0.4f + bob, 0.4f));
 
     modelPart(forget_[F_BODY], root, tint);
+    // boss rework: the eye's weak-point box follows the eye as the camera sees it. The eye stands
+    // out more than a tile towards the camera, so it is projected back onto the plane the players
+    // move in (z 0.2..0.4) along the view ray, and the Boss takes that as its eye position.
+    {
+        Vector3 e = Vector3Transform(Vector3{0.88f, 0.12f, 0.0f}, root);
+        Vector3 d = Vector3Subtract(e, g_camPos);
+        if (std::fabs(d.z) > 0.001f) {
+            float k = (0.3f - g_camPos.z) / d.z;
+            Vector3 p = Vector3Add(g_camPos, Vector3Scale(d, k));
+            g.boss.eyeDX = p.x - b.x;
+            g.boss.eyeDY = Y3(p.y) - b.y;
+            g.boss.eyeSet = true;
+        }
+    }
     // tentacles hang from a ring under the dome; each is 5 segments and a curled tip
     const int N = 8, SEGS = 5;
     for (int i = 0; i < N; ++i) {

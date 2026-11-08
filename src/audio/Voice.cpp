@@ -61,6 +61,27 @@ bool playing()
     return it != g_cache.end() && it->second.frameCount > 0 && IsSoundPlaying(it->second);
 }
 
+// akshat (memory scenes): how long a line's clip runs, so the subtitles can wait for the voice.
+float length(const std::string& speaker, const std::string& text)
+{
+    static std::unordered_map<std::string, float> lens;
+    std::string k = key(speaker, text);
+    auto c = g_cache.find(k);
+    if (c != g_cache.end() && c->second.frameCount > 0 && c->second.stream.sampleRate > 0)
+        return c->second.frameCount / (float)c->second.stream.sampleRate;
+    auto it = lens.find(k);
+    if (it != lens.end()) return it->second;
+    float len = 0;
+    std::string path = assetPath("vo/" + k + ".mp3");
+    if (FileExists(path.c_str())) {
+        Wave w = LoadWave(path.c_str());
+        if (w.frameCount > 0 && w.sampleRate > 0) len = w.frameCount / (float)w.sampleRate;
+        UnloadWave(w);
+    }
+    lens[k] = len;
+    return len;
+}
+
 void setVolume(float v) { g_volume = v < 0 ? 0 : (v > 1 ? 1 : v); }
 
 void shutdown()

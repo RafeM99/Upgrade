@@ -5,9 +5,10 @@
 // graphics upgrade between stages. Each memory has its own boss (see Boss::kind in Enemy.h).
 //
 // Three pieces, all separate from the level HUD:
-//   * memory cards: full screen, between levels. A photograph of the memory (taken from the
-//     game the moment the card opens), its title and year, a few lines from Gran and Sam,
-//     and a timeline that moves further back each time.
+//   * memory scenes: full screen, between levels. The memory acted out as a short animated
+//     scene in its stage's art style (ui/MemoryScene), with the lines from Gran and Sam as
+//     voiced subtitles, the title and year as an opening caption, and a timeline strip that
+//     moves further back each time.
 //   * cinematic bars: black bars top and bottom during play, for a boss arriving and a
 //     memory coming back.
 //   * the ending: the album of everything she remembered, then the present day.
@@ -49,13 +50,15 @@ public:
     void drawEnding(Game& g);
 
 private:
-    struct Line { int who; std::string text; };   // who: -1 narration, 0 Gran, 1 Sam
+    // who: -1 narration, 0 Gran, 1 Sam. text: as shown (speech in quotes).
+    struct Line { int who; std::string text; float start = 0, dur = 0; };
     struct Card {
-        int id = PROLOGUE;
+        int id = PROLOGUE;   // PROLOGUE, a memory 0..6, or scene::ENDING
         std::string label, title, when;
         std::vector<Line> lines;
+        std::vector<float> starts;   // when each line starts (for the scene's choreography)
         float t = 0;
-        int totalChars = 0;
+        float end = 0;               // when the last line is over
     };
     std::vector<int> queue_;
     int cur_ = -1;
@@ -69,12 +72,16 @@ private:
     float endT_ = 0;
 
     void load(int id);
+    void loadLines(const std::string& prefix);   // akshat: the lines, timed to their voiceover
     int voicedLine_ = -1;    // akshat: the card line whose voiceover is playing
-    void voiceTick();        // akshat: start the voiceover of the line being typed now
+    void voiceTick();        // akshat: start the voiceover of the line being spoken now
     void loadEnding();
-    float shownChars() const;
-    bool typed() const { return shownChars() >= card_.totalChars; }
-    void drawLines(Game& g, float x, float y, float w, float alpha);
+    int lineAt() const;      // akshat: the line on screen now (-1 before the first)
+    bool typed() const { return card_.t >= card_.end; }
+    bool press();            // akshat: a button: finish the line, next line, or true: the card is done
+    void drawScene(Game& g, int restoredUpTo);   // akshat: the memory scene, subtitles, caption, timeline
+    void drawSubtitle(float alpha);
+    void drawCaption(float alpha);
     void drawPolaroid(Game& g, int era, float cx, float cy, float w, float angle, float alpha, const std::string& caption);
-    void drawTimeline(Game& g, int current, int restoredUpTo, float alpha);
+    void drawTimelineStrip(int current, int restoredUpTo, float alpha);
 };

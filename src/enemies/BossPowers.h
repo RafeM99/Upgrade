@@ -14,6 +14,7 @@
 // Every active power is announced first: the boss stops and pulses, and the HUD names it.
 // How strong they are depends on the difficulty (title screen, --difficulty, [game] difficulty).
 #pragma once
+#include "enemies/Enemy.h"
 #include "raylib.h"
 
 #include <string>
@@ -35,16 +36,26 @@ struct PowerTuning {
     float rushK, rushT;     // scarecrow: crow speed and how long
     int crows;              // scarecrow: crows it calls each time
     float pullBack;         // forgetting: seconds the players are pulled back
-    int extraHits;          // every boss needs this many more hits
+    int extraHits;          // (old stomp fight; unused since the boss rework: FIGHT_TUNING hpMul)
+    float echoDelay;        // train: seconds between the charge and its first echo
 };
 
 // Gentle: clearly announced, short, more annoying than dangerous. Medium: they can hurt you if
 // ignored. Hard: a real threat, more often, and every boss takes one more hit.
 constexpr PowerTuning POWER_TUNING[DIFF_COUNT] = {
-    // every warn  freeze atk   heals win   hurry      rain        echo hurt   rush       crows pull extra
-    {9.0f, 1.3f, 0.9f, false, 1, 3.0f, 1.25f, 3.0f, 0.75f, 3.0f, 1, false, 1.4f, 4.0f, 1, 2.0f, 0},
-    {7.0f, 1.0f, 1.3f, true,  2, 2.5f, 1.40f, 4.0f, 0.65f, 4.0f, 1, true,  1.7f, 5.0f, 2, 3.0f, 0},
-    {5.5f, 0.8f, 1.8f, true,  4, 2.0f, 1.60f, 5.0f, 0.55f, 5.0f, 2, true,  2.0f, 6.0f, 3, 4.0f, 1},
+    // every warn  freeze atk   heals win   hurry      rain        echo hurt   rush       crows pull extra echoDelay
+    {9.0f, 1.3f, 0.9f, false, 1, 3.0f, 1.25f, 3.0f, 0.75f, 3.0f, 1, false, 1.4f, 4.0f, 1, 2.0f, 0, 1.3f},
+    {7.0f, 1.0f, 1.3f, true,  2, 2.5f, 1.40f, 4.0f, 0.65f, 4.0f, 1, true,  1.7f, 5.0f, 2, 3.0f, 0, 0.9f},
+    {5.5f, 0.8f, 1.8f, true,  4, 2.0f, 1.60f, 5.0f, 0.55f, 5.0f, 2, true,  2.0f, 6.0f, 3, 4.0f, 1, 0.6f},
+};
+
+// The boss fight itself (akshat, boss rework; see Boss in enemies/Enemy.h). Gentle: slow shots,
+// long telegraphs, long openings. Hard: quicker everything, short openings, touching it hurts.
+constexpr FightTuning FIGHT_TUNING[DIFF_COUNT] = {
+    // shotEvery speed hover aim   stunDefl stunMiss hits train minions hpMul hoverHurts
+    {2.6f, 1.00f, 6.0f, 1.25f, 3.8f, 3.2f, 3, 12.0f, 0.0f, 1.00f, false},
+    {2.1f, 1.15f, 5.0f, 1.00f, 3.1f, 2.6f, 3, 14.0f, 11.0f, 1.25f, false},
+    {1.6f, 1.30f, 4.0f, 0.80f, 2.5f, 2.1f, 3, 16.0f, 7.0f, 1.50f, true},
 };
 
 // One echo of the Last Train: a replay of its last charge, a little later.

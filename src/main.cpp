@@ -12,9 +12,12 @@
 //   --seed N          fixed level seed         --ending      jump to the ending
 //   --size W H        window size
 //   --settings        open the Settings screen at start
+//   --pause           start the run paused        --credits   open the credits on the title
+//   --menu N          the title menu row to start on (0 Start .. 5 Quit)
 //   --set KEY=VALUE   override a setting (keys as in settings.ini, e.g. retro=2)
 // Test runs (--frames / --autoplay) open a hidden window and ignore settings.ini; add --show to watch one.
 //   --cutscenes       play the boss scenes even with --autoplay (they auto-advance)
+//   --hitboxes        draw the boss, player, attack and shot hit boxes (debug)
 #include "core/Game.h"
 
 #include <cstdlib>
@@ -42,6 +45,10 @@ int main(int argc, char** argv)
         else if (is("--difficulty")) o.difficulty = difficultyFromString(next(), 0);
         else if (is("--size")) { o.width = std::atoi(next()); o.height = std::atoi(next()); }
         else if (is("--settings")) o.openSettings = true;
+        else if (is("--pause")) o.openPause = true;          // akshat: UI screenshots
+        else if (is("--credits")) o.openCredits = true;
+        else if (is("--menu")) o.titleItem = std::atoi(next());
+        else if (is("--hitboxes")) o.hitboxes = true;      // akshat: debug overlay of every hit box
         else if (is("--set")) o.setOverrides.push_back(next());
     }
     Game game;

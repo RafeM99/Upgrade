@@ -11,7 +11,7 @@ title_p2_ready = Player 2 is here!
 title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
 title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
 title_controls_pad = Gamepads: stick or d-pad move, A jump, X attack, B ability, Y second ability, Start pause. First pad plays Gran, second Sam.
-title_credit = GameJam 2026 . theme: Time
+title_credit = GameJam 2026  ·  Theme: Time
 
 p1_name = GRAN
 p2_name = SAM
@@ -90,9 +90,9 @@ difficulty_2 = HARD
 
 # boss scenes (akshat): the dialogue lines themselves live in assets/cutscenes.txt
 cutscene_skip = Hold JUMP to skip  .  ESC skips all
-difficulty_desc_0 = Boss powers are short and clearly announced. Up / Down to change
-difficulty_desc_1 = Boss powers can hurt you if you ignore them. Up / Down to change
-difficulty_desc_2 = Strong, frequent powers, and every boss takes one more hit. Up / Down to change
+difficulty_desc_0 = Boss powers are short and clearly announced.
+difficulty_desc_1 = Boss powers can hurt you if you ignore them.
+difficulty_desc_2 = Strong, frequent powers, and every boss takes one more hit.
 # Three memories have a boss ([boss] stages in config.ini: 2, 4 and 6): the Forgetting takes the
 # shape of something in it. Names 0, 1, 3 and 5 are only used if a stage is added there.
 boss_name_0 = THE 3 A.M. CLOCK
@@ -128,7 +128,7 @@ quit = Quit to title
 pause_hint = Up/Down (or stick / d-pad) to choose, Enter or A to pick, B to go back
 
 credits_title = UPGRADE
-credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
+credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nSohan\nAkshat\n\nTheme: Time\n\nAll art and sound made in code\nMade with raylib\nFonts: Inter and Pixelify Sans (SIL Open Font License)
 thanks = Thank you for remembering with her.
 ending_continue = Press any button
 
@@ -263,3 +263,56 @@ opt_low = Low
 opt_normal = Normal
 opt_high = High
 opt_unlimited = Unlimited
+
+# ---- UI pass (akshat): main menu, prompts, credits
+menu_start = Start
+menu_players = Players
+menu_difficulty = Difficulty
+menu_settings = Settings
+menu_credits = Credits
+menu_quit = Quit
+menu_players_1 = 1 PLAYER
+menu_players_2 = 2 PLAYERS
+menu_start_desc = Walk back through Gran's memories, newest first.
+menu_players_desc_1 = Gran plays alone. Player 2 can join any time with R-Shift, / or their own controller.
+menu_players_desc_2 = Gran and Sam play together on one screen. Stay close.
+menu_settings_desc = Display, graphics and sound.
+menu_credits_desc = Who made this.
+menu_quit_desc = Close the game.
+ui_navigate = Navigate
+ui_change = Change
+ui_select = Select
+ui_back = Back
+ui_controls = Controls
+ui_player1 = Player 1
+ui_player2 = Player 2
+ui_ready = Ready
+ui_press_to_join = R-Shift to join
+ctl_move = Move
+ctl_jump = Jump
+ctl_attack = Attack
+ctl_ability = Ability
+ctl_ability2 = 2nd ability
+ctl_join_note = Hold Jump to glide. Down + Ability for the second ability. Esc or P pauses.
+ctl_pads_note = Y for the second ability, Start to pause. The first pad plays Gran, the second Sam.
+credits_team_head = Made by
+credits_team = Camilla  ·  Rafale  ·  Sohan  ·  Akshat
+credits_jam_head = For
+credits_jam = GameJam 2026  ·  Theme: Time. All art, music and sound made in code.
+credits_tech_head = Made with
+credits_tech = raylib 5.5
+credits_fonts_head = Fonts
+credits_fonts = Inter by Rasmus Andersson  ·  Pixelify Sans by Stefie Justprince\nSIL Open Font License 1.1
+cutscene_hold_skip = Hold to skip
+cutscene_skip_all = Skip all
+
+# boss fight (akshat, boss rework): these replace the old "jump on it" hints above
+boss_hint = NOW! Hit the glowing weak point with ATTACK!
+boss_hint_short = ATTACK its shots to hit them back, then strike the weak point!
+boss_together = REMEMBER TOGETHER!
+boss_together_sub = You struck it at the same moment: a double hit
+boss_phase2_2 = THE BELL RINGS FASTER!
+boss_phase2_4 = THE LAST TRAIN IS RUNNING LATE!
+boss_phase2_6 = THE FORGETTING GROWS DESPERATE!
+boss_phase2_sub = Half its strength is gone. Keep going!
+ui_phase2 = Phase 2

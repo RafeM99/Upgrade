@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+constexpr int TITLE_ITEMS = 6;   // rows of the title menu (ui/Hud.cpp draws them)
+
 enum class Screen { Title, Playing, Paused, Story, Ending, Settings };
 
 enum PowerType { PU_SHIELD, PU_SLOW, PU_MAGNET, PU_PHOTO, PU_SPEED, PU_COUNT };
@@ -46,6 +48,10 @@ struct Options {
     std::string shot, shotPrefix;
     int width = 1280, height = 720;
     bool openSettings = false;                  // --settings: start on the Settings screen
+    bool openPause = false;                     // --pause: start a run paused (UI screenshots)
+    bool openCredits = false;                   // --credits: open the credits from the title
+    int titleItem = 0;                          // --menu N: the title menu row to start on
+    bool hitboxes = false;   // --hitboxes: draw every boss / player / shot hit box (debug)
     std::vector<std::string> setOverrides;      // --set key=value (settings), applied after load
 };
 
@@ -90,6 +96,11 @@ public:
 
     // pause menu
     int pauseItem = 0;
+
+    // title menu (akshat, UI pass): Start, Players, Difficulty, Settings, Credits, Quit
+    int titleItem = 0;
+    int titleMode = 0;           // 0 the menu, 1 the credits
+    bool quitRequested = false;  // Quit on the title: run() ends after this frame
 
     // settings menu (akshat): reachable from the title and the pause menu
     int settingsItem = 0;                // row, 0..SET_COUNT (the last row is Back)
@@ -154,6 +165,20 @@ private:
     void clearHistory();
     void applyBossPower();
     void updateBossPowers(float dt);
+    // the boss fight (akshat, boss rework; core/GameBoss.cpp)
+    bool arenaOn_ = false;
+    float arenaL_ = 0, arenaR_ = 0, arenaFloor_ = 12;
+    float lastWeakHit_[2] = {-99, -99};
+    float bossStartT_ = 0;                   // when the fight began (for the test log)
+    int bossWipes_ = 0;
+    bool swingUsed_[2] = {false, false};     // one weak-point hit / clank per swing
+    void startBossFight();
+    void bossPlayerCombat(float dt);
+    bool updateBossFight(float dt, float slowK);   // true: the fight is over this frame (return)
+    void hitBossWeak(int p, int dmg, const char* how);
+    void keepPlayersInArena();
+    void bossRespawn();
+    bool botBoss(int p, PlayerInput& in, int& hold);
 
     void update(float dt);
     void updateTitle();

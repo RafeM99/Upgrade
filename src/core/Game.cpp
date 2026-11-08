@@ -105,6 +105,9 @@ void Game::init(const Options& o)
     if (!opt.startOnTitle || opt.autoplay) startRun();
     if (opt.ending) startEnding();
     if (opt.openSettings) openSettings();
+    titleItem = std::max(0, std::min(TITLE_ITEMS - 1, opt.titleItem));
+    if (opt.openCredits) titleMode = 1;
+    if (opt.openPause && screen == Screen::Playing) { screen = Screen::Paused; audio.setMusicDuck(0.35f); }
 }
 
 bool Game::storyOn() const { return opt.story && config().b("story.enabled", true); }
@@ -185,7 +188,7 @@ void Game::showBanner(const std::string& title, const std::string& sub, float se
 // ------------------------------------------------------------------ main loop
 void Game::run()
 {
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !quitRequested) {
         float frameDt = std::min(GetFrameTime(), 0.1f);
         // akshat: stay on top only long enough to come to the front, then behave like a normal window
         if (frameNo_ == 60 && IsWindowState(FLAG_WINDOW_TOPMOST)) { ClearWindowState(FLAG_WINDOW_TOPMOST); SetWindowFocused(); }
@@ -315,31 +318,54 @@ void Game::update(float dt)
 
 void Game::updateTitle()
 {
+    // akshat (UI pass): a real main menu. Up / Down choose a row, Left / Right change Players and
+    // Difficulty, Enter / Space / pad A picks. Player 2 joins with their own attack or ability
+    // key, or any button on their own pad (their arrows and Enter drive the menu).
     if (!firstTick_) return;
-    PlayerInput p1 = input.read(0), p2 = input.read(1);
-    if (p2.any && !players[1].joined) {
+    PlayerInput p2 = input.read(1);
+    if (titleMode == 1) {   // credits: any back or select returns to the menu
+        if (input.menuBack() || input.menuSelect() || input.pausePressed()) { titleMode = 0; audio.play("advance"); }
+        return;
+    }
+    const bool p2Join = p2.attackPressed || p2.abilityPressed || (input.padFor(1) >= 0 && p2.any);
+    if (p2Join && !players[1].joined) {
         players[1].joined = true;
         audio.play("join");
         return;
     }
-    // difficulty: Up / Down (arrows or d-pad) or 1 / 2 / 3. These keys never start the game.
-    int d = difficulty;
-    // arrows, d-pad or left stick on any pad (W / S count too: they change it, not start)
-    if (input.menuUp()) d = (d + DIFF_COUNT - 1) % DIFF_COUNT;
-    if (input.menuDown()) d = (d + 1) % DIFF_COUNT;
-    for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
-    if (d != difficulty) { difficulty = d; audio.play("select"); return; }
-    bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
+    if (input.menuUp()) { titleItem = (titleItem + TITLE_ITEMS - 1) % TITLE_ITEMS; audio.play("select"); return; }
+    if (input.menuDown()) { titleItem = (titleItem + 1) % TITLE_ITEMS; audio.play("select"); return; }
+    int dir = input.menuRight() ? 1 : (input.menuLeft() ? -1 : 0);
+    // difficulty: also 1 / 2 / 3 from anywhere on the menu
+    for (int n = 0; n < DIFF_COUNT; ++n)
+        if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) { difficulty = n; titleItem = 2; audio.play("select"); return; }
     if (IsKeyPressed(KEY_O) || IsKeyPressed(KEY_TAB) ||
-        (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT))) {   // Settings (akshat)
+        (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT))) {   // Settings shortcut
         audio.play("select");
         openSettings();
         return;
     }
-    for (int k = KEY_A; k <= KEY_Z && !go; ++k) go = IsKeyPressed(k) && k != KEY_P && k != KEY_O;
-    if (go) {
-        audio.play("select");
-        startRun();
+    if (input.menuBack()) { titleItem = TITLE_ITEMS - 1; audio.play("select"); return; }   // Esc: jump to Quit
+    const bool pick = input.menuSelect();
+    switch (titleItem) {
+    case 0:   // Start
+        if (pick) { audio.play("advance"); startRun(); }
+        break;
+    case 1:   // Players: one or two
+        if (dir || pick) { players[1].joined = !players[1].joined; audio.play(players[1].joined ? "join" : "select"); }
+        break;
+    case 2:   // Difficulty: how strong the bosses' time powers are
+        if (dir || pick) { difficulty = (difficulty + (dir < 0 ? DIFF_COUNT - 1 : 1)) % DIFF_COUNT; audio.play("select"); }
+        break;
+    case 3:
+        if (pick) { audio.play("select"); openSettings(); }
+        break;
+    case 4:
+        if (pick) { audio.play("advance"); titleMode = 1; }
+        break;
+    default:
+        if (pick) quitRequested = true;
+        break;
     }
 }
 
@@ -559,11 +585,6 @@ void Game::updatePlaying(float dt)
                 if (e.dead || (e.owner >= 0 && e.owner != p && !soloNow)) continue;
                 if (std::fabs(e.cx() - pl.cx()) < 2.6f && std::fabs((e.y + e.h) - pl.bottom()) < 1.6f) damageEnemy(e, 3, p, 0);
             }
-            if (boss.active && boss.vulnerable() && std::fabs(boss.x - pl.cx()) < 2.8f) {
-                boss.hp = std::max(0, boss.hp - 2);
-                boss.hurt = 0.6f;
-                audio.play("boss_hit");
-            }
         }
         // trail of dust when running in the later eras
         if (era >= 3 && pl.onGround && std::fabs(pl.vx) > 4 && ((int)(time * 30) + p) % 6 == 0)
@@ -578,12 +599,6 @@ void Game::updatePlaying(float dt)
         for (auto& e : enemies) {
             if (e.dead || e.hurt > 0 || (e.owner >= 0 && e.owner != p && !soloNow)) continue;
             if (overlap(ax, pl.y, 1.3f, pl.h, e.x, e.y, e.w, e.h)) damageEnemy(e, 1, p, pl.facing * 4.0f);
-        }
-        if (boss.active && boss.vulnerable() && overlap(ax, pl.y, 1.3f, pl.h, boss.x - boss.w / 2, boss.y - boss.h / 2, boss.w, boss.h)) {
-            boss.hp = std::max(0, boss.hp - 1);
-            boss.hurt = 0.6f;
-            audio.play("boss_hit");
-            cam.addShake(0.4f);
         }
     }
 
@@ -616,81 +631,12 @@ void Game::updatePlaying(float dt)
                 hurtPlayer(p, false);
             }
         }
-        // boss contact
-        if (boss.active && boss.state != 5 && boss.state != 0 && pl.alive()) {
-            float bx = boss.x - boss.w / 2, by = boss.y - boss.h / 2;
-            if (overlap(pl.x, pl.y, pl.w, pl.h, bx, by, boss.w, boss.h)) {
-                float prevBottom = pl.bottom() - pl.vy * dt;
-                if (boss.vulnerable() && pl.vy > 0 && prevBottom <= by + 0.6f) {
-                    boss.hp = std::max(0, boss.hp - (pl.pounding ? 2 : 1));
-                    boss.hurt = 0.7f;
-                    pl.vy = -ptune.stompBounce * 1.3f;
-                    pl.pounding = false;
-                    audio.play("boss_hit");
-                    cam.addShake(0.7f);
-                    hitPause = 0.08f;
-                    particles.burst(boss.x, by, 30, Color{200, 120, 255, 255}, 8, 0.7f, 0.2f);
-                } else if (boss.dangerous() && pl.invuln <= 0 && pl.dashTime <= 0) {
-                    hurtPlayer(p, false);
-                } else if (!boss.dangerous()) {
-                    // touching a resting boss from the side just pushes you away
-                    pl.vx = (pl.cx() < boss.x ? -1.0f : 1.0f) * 9.0f;
-                    pl.x += (pl.cx() < boss.x ? -1.0f : 1.0f) * 0.1f;
-                    if (pl.onGround) pl.vy = -6;
-                }
-            }
-        }
     }
+    // ---- the boss fight: deflecting its shots, its weak point, its body and shots (core/GameBoss.cpp)
+    bossPlayerCombat(dt);
 
-    // ---- boss
-    if (boss.active) {
-        if (bossHeldByPower() && boss.state == 1) boss.stateTime = 0;   // it waits while its power plays out
-        boss.update(dt, cam.left(), cam.right(), level, players, tier(), slowK);
-        if (boss.landed && boss.kind == 2) {
-            // the school bell rings as it lands: anyone standing close is thrown back (no harm done)
-            for (auto& pl : players) {
-                if (!pl.alive() || !pl.onGround) continue;
-                float dx = pl.cx() - boss.x;
-                if (std::fabs(dx) > 4.5f) continue;
-                pl.vx = (dx < 0 ? -1.0f : 1.0f) * 11.0f;
-                pl.vy = -9.0f;
-                pl.onGround = false;
-                pl.wallLock = 0.25f;   // keeps the push: no jump cut, no steering for a moment
-            }
-            cam.addShake(0.8f);
-            audio.play("pound");
-            particles.burst(boss.x, boss.y + boss.h / 2, 40, Color{255, 220, 120, 255}, 9, 0.6f, 0.2f);
-        }
-        if (boss.wantsSpawn) {
-            int type = tier() >= 2 && (std::rand() % 3 == 0) ? EN_BRUTE : (std::rand() % 2 ? EN_FLYER : EN_BLOB);
-            if (boss.spawnsFlyers()) type = EN_FLYER;   // the storm's rain, the scarecrow's crows
-            Enemy e = makeEnemy(type, boss.x, boss.y, tier(), etune);
-            e.y = boss.y;
-            e.baseY = e.y;
-            if (!solo() && era >= 1 && std::rand() % 3 == 0) e.owner = std::rand() % 2;
-            enemies.push_back(e);
-            particles.burst(boss.x, boss.y, 16, Color{160, 100, 220, 255}, 5, 0.5f, 0.15f);
-        }
-        if (boss.hp <= 0 && boss.state != 5) {
-            boss.state = 5;
-            boss.stateTime = 0;
-            audio.play("boss_hit", 1, 0.6f);
-            cam.addShake(1.2f);
-            spawnFragments(boss.x, boss.y, 12, 1.5f);
-            particles.burst(boss.x, boss.y, 80, Color{220, 180, 255, 255}, 12, 1.4f, 0.25f);
-            score += 500;
-            events().bossDefeated.emit();
-            audio.setBoss(false);
-        }
-        if (boss.defeated) {
-            boss.active = false;
-            bossBeatenThisEra = true;
-            // akshat: a few words with the beaten boss, then the memory comes back
-            cutscene.play(*this, "boss_" + Cutscene::bossId(boss.kind) + "_defeat");
-            cutscene.then([this] { memoryRestored(); });
-            return;
-        }
-    }
+    // ---- boss (core/GameBoss.cpp)
+    if (boss.active && updateBossFight(dt, slowK)) return;
 
     updateBossPowers(dt);
     recordHistory(dt);
@@ -765,9 +711,11 @@ void Game::updatePlaying(float dt)
         if (wallSlowTime > 0) speed *= config().f("powerups.hourglass_slow_factor", 0.3f);
         if (time < config().f("wall.start_delay", 4.0f)) speed = 0;
         if (powers.freezeT > 0 || powers.pullT > 0) speed = 0;   // the Wall waits while a boss holds you still
+        if (arenaOn_) speed = wallX > arenaL_ - 4.0f ? -3.0f : 0.0f;   // boss arena: the Wall waits off-screen
         wallSpeedNow = speed;
         wallX += speed * dt;
     }
+    keepPlayersInArena();
     for (int p = 0; p < 2; ++p) {
         Player& pl = players[p];
         if (!pl.joined) continue;
@@ -821,12 +769,13 @@ void Game::updatePlaying(float dt)
     for (auto& pl : players)
         if (pl.joined) { minX = std::min(minX, pl.cx()); maxX = std::max(maxX, pl.cx()); }
     float target = (minX + maxX) / 2 + 2.0f;
+    if (arenaOn_) target = (arenaL_ + arenaR_) / 2;   // boss arena: the camera holds still on it
     // up and down: keep the highest player (and the boss) comfortably inside the view
     float highest = 1e9f;
     for (auto& pl : players)
         if (pl.joined) highest = std::min(highest, pl.y);
     float wantTop = highest - 3.0f;
-    if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
+    if (boss.active) wantTop = std::min(wantTop, boss.bounds().y - 0.6f);
     cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
     {
         float fTop = 1e9f, fBottom = -1e9f, fMin = 1e9f, fMax = -1e9f;
@@ -838,10 +787,12 @@ void Game::updatePlaying(float dt)
         // the boss counts too (from its top edge, with room for the 3D model's spikes), so it
         // is never cut off at the top while it hovers
         if (boss.active && boss.state != 5 && fMin < fMax) {
-            fTop = std::min(fTop, boss.y - boss.h / 2 - 1.0f);
-            fMin = std::min(fMin, boss.x - boss.w / 2);
-            fMax = std::max(fMax, boss.x + boss.w / 2);
+            HitBox bb = boss.bounds();
+            fTop = std::min(fTop, bb.y - 0.6f);
+            fMin = std::min(fMin, bb.x);
+            fMax = std::max(fMax, bb.x + bb.w);
         }
+        if (arenaOn_ && fMin < fMax) { fMin = std::min(fMin, arenaL_); fMax = std::max(fMax, arenaR_); }
         if (fMin < fMax) cam.setFocus(fMin, fMax, fTop, fBottom);
     }
     // never show past the start of the level: no empty strip at the left edge
@@ -884,7 +835,7 @@ void Game::updatePlaying(float dt)
     // returns. The other stages upgrade straight away.
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && bossStage(era) && !bossBeatenThisEra) {
-            boss.start(cam.x, tier(), config().i("boss.base_hits", 2) + powerTuning().extraHits, config().i("boss.hits_per_era", 1), era);
+            startBossFight();   // core/GameBoss.cpp: the arena, then the boss
             startBossPowers();
             cam.addShake(0.6f);
             audio.setBoss(true);
@@ -1062,7 +1013,7 @@ void Game::respawnAfterLoss()
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const Enemy& e) {
         return std::fabs(e.cx() - x) < 5;
     }), enemies.end());
-    if (boss.active && boss.state != 5) { boss.state = 1; boss.stateTime = 0; }
+    if (boss.active && boss.state != 5) bossRespawn();
 }
 
 void Game::collectPowerUp(int p, PowerUp& pu)
@@ -1232,6 +1183,7 @@ PlayerInput Game::botInput(int p)
     // smash cracked floors when standing on them
     if (pl.has[AB_GROUND_POUND] && !pl.onGround && level.tile((int)std::floor(pl.cx()), feet + 1) == '=') { in.abilityPressed = true; in.down = true; }
     if (pl.has[AB_TIME_SLOW] && pl.slowCooldown <= 0 && boss.active) { in.abilityPressed = true; in.down = true; }
+    if (botBoss(p, in, hold[p])) return in;   // core/GameBoss.cpp: the bots fight the boss properly
     // dodge the swoop marker, then jump on the boss when it rests
     if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
         in.right = pl.cx() > boss.toX;

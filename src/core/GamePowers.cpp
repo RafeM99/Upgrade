@@ -214,7 +214,7 @@ void Game::updateBossPowers(float dt)
             for (int i = 0; i < tu.echoes; ++i) {
                 TrainEcho e;
                 e.path = powers.curPath;
-                e.delay = 0.6f * (i + 1);
+                e.delay = tu.echoDelay * (i + 1);
                 powers.echoes.push_back(e);
             }
             if (opt.autoplay) TraceLog(LOG_INFO, "EVENT t=%.1f boss power 4 echoes x%d", time, tu.echoes);
@@ -229,16 +229,20 @@ void Game::updateBossPowers(float dt)
         e.t += dt * slowK;   // Sam's time-slow pulse slows the echoes too
         if (!e.active()) continue;
         Vector2 c = e.pos();
-        float bw = boss.w * 0.85f, bh = boss.h * 0.85f;
+        // the echo has the train's own body box (boss rework), not the old 2.4 x 2.2 square
+        const float bw = 2.64f, bh = 1.94f, bx = c.x - 1.32f, by = c.y - 0.86f;
+        const size_t i = (size_t)((e.t - e.delay) * 60.0f);
+        const float dir = (i + 1 < e.path.size() ? e.path[i + 1].x - e.path[i].x : 0.0f) >= 0 ? 1.0f : -1.0f;
         for (int p = 0; p < 2; ++p) {
             Player& pl = players[p];
-            if (!pl.alive() || !overlapBox(pl.x, pl.y, pl.w, pl.h, c.x - bw / 2, c.y - bh / 2, bw, bh)) continue;
+            if (!pl.alive() || !overlapBox(pl.x, pl.y, pl.w, pl.h, bx, by, bw, bh)) continue;
             if (tu.echoHurts) {
                 if (pl.invuln <= 0 && pl.dashTime <= 0) hurtPlayer(p, false);
-            } else {
-                pl.vx = 9.0f;   // always forward, never towards the Forgetting Wall
-                pl.vy = std::min(pl.vy, -8.0f);
-                pl.wallLock = 0.2f;
+            } else if (pl.wallLock <= 0) {
+                // Gentle: the echo only lifts you up and over it, the way it is going (no harm)
+                pl.vx = dir * 6.0f;
+                pl.vy = std::min(pl.vy, -12.0f);
+                pl.wallLock = 0.25f;
             }
         }
     }

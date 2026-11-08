@@ -5,6 +5,7 @@
 #include "raylib.h"
 #include "core/Paths.h"
 #include "render/ArtSpec.h"
+#include "ui/Theme.h"
 
 #include <algorithm>
 #include <cmath>
@@ -14,8 +15,8 @@
 namespace {
 
 // ---- layout (UI units, 1280 x 720)
-constexpr float BOX_X = 60, BOX_Y = 528, BOX_W = 1160, BOX_H = 162;
-constexpr float TEXT_SIZE = 30, LINE_H = 40, TEXT_PAD_X = 44, TEXT_PAD_Y = 26;
+constexpr float BOX_X = 60, BOX_Y = 516, BOX_W = 1160, BOX_H = 162;
+constexpr float TEXT_SIZE = 28, LINE_H = 40, TEXT_PAD_X = 44, TEXT_PAD_Y = 26;
 constexpr int LINES_PER_PAGE = 3;
 constexpr float PORTRAIT_H = 300, PORTRAIT_BOTTOM = BOX_Y + 14;
 constexpr float LEFT_X = 210, RIGHT_X = 1070;
@@ -31,7 +32,10 @@ void setup(Game& g)
     S = r.height / 720.0f;
     OX = r.x;
     OY = r.y;
+    ui::setFrame(r);
 }
+int g_font = ui::PIXEL;   // akshat (UI pass): Pixelify Sans in the pixel stages, Inter in the smooth ones
+int fontFor(int era) { return art::lowRes(era) ? ui::PIXEL : ui::BODY; }
 Color hexc(unsigned h, unsigned char a = 255) { return Color{(unsigned char)(h >> 16), (unsigned char)(h >> 8), (unsigned char)h, a}; }
 Color fade(Color c, float a) { c.a = (unsigned char)(c.a * std::max(0.0f, std::min(1.0f, a))); return c; }
 Rectangle R(float x, float y, float w, float h) { return Rectangle{OX + x * S, OY + y * S, w * S, h * S}; }
@@ -39,16 +43,22 @@ float clamp01(float v) { return std::max(0.0f, std::min(1.0f, v)); }
 float easeOut(float k) { k = clamp01(k); return 1 - (1 - k) * (1 - k) * (1 - k); }
 int fs(float size) { return std::max(8, (int)std::lround(size * S)); }
 
-void text(const std::string& s, float x, float y, float size, Color c, bool shadow, bool centre = false, float scale = 1)
+// centre: x, y is the middle of the text. outline: big VS titles.
+void text(const std::string& s, float x, float y, float size, Color c, bool shadow, bool centre = false, float scale = 1,
+          Color outline = BLANK, int font = -1)
 {
-    int f = std::max(8, (int)std::lround(size * S * scale));
-    float sp = f / 10.0f;
-    Vector2 m = MeasureTextEx(GetFontDefault(), s.c_str(), (float)f, sp);
-    float px = OX + x * S - (centre ? m.x / 2 : 0), py = OY + y * S - (centre ? m.y / 2 : 0);
-    if (shadow) DrawTextEx(GetFontDefault(), s.c_str(), {px + 2 * S, py + 2 * S}, (float)f, sp, fade(BLACK, c.a / 255.0f * 0.6f));
-    DrawTextEx(GetFontDefault(), s.c_str(), {px, py}, (float)f, sp, c);
+    ui::TextStyle st;
+    st.size = size * scale;
+    st.font = font < 0 ? g_font : font;
+    st.track = st.font == ui::PIXEL ? 0.04f : 0;
+    st.color = c;
+    st.align = centre ? ui::CENTER : ui::LEFT;
+    if (shadow) { st.shadow = fade(BLACK, c.a / 255.0f * 0.6f); st.shadowOff = std::max(2.0f, size * scale * 0.06f); }
+    if (outline.a) { st.outline = outline; st.outlineW = std::max(2.0f, size * scale * 0.05f); }
+    if (centre) ui::textMid(s, x, y, st);
+    else ui::text(s, x, y, st);
 }
-float textW(const std::string& s, float size) { return MeasureTextEx(GetFontDefault(), s.c_str(), size, size / 10).x; }
+float textW(const std::string& s, float size) { return ui::textW(s, size, g_font, g_font == ui::PIXEL ? 0.04f : 0); }
 
 // A filled quad in UI units; drawn with both windings so the vertex order never matters.
 void quad(Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color col)
@@ -170,34 +180,31 @@ BoxStyle drawBox(int stage, float x, float y, float w, float h)
         DrawRectangleGradientV((int)in.x, (int)in.y, (int)in.width, (int)in.height, hexc(0x3a56c0), hexc(0x111a58));
         return {hexc(0xfdf8ff), true};
     }
-    // 2.5D: clean, modern, translucent
-    DrawRectangleRounded(R(x, y + 6, w, h), 0.22f, 12, fade(BLACK, 0.35f));
-    DrawRectangleRounded(R(x, y, w, h), 0.22f, 12, fade(hexc(0x140a22), 0.86f));
-    DrawRectangleRoundedLinesEx(R(x, y, w, h), 0.22f, 12, 2 * S, fade(hexc(0xfff0d0), 0.55f));
-    DrawRectangleRec(R(x + 30, y + 1, w - 60, 2), fade(WHITE, 0.25f));
-    return {hexc(0xfff8ee), true};
+    // 2.5D / 3D: the menus' dark glass, with a warm accent
+    ui::panel({x, y, w, h}, ui::menuSkin());
+    return {hexc(0xfff8ee), false};
 }
 
 void nameTab(int stage, const std::string& name, unsigned colHex, float x, float y)
 {
     const int era = boxStyle(stage);
-    float w = textW(name, 26) + 40, h = 40;
+    float w = textW(name, 24) + 40, h = 40;
     Color col = hexc(colHex);
     if (era == 0) {
         DrawRectangleRec(R(x, y, w, h), hexc(0x101216));
         DrawRectangleLinesEx(R(x + 4, y + 4, w - 8, h - 8), std::max(1.0f, 2 * S), hexc(0xebebe1));
-        text(name, x + 20, y + 8, 26, hexc(0xebebe1), false);
+        text(name, x + w / 2, y + h / 2, 24, hexc(0xebebe1), false, true);
     } else if (era == 1) {
         DrawRectangleRec(R(x, y, w, h), hexc(0x0f0d1a));
         DrawRectangleRec(R(x + 5, y + 5, w - 10, h - 10), col);
-        text(name, x + 20, y + 8, 26, WHITE, true);
+        text(name, x + w / 2, y + h / 2, 24, WHITE, true, true);
     } else if (era == 2) {
         DrawRectangleRounded(R(x, y, w, h), 0.4f, 6, hexc(0xd8e0f0));
         DrawRectangleRounded(R(x + 4, y + 4, w - 8, h - 8), 0.4f, 6, col);
-        text(name, x + 20, y + 8, 26, WHITE, true);
+        text(name, x + w / 2, y + h / 2, 24, WHITE, true, true);
     } else {
         DrawRectangleRounded(R(x, y, w, h), 1.0f, 12, fade(col, 0.92f));
-        text(name, x + 20, y + 8, 26, WHITE, true);
+        text(name, x + w / 2, y + h / 2, 24, WHITE, true, true);
     }
 }
 
@@ -342,7 +349,7 @@ void Cutscene::finish(Game& g)
 
 void Cutscene::startLine(Game& g)
 {
-    (void)g;
+    g_font = fontFor(g.era);
     page_ = 0;
     shown_ = 0;
     doneT_ = 0;
@@ -350,7 +357,7 @@ void Cutscene::startLine(Game& g)
     blips_ = 0;
     pages_.clear();
     const Line& ln = cur_->lines[line_];
-    vo::play(ln.speaker, ln.text);   // akshat: voiceover for this line
+    vo::play(ln.speaker, ln.text);   // akshat: voiceover for this line, if it was generated
     if (ln.speaker == "sam" || isBoss(ln.speaker)) {
         if (rightWho_ != ln.speaker) rightIn_ = 0;
         rightWho_ = ln.speaker;
@@ -491,6 +498,7 @@ void Cutscene::draw(Game& g)
 {
     if (!cur_) return;
     setup(g);
+    g_font = fontFor(g.era);
     g_hourglass = &hourglass_;
     const int era = g.era;
     const bool vs = !cur_->vs.empty();
@@ -544,14 +552,14 @@ void Cutscene::draw(Game& g)
             Color tint = (talk || speaker.empty() || isBoss(speaker)) ? WHITE : Color{180, 180, 190, 255};
             portrait(g, heroes[p], 200 + p * 170 + hx, 512 + sy + b, 200, p == 1, tint, talk, t_ + p, false);
         }
-        text(std::string(T("p1_name")) + " & " + T("p2_name"), 1010 + hx, 380 + sy, 40, WHITE, true, true);
+        text(std::string(T("p1_name")) + " & " + T("p2_name"), 1010 + hx, 380 + sy, 44, WHITE, true, true, 1, fade(BLACK, 0.8f), ui::PIXEL);
         // the name slams in
         if (slammed_) {
             float st = phase_ == PH_FLASH ? phaseT_ - SLAM_AT : 10.0f;
             float sc = 1.0f + 1.6f * (1 - easeOut(st / 0.15f));
             std::string nm = speakerName(cur_->vs);
-            text(nm, 470 + sx, 180 + sy, 60, hexc(0xfff4d8), true, true, sc);
-            text("VS", 640 + sx * 1.5f, 300 + sy, 64, hexc(0xf7d73a), true, true, sc);
+            text(nm, 470 + sx, 180 + sy, 60, hexc(0xfff4d8), true, true, sc, fade(BLACK, 0.85f), ui::PIXEL);
+            text("VS", 640 + sx * 1.5f, 300 + sy, 76, hexc(0xf7d73a), true, true, sc, hexc(0x2a1606), ui::PIXEL);
         }
         if (phase_ == PH_FLASH) return;
     } else {
@@ -587,7 +595,7 @@ void Cutscene::draw(Game& g)
     std::string nm = speakerName(speaker);
     if (!nm.empty()) {
         bool right = speaker == "sam" || isBoss(speaker);
-        float w = textW(nm, 26) + 40;
+        float w = textW(nm, 24) + 40;
         nameTab(era, nm, v.col, right ? BOX_X + BOX_W - 40 - w : BOX_X + 40, by - 30);
     }
     // typewriter text
@@ -606,11 +614,14 @@ void Cutscene::draw(Game& g)
         quad({ax - 11, ay}, {ax + 11, ay}, {ax + 11, ay}, {ax, ay + 13}, st.text);
     }
     // skip hint + hold progress
-    std::string hint = T("cutscene_skip");
-    Color hc = fade(WHITE, 0.6f);
-    float hw = textW(hint, 13);
-    text(hint, BOX_X + BOX_W - 20 - hw, by + BOX_H + 8, 13, hc, true);
-    if (holdT_ > 0) {
-        DrawRectangleRec(R(BOX_X + BOX_W - 20 - hw, by + BOX_H + 24, hw * std::min(1.0f, holdT_ / HOLD_SKIP), 3), hc);
+    {
+        std::vector<ui::Prompt> ps = {{{"Space"}, {ui::PAD_A}, T("cutscene_hold_skip")}, {{"Esc"}, {ui::PAD_START}, T("cutscene_skip_all")}};
+        // under the box, on the right
+        const float ph = 20, right = BOX_X + BOX_W - 8, py = by + BOX_H + 6;
+        float tw = 0;
+        for (auto& p : ps) tw += ui::promptW(p, ph) + ph * 1.1f;
+        tw -= ph * 1.1f;
+        ui::promptRow(ps, right, py, ph, fade(WHITE, 0.75f), ui::RIGHT, boxIn);
+        if (holdT_ > 0) ui::rrect({right - tw, py + ph + 2, tw * std::min(1.0f, holdT_ / HOLD_SKIP), 2}, 1, ui::col::amber);
     }
 }
