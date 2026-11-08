@@ -1388,7 +1388,7 @@ void Models3D::drawPlayer(Game& g, int p)
     const Player& pl = g.players[p];
     const bool gran = p == 0;
     float a = 1.0f;
-    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
+    if (pl.invuln > 0 && !pl.faded && !(g.powers.freezeT > 0 || g.powers.pullT > 0) && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
     if (pl.faded) a = 0.45f;
     auto col = [&](unsigned h) {
         Color c = hexc(h);
@@ -1673,7 +1673,7 @@ void Models3D::drawPersonModel(Game& g, int p)
     const Player& pl = g.players[p];
     Model* parts = person_[p];
     float a = 1.0f;
-    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.4f;
+    if (pl.invuln > 0 && !pl.faded && !(g.powers.freezeT > 0 || g.powers.pullT > 0) && (int)(pl.invuln * 12) % 2 == 0) a = 0.4f;
     if (pl.faded) a = 0.55f;
     Color tint = withA(WHITE, a);
     setLook(pl.faded ? Vector4{0.8f, 0.82f, 0.9f, 0.25f} : Vector4{0, 0, 0, 0}, pl.faded ? 0.85f : 0.0f);
