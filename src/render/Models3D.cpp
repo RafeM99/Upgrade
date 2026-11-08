@@ -1707,7 +1707,7 @@ void Models3D::drawPersonModel(Game& g, int p)
             float h = std::sqrt(sa * sa * std::sin(ph2) * std::sin(ph2) + sb * sb * std::cos(ph2) * std::cos(ph2));
             dMax = std::max(dMax, -(yc - h));
         }
-        footLift = dMax - 0.55f - 0.01f;   // hips 0.55 above the root; keep 1 cm of sole in the lawn
+        footLift = dMax - 0.55f * std::cos(lean) - 0.01f;   // hips 0.55 above the root; keep 1 cm of sole in the lawn
         bob = 0;
     }
     Matrix root = then(MatrixRotateY(yaw), T(pl.cx(), Y3(pl.bottom()) + bob - crouch + footLift, 0.2f));
