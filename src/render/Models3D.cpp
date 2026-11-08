@@ -55,6 +55,8 @@ void Models3D::init()
     locSunCol_ = GetShaderLocation(sh_, "sunCol");
     locSkyCol_ = GetShaderLocation(sh_, "skyCol");
     locGroundCol_ = GetShaderLocation(sh_, "groundCol");
+    locBlend_ = GetShaderLocation(sh_, "blendCol");
+    locGrey_ = GetShaderLocation(sh_, "grey");
     setLight(false);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
@@ -65,9 +67,13 @@ void Models3D::init()
     for (Model* m : {&cube_, &sphere_, &cyl_, &torus_, &cone_}) m->materials[0].shader = sh_;
     ready_ = sh_.id > 0;
 
-    static const char* const granNames[G_COUNT] = {"gran_body", "gran_head", "gran_upperarm", "gran_forearm", "gran_thigh", "gran_shin"};
-    static const char* const forgetNames[F_COUNT] = {"forget_body", "forget_seg", "forget_tip"};
-    loadParts(gran_, granNames, G_COUNT, granReady_);
+    static const char* const personNames[2][P_COUNT] = {
+        {"gran_body", "gran_head", "gran_upperarm", "gran_forearm", "gran_thigh", "gran_shin"},
+        {"sam_body", "sam_head", "sam_upperarm", "sam_forearm", "sam_thigh", "sam_shin"}};
+    static const char* const clockNames[C_COUNT] = {"clock_case", "clock_pendulum", "clock_hour", "clock_minute", "clock_foot_l", "clock_foot_r"};
+    static const char* const forgetNames[F_COUNT] = {"forget_body", "forget_seg", "forget_tip", "forget_pupil"};
+    for (int p = 0; p < 2; ++p) loadParts(person_[p], personNames[p], P_COUNT, personReady_[p]);
+    loadParts(clock_, clockNames, C_COUNT, clockReady_);
     loadParts(forget_, forgetNames, F_COUNT, forgetReady_);
 }
 
@@ -120,8 +126,15 @@ void Models3D::modelPart(Model& m, Matrix t, Color tint, bool rim)
     float zero = 0.0f, r = rim && rims_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
     SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
+    pushLook();
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, tint);
+}
+
+void Models3D::pushLook()
+{
+    SetShaderValue(sh_, locBlend_, &blend_, SHADER_UNIFORM_VEC4);
+    SetShaderValue(sh_, locGrey_, &grey_, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::shutdown()
@@ -130,7 +143,8 @@ void Models3D::shutdown()
         m->materials[0].shader = Shader{rlGetShaderIdDefault(), rlGetShaderLocsDefault()};
         UnloadModel(*m);
     }
-    unloadParts(gran_, granReady_ ? G_COUNT : 0, granReady_);
+    for (int p = 0; p < 2; ++p) unloadParts(person_[p], personReady_[p] ? P_COUNT : 0, personReady_[p]);
+    unloadParts(clock_, clockReady_ ? C_COUNT : 0, clockReady_);
     unloadParts(forget_, forgetReady_ ? F_COUNT : 0, forgetReady_);
     UnloadShader(sh_);
 }
@@ -142,6 +156,7 @@ void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool rim)
     float r = rim && rims_ && &m != &cube_ ? 1.0f : 0.0f;
     SetShaderValue(sh_, locEmissive_, &emissive, SHADER_UNIFORM_FLOAT);
     SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
+    pushLook();
     m.transform = t;
     DrawModel(m, {0, 0, 0}, 1.0f, c);
 }
@@ -150,6 +165,7 @@ void Models3D::begin(Game& g, const Camera3D& cam)
 {
     rlDrawRenderBatchActive();
     camPos_ = cam.position;
+    setLook({0, 0, 0, 0}, 0.0f);
     SetShaderValue(sh_, locView_, &cam.position, SHADER_UNIFORM_VEC3);
     Vector3 pos[4]{}, col[4]{};
     float rad[4] = {0, 0, 0, 0};
@@ -633,7 +649,7 @@ void Models3D::drawGardenFront(Game& g, float l, float r)
 // ------------------------------------------------------------------ Gran and Sam
 void Models3D::drawPlayer(Game& g, int p)
 {
-    if (p == 0 && granReady_) { drawGranModel(g); return; }
+    if (personReady_[p]) { drawPersonModel(g, p); return; }
     const Player& pl = g.players[p];
     const bool gran = p == 0;
     float a = 1.0f;
@@ -800,6 +816,8 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
         part(sphere_, at(then(S(0.09f, 0.09f, 0.08f), T(L / 2 - 0.01f, 0.03f, 0))), col(0xfaf3e6));
         part(sphere_, at(then(S(0.045f, 0.05f, 0.045f), T(L / 2 + 0.065f, 0.03f, 0))), col(0x0f0d1a));
         part(cube_, at(then(then(S(0.03f, 0.04f, 0.2f), MatrixRotateZ(-0.3f)), T(L / 2 + 0.04f, 0.11f, 0))), spine);   // a heavy lid
+    } else if (clockReady_) {
+        drawClockModel(g, e);
     } else {
         // A grandfather clock on two stubby feet: plinth, trunk with the pendulum behind glass,
         // and a hood with the dial, scowling. It leans in and the pendulum thrashes when it charges.
@@ -838,7 +856,7 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
             part(sphere_, at(then(S(0.05f, 0.05f, 0.05f), T(0.22f, 1.55f, s * 0.38f))), brass);
         }
         // the glass door: dark behind, the pendulum, a brass frame and a glint
-        float swing = e.dead ? 0.0f : (mad ? std::sin(e.t * 14) * 0.75f : std::sin(e.t * 4.2f) * 0.35f);
+        float swing = e.dead ? 0.0f : (mad ? std::sin(e.t * 14) * 0.28f : std::sin(e.t * 4.2f) * 0.16f);
         part(cube_, at(then(S(0.02f, 0.48f, 0.34f), T(0.19f, 0.64f, 0))), col(0x2a1a14), 0, false);
         Matrix pend = then(MatrixRotateX(swing), T(0.205f, 0.86f, 0));
         part(cyl_, at(then(then(S(0.012f, 0.36f, 0.012f), T(0, -0.36f, 0)), pend)), brass, 0, false);
@@ -911,18 +929,22 @@ void Models3D::drawFragment(float x, float y, float t, float alpha)
     part(cube_, m, withA(hexc(0xf7d73a), alpha), 0.75f);
 }
 
-// ------------------------------------------------------------------ Gran, modelled in Blender
-// A run cycle like the reference: leaning into it, elbows bent, knees lifting.
-void Models3D::drawGranModel(Game& g)
+// ------------------------------------------------------------------ Gran and Sam, modelled in Blender
+// Both are built on the same skeleton, so one run cycle drives them: leaning into it, elbows
+// bent, knees lifting. A faded player is greyed out and see-through (dithered by the shader);
+// the flicker after a hit is the same dither, so no inside parts ever show.
+void Models3D::drawPersonModel(Game& g, int p)
 {
-    const Player& pl = g.players[0];
+    const Player& pl = g.players[p];
+    Model* parts = person_[p];
     float a = 1.0f;
-    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
-    if (pl.faded) a = 0.45f;
-    Color tint = withA(pl.faded ? hexc(0xb8b8c8) : WHITE, a);
+    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.4f;
+    if (pl.faded) a = 0.55f;
+    Color tint = withA(WHITE, a);
+    setLook(pl.faded ? Vector4{0.8f, 0.82f, 0.9f, 0.25f} : Vector4{0, 0, 0, 0}, pl.faded ? 0.85f : 0.0f);
 
     float yaw = pl.facing > 0 ? -0.52f : PI + 0.52f;
-    float ph = g.time * 12.0f;
+    float ph = g.time * 12.0f + p * 1.3f;
     bool running = pl.onGround && std::fabs(pl.vx) > 0.6f;
     float run = running ? std::min(1.0f, std::fabs(pl.vx) / 4.0f + 0.4f) : 0.0f;
     float s = std::sin(ph), c = std::cos(ph);
@@ -948,74 +970,148 @@ void Models3D::drawGranModel(Game& g)
     Matrix hips = then(then(MatrixRotateZ(lean), T(0, hipY, 0)), root);
     auto R = MatrixRotateZ;
 
-    // legs first (behind), the far one darker by the light anyway
-    for (int side = 0; side < 2; ++side) {
+    for (int side = 0; side < 2; ++side) {   // legs hang from the hips but do not lean with the body
         float z = side ? 0.1f : -0.1f;
         float th = side ? thighF : thighB, kn = side ? kneeF : kneeB;
-        // legs hang from the hips but do not lean with the body
         Matrix thigh = then(R(th - lean), then(T(0, 0, z), hips));
-        modelPart(gran_[G_THIGH], thigh, tint);
+        modelPart(parts[P_THIGH], thigh, tint);
         Matrix shin = then(R(kn), then(T(0, -0.26f, 0), thigh));
-        modelPart(gran_[G_SHIN], shin, tint);
+        modelPart(parts[P_SHIN], shin, tint);
     }
-    // far arm, body, head, near arm
     auto arm = [&](float z, float sw) {
         Matrix up = then(R(sw), then(T(0, 0.4f, z), hips));
-        modelPart(gran_[G_UPPERARM], up, tint);
+        modelPart(parts[P_UPPERARM], up, tint);
         Matrix fore = then(R(elbow), then(T(0, -0.21f, 0), up));
-        modelPart(gran_[G_FOREARM], fore, tint);
+        modelPart(parts[P_FOREARM], fore, tint);
     };
     arm(-0.25f, armB);
-    modelPart(gran_[G_BODY], hips, tint);
-    modelPart(gran_[G_HEAD], then(R(headNod * 0.5f + (pl.onGround ? 0 : 0.1f)), then(T(0, 0.48f, 0), hips)), tint);
+    modelPart(parts[P_BODY], hips, tint);
+    modelPart(parts[P_HEAD], then(R(headNod * 0.5f + (pl.onGround ? 0 : 0.1f)), then(T(0, 0.48f, 0), hips)), tint);
     arm(0.25f, armF);
 
-    // her umbrella when she glides
-    if (pl.gliding || pl.frame == art::PF_SPECIAL) {
+    // Gran's umbrella when she glides
+    if (p == 0 && (pl.gliding || pl.frame == art::PF_SPECIAL)) {
         auto at = [&](Matrix m) { return then(m, root); };
-        part(cyl_, at(then(S(0.02f, 0.7f, 0.02f), T(0.1f, 1.25f, 0.25f))), withA(hexc(0x3a2a2a), a));
-        part(sphere_, at(then(S(0.62f, 0.22f, 0.62f), T(0.1f, 1.95f, 0.25f))), withA(hexc(0xb03a6a), a));
+        part(cyl_, at(then(S(0.02f, 0.7f, 0.02f), T(0.1f, 1.3f, 0.25f))), withA(hexc(0x3a2a2a), a));
+        part(sphere_, at(then(S(0.62f, 0.22f, 0.62f), T(0.1f, 2.0f, 0.25f))), withA(hexc(0xb03a6a), a));
     }
+    setLook({0, 0, 0, 0}, 0.0f);
+}
+
+// ------------------------------------------------------------------ the grandfather clock, modelled in Blender
+// A longcase clock waddling on its two bracket feet. Its face sits in the arch above the dial
+// (scowling brows, eyes that glow red when it winds up), the hands turn, and the pendulum
+// swings inside the trunk: only its weight shows through the round window. The swing is held
+// to 0.28 radians even when it charges, so the weight stays inside the case.
+void Models3D::drawClockModel(Game& g, const Enemy& e)
+{
+    (void)g;
+    // pivots of the Blender parts (printed by make_models.py)
+    const float FOOT_H = 0.0837f, PEND_X = 0.044f, PEND_Y = 0.8808f, DIAL_X = 0.1568f, DIAL_Y = 1.3124f;
+    const float FACE_X = 0.1515f, FACE_Y = 1.503f;
+    float a = e.dead ? std::max(0.0f, 1 - e.deadTime / 0.45f) : 1.0f;
+    Color tint = withA(WHITE, a);
+    Vector4 look{0, 0, 0, 0};
+    if (e.owner >= 0) {
+        Color o = e.owner == 0 ? hexc(0xffaf5f) : hexc(0x78b4ff);
+        look = {o.r / 255.0f, o.g / 255.0f, o.b / 255.0f, 0.35f};
+    }
+    if (e.hurt > 0) look = {1, 1, 1, 0.6f};
+    setLook(look, 0.0f);
+
+    float yawC = e.dir > 0 ? -1.0f : PI + 1.0f;   // turned well towards the camera, so the dial shows
+    Matrix root = then(MatrixRotateY(yawC), T(e.cx(), Y3(e.y + e.h), 0.1f));
+    bool mad = e.state >= 1 && !e.dead;
+    float wt = e.t * (e.state == 2 ? 18.0f : 7.0f);
+    float step = e.state == 1 ? 0.0f : std::sin(wt);
+    float lean = e.state == 1 ? -0.16f : (e.state == 2 ? -0.26f : -0.03f);
+    float rattle = e.state == 1 ? std::sin(e.t * 70) * 0.025f : 0.0f;
+    float rock = step * 0.05f, hop = std::fabs(std::cos(wt)) * (e.state == 1 ? 0 : 0.035f);
+    Matrix body = then(then(then(MatrixRotateX(rock), MatrixRotateZ(lean + rattle)), T(0, FOOT_H + hop, 0)), root);
+    auto at = [&](Matrix m) { return then(m, body); };
+
+    for (int s = -1; s <= 1; s += 2) {   // the feet: one steps forward while the other lifts
+        float fx = s * step * 0.1f, lift = std::max(0.0f, s * std::cos(wt)) * (e.state == 1 ? 0 : 0.06f);
+        modelPart(clock_[s < 0 ? C_FOOT_L : C_FOOT_R], then(T(fx, FOOT_H + lift, -s * 0.15f), root), tint);
+    }
+    modelPart(clock_[C_CASE], body, tint);
+    float swing = e.dead ? 0.0f : (mad ? std::sin(e.t * 14) * 0.28f : std::sin(e.t * 4.2f) * 0.16f);
+    modelPart(clock_[C_PENDULUM], at(then(MatrixRotateX(swing), T(PEND_X, PEND_Y, 0))), tint);
+    float spin = mad ? e.t * 9 : e.t * 0.8f;
+    modelPart(clock_[C_HOUR], at(then(MatrixRotateX(-spin / 12 - 2.1f), T(DIAL_X + 0.004f, DIAL_Y, 0))), tint, false);
+    modelPart(clock_[C_MINUTE], at(then(MatrixRotateX(-spin), T(DIAL_X + 0.009f, DIAL_Y, 0))), tint, false);
+
+    // the face in the arch: big dark eyes (red and glowing when it winds up) and cross brows
+    Color ink = withA(hexc(0x1c1420), a), red = withA(hexc(0xff4040), a);
+    for (int s = -1; s <= 1; s += 2) {
+        if (!e.dead)
+            part(sphere_, at(then(S(0.02f, mad ? 0.042f : 0.036f, 0.03f), T(FACE_X + 0.006f, FACE_Y, s * 0.052f))),
+                 mad ? red : ink, mad ? 1.0f : 0.0f, false);
+        float tilt = mad ? 0.6f : 0.42f;
+        part(cube_, at(then(then(S(0.03f, 0.022f, 0.075f), MatrixRotateX(-s * tilt)),
+                            T(FACE_X + 0.01f, FACE_Y + 0.048f - (mad ? 0.008f : 0), s * 0.05f))),
+             ink, 0, false);
+    }
+    setLook({0, 0, 0, 0}, 0.0f);
 }
 
 // ------------------------------------------------------------------ the Forgetting, modelled in Blender
-// A big tentacle alien that floats and bobs, eye on the players, its eight tentacles curling
-// in slow waves; they splay out when it slams down.
+// A ball of Gran's dark knitting wool coming unravelled. It floats and bobs, its one eye
+// following the nearest player, and its strands of yarn (3 to 6 pieces each, so the outline
+// varies) wave in slow curls, getting paler towards their frayed ends as if fading. They splay
+// out when it slams down. A hit flashes it towards white in the shader.
 void Models3D::drawForgetting(Game& g)
 {
     const Boss& b = g.boss;
     float a = b.state == 5 ? std::max(0.0f, 1 - b.stateTime / 1.6f) : 1.0f;
     bool flash = (b.state == 3 && (int)(g.time * 8) % 2 == 0) || b.hurt > 0;
-    Color tint = withA(flash ? Color{255, 210, 220, 255} : WHITE, a);
+    Color tint = withA(WHITE, a);
+    const Vector3 pale = {0.86f, 0.85f, 0.9f};
+    auto look = [&](float fade) {   // fade 0 (the ball) .. 1 (the very tips)
+        if (flash) setLook({1.0f, 0.97f, 0.95f, 0.6f}, 0.0f);
+        else setLook({pale.x, pale.y, pale.z, 0.55f * fade}, 0.0f);
+    };
 
     float t = b.t;
     float bob = std::sin(t * 2.2f) * 0.15f;
     float slam = b.state == 3 ? 1.0f : 0.0f;
     const float k = 1.8f;    // size in the level
-    // turned toward the camera and a little toward the nearest player
-    float px = g.players[0].cx();
-    if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) px = g.players[1].cx();
-    float yaw = px < b.x ? -PI / 2 - 0.7f : -PI / 2 + 0.7f;
+    // the nearest player: the ball turns a little towards them and the eye follows them
+    float px = g.players[0].cx(), py = g.players[0].cy();
+    if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) { px = g.players[1].cx(); py = g.players[1].cy(); }
+    float yaw = px < b.x ? -PI / 2 - 0.3f : -PI / 2 + 0.3f;
     float tilt = std::sin(t * 1.3f) * 0.06f;
-    Matrix root = then(then(then(S(k, k, k), MatrixRotateX(tilt)), MatrixRotateY(yaw)), T(b.x, Y3(b.y) + 0.4f + bob, 0.4f));
+    Vector3 centre = {b.x, Y3(b.y) + 0.4f + bob, 0.4f};
+    Matrix turn = then(MatrixRotateX(tilt), MatrixRotateY(yaw));
+    Matrix root = then(then(S(k, k, k), turn), T(centre.x, centre.y, centre.z));
 
+    look(0);
     modelPart(forget_[F_BODY], root, tint);
-    // tentacles hang from a ring under the dome; each is 5 segments and a curled tip
-    const int N = 8, SEGS = 5;
+    if (b.state != 5) {
+        // the pupil slides about inside the hollow eye towards the player
+        Vector3 d = Vector3Normalize({px - centre.x, Y3(py) - centre.y, 6.0f});   // towards the player, and the camera
+        Vector3 l = Vector3Transform(d, MatrixTranspose(turn));                    // into the ball's own frame
+        Vector3 pp = {0.8f, 0.12f + std::max(-1.0f, std::min(1.0f, l.y)) * 0.13f, std::max(-1.0f, std::min(1.0f, l.z)) * 0.13f};
+        modelPart(forget_[F_PUPIL], then(T(pp.x, pp.y, pp.z), root), tint, false);
+    }
+    // strands hang from a ring under the ball
+    const int N = 8;
     for (int i = 0; i < N; ++i) {
         float ang = (i + 0.5f) * 2 * PI / N;
-        // ring position (game space, before root): x forward, z sideways
-        float rx = std::cos(ang) * 0.55f, rz = std::sin(ang) * 0.52f;
-        // turn the chain so its "forward" bend axis points out from the centre
-        Matrix m = then(then(MatrixRotateZ(0.35f + 0.6f * slam), MatrixRotateY(-ang)), then(T(rx, -0.5f, rz), root));
+        int segs = 3 + (int)(hashi(i, 77) % 4);
+        float rx = std::cos(ang) * 0.48f, rz = std::sin(ang) * 0.48f;
+        Matrix m = then(then(MatrixRotateZ(0.3f + 0.6f * slam), MatrixRotateY(-ang)), then(T(rx, -0.66f, rz), root));
         float sc = 1.0f;
-        for (int j = 0; j < SEGS; ++j) {
+        for (int j = 0; j < segs; ++j) {
+            look((float)j / segs);
             modelPart(forget_[F_SEG], then(S(sc, sc, sc), m), tint);
             float wave = std::sin(t * 2.6f + i * 0.9f - j * 0.8f) * (0.32f - 0.2f * slam) + 0.06f * j * (1 - slam);
             float sway = std::cos(t * 1.9f + i * 1.7f - j * 0.6f) * 0.15f;
-            m = then(then(MatrixRotateZ(wave), MatrixRotateX(sway)), then(T(0, -0.38f * sc, 0), m));
-            sc *= 0.86f;
+            m = then(then(MatrixRotateZ(wave), MatrixRotateX(sway)), then(T(0, -0.4f * sc, 0), m));
+            sc *= 0.9f;
         }
+        look(1);
         modelPart(forget_[F_TIP], then(S(sc, sc, sc), m), tint);
     }
+    setLook({0, 0, 0, 0}, 0.0f);
 }
