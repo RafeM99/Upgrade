@@ -6,8 +6,17 @@
 #include <cmath>
 #include <cstdlib>
 
-void GameCamera::update(float targetX, float targetTop, float spread, float minLeft, float dt)
+float GameCamera::lookDown() const
 {
+    // the same smoothsteps as camera3D: cy -= s * 1.2 + t * 1.6
+    float s1 = std::min(1.0f, std::max(0.0f, swing)), s2 = std::min(1.0f, std::max(0.0f, swing - 1.0f));
+    float s = s1 * s1 * (3 - 2 * s1), t = s2 * s2 * (3 - 2 * s2);
+    return s * 1.2f + t * 1.6f;
+}
+
+void GameCamera::update(float targetX, float targetTop, float spread, float minLeft, float dt, float floorY)
+{
+    lastTargetTop = targetTop;
     // zoom out a little when the players spread apart (not in pixel-art stages: the zoom is fixed
     // there so the pixel grid never changes size)
     float wantH = art::VIEW_TILES_H;
@@ -37,6 +46,16 @@ void GameCamera::update(float targetX, float targetTop, float spread, float minL
     float wantTop = std::max(-lift, std::min((float)LEVEL_H - viewH, targetTop - lift));
     top += (wantTop - top) * std::min(1.0f, 4.0f * dt);
     top = std::max(-lift, std::min((float)LEVEL_H - viewH, top));
+    // the floor under the lowest player stays in view: the visible bottom (top + viewH, plus
+    // however far the 2.5D / 3D view looks down) never rises above floor + FLOOR_SHOWN. The camera
+    // eases towards it, with a hard stop that always keeps the floor's grass edge on screen.
+    if (floorY >= 0) {
+        constexpr float FLOOR_SHOWN = 1.6f, FLOOR_MIN = 0.7f;
+        float bottomOff = viewH + lookDown();
+        float soft = floorY + FLOOR_SHOWN - bottomOff, hard = floorY + FLOOR_MIN - bottomOff;
+        if (top < soft) top += (soft - top) * std::min(1.0f, 6.0f * dt);
+        top = std::max(top, hard);
+    }
     shake = std::max(0.0f, shake - dt * 2.5f);
     shakeX = shake * ((std::rand() % 1000) / 500.0f - 1.0f) * 0.3f;
     shakeY = shake * ((std::rand() % 1000) / 500.0f - 1.0f) * 0.3f;

@@ -42,14 +42,14 @@ constexpr int TIER[ERA_COUNT] = {0, 1, 1, 2, 2, 3, 3};
 
 // The world view is VIEW_TILES_H tiles tall. The low-res render target is
 // TILE_PX * VIEW_TILES_H pixels tall, so one sprite pixel is one target pixel.
-constexpr float VIEW_TILES_H = 11.0f;   // Gran and Sam (1.5 tiles) are about 1/7 of the screen
+constexpr float VIEW_TILES_H = 11.0f;   // Gran and Sam (drawn ~2.2 tiles) are about 1/5 of the screen
 
 // Background layers: each is two screens wide and tiles horizontally.
 constexpr int BG_H[ERA_COUNT] = {88, 176, 176, 220, 352, 360, 360};   // = the native buffer height
 inline int bgW(int era) { return BG_H[era] * 32 / 9; }
 constexpr int BG_LAYERS = 4;   // 0 sky (opaque), 1 far, 2 mid, 3 near
 
-// ---- Player sheet: player_p1.png / player_p2.png, frames 1 x 1.5 tiles in one row
+// ---- Player sheet: player_p1.png / player_p2.png, frames PLAYER_FW x PLAYER_FH tiles in one row
 enum PlayerFrame {
     PF_IDLE0, PF_IDLE1,
     PF_RUN0, PF_RUN1, PF_RUN2, PF_RUN3,
@@ -61,22 +61,50 @@ enum PlayerFrame {
     PF_ATTACK,
     PF_COUNT
 };
-constexpr float PLAYER_FW = 1.0f, PLAYER_FH = 1.5f;   // frame size in tiles
+// Frame size in tiles. The figures are drawn 1.5x the 1 x 1.5 tile hitbox-sized box they were
+// designed in (PLAYER_K), so they read on busy scenery; the hitbox itself is unchanged.
+constexpr float PLAYER_K = 1.5f;
+constexpr float PLAYER_FW = 1.0f * PLAYER_K, PLAYER_FH = 1.5f * PLAYER_K;
 
 // ---- Enemy sheets (frame sizes in tiles)
 enum BlobFrame  { BF_WALK0, BF_WALK1, BF_WALK2, BF_WALK3, BF_SQUASH, BF_COUNT };
 enum FlyerFrame { FF_FLAP0, FF_FLAP1, FF_FLAP2, FF_FLAP3, FF_HURT, FF_COUNT };
 enum BruteFrame { RF_WALK0, RF_WALK1, RF_WALK2, RF_WALK3, RF_HURT, RF_CHARGE, RF_COUNT };
 enum BossFrame  { XF_FLOAT0, XF_FLOAT1, XF_HURT, XF_SLAM, XF_COUNT };
-constexpr float BLOB_FS = 1.0f, FLYER_FS = 1.0f, BRUTE_FS = 2.0f, BOSS_FS = 3.0f;
+// Creatures are drawn ENEMY_K times the 1 x 1 / 2 x 2 tile box they were designed in, to sit
+// beside the bigger heroes (hitboxes unchanged). Every size times TILE_PX is a whole number.
+constexpr float ENEMY_K = 1.25f;
+constexpr float BLOB_FS = 1.0f * ENEMY_K, FLYER_FS = 1.0f * ENEMY_K, BRUTE_FS = 2.0f * ENEMY_K, BOSS_FS = 3.0f;
 
 // ---- Tiles and pickups: tiles.png, 1 x 1 tile frames in one row
 enum TileFrame {
     T_GROUND_TOP, T_GROUND, T_BLOCK, T_CRACKED, T_P1, T_P2, T_WALL,
     T_FRAG0, T_FRAG1,
     T_PU_SHIELD, T_PU_SLOW, T_PU_MAGNET, T_PU_PHOTO, T_PU_SPEED,
+    // ground variants (the renderer picks one per tile by a hash of its position) and a
+    // buried keepsake two tiles wide (left, right half) that turns up every few screens
+    T_GROUND_TOP1, T_GROUND_TOP2, T_GROUND_TOP3,
+    T_GROUND1, T_GROUND2, T_GROUND3,
+    T_FEAT_L, T_FEAT_R,
+    // more ground: four more variants of the grass cap and the earth, the deep stratum along the
+    // bottom row, rocky undersides (solid above, air below), stony earth inside floating masses,
+    // a boulder two tiles wide in the deep stratum, and overlays drawn in the air next to the
+    // ground: grass tufts standing on a grass cap, grass hanging over a cliff edge (L: the air
+    // tile left of the edge, R: right of it)
+    T_GROUND_TOP4, T_GROUND_TOP5, T_GROUND_TOP6, T_GROUND_TOP7,
+    T_GROUND4, T_GROUND5, T_GROUND6, T_GROUND7,
+    T_DEEP0, T_DEEP1, T_DEEP2, T_DEEP3,
+    T_UNDER0, T_UNDER1, T_UNDER2, T_UNDER3,
+    T_ROCK0, T_ROCK1, T_ROCK2, T_ROCK3,
+    T_PAIR_L, T_PAIR_R,
+    T_TUFT0, T_TUFT1, T_TUFT2, T_TUFT3,
+    T_CAP_L, T_CAP_R,
     T_COUNT
 };
+constexpr int GROUND_VARIANTS = 8;   // grass caps and earth: frame 0, frames 1..3, frames 4..7
+constexpr int DEEP_VARIANTS = 4, UNDER_VARIANTS = 4, ROCK_VARIANTS = 4, TUFT_VARIANTS = 4;
+constexpr int groundTopFrame(int v) { return v == 0 ? T_GROUND_TOP : (v < 4 ? T_GROUND_TOP1 + v - 1 : T_GROUND_TOP4 + v - 4); }
+constexpr int groundFrame(int v) { return v == 0 ? T_GROUND : (v < 4 ? T_GROUND1 + v - 1 : T_GROUND4 + v - 4); }
 
 // ---- Forgetting Wall texture: wall.png, 2 x 4 tiles, tiles vertically.
 constexpr float WALL_TEX_W = 2.0f, WALL_TEX_H = 4.0f;

@@ -111,12 +111,12 @@ void Game::startRun()
         pl = Player();
         pl.index = p;
         pl.joined = joined;
-        pl.spawnAt(4.0f + p * 1.2f, (float)LEVEL_H - 2);
+        pl.spawnAt(4.0f + p * 1.7f, (float)LEVEL_H - 2);   // apart: the figures are drawn 1.5 tiles wide
     }
     for (int e = 1; e <= era; ++e) unlockAbilitiesFor(e);
     cam = GameCamera();
     cam.x = 12;
-    cam.top = LEVEL_H - art::VIEW_TILES_H;
+    cam.top = cam.lastTargetTop = LEVEL_H - art::VIEW_TILES_H;
     cam.pixelLock = art::lowRes(era);
     cam.swing = art::SWING[era];
     wallX = -10;
@@ -385,7 +385,7 @@ void Game::updatePlaying(float dt)
             cam.swing = art::SWING[transFromEra] + (art::SWING[era] - art::SWING[transFromEra]) * k;
         }
         cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
-        cam.update(cam.x, cam.top, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
+        cam.update(cam.x, cam.lastTargetTop, 0, std::max(wallX - 3, (float)level.firstCol()), dt);
         if (transT >= transLen) {
             transActive = false;
             cam.swing = art::SWING[era];
@@ -472,6 +472,13 @@ void Game::updatePlaying(float dt)
     // ---- enemies
     const float rushK = powers.rushT > 0 ? powers.rushK : 1.0f;   // the Scarecrow's HARVEST RUSH
     for (auto& e : enemies) updateEnemy(e, level, players, dt, tier(), slowK * rushK, etune);
+    if (opt.autoplay)   // test runs: report any enemy that ends a tick inside the terrain
+        for (const auto& e : enemies) {
+            float bx, by, bw, bh;
+            enemyTerrainBox(e, bx, by, bw, bh);
+            if (!e.dead && boxHitsSolid(level, bx, by, bw, bh, -1, false))
+                TraceLog(LOG_WARNING, "TEST t=%.1f enemy type %d inside the terrain at %.2f %.2f", time, e.type, e.x, e.y);
+        }
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const Enemy& e) {
         return e.remove || e.x < wallX - 6;
     }), enemies.end());
@@ -550,7 +557,7 @@ void Game::updatePlaying(float dt)
             e.y = boss.y;
             e.baseY = e.y;
             if (!solo() && era >= 1 && std::rand() % 3 == 0) e.owner = std::rand() % 2;
-            enemies.push_back(e);
+            addEnemy(e);
             particles.burst(boss.x, boss.y, 16, Color{160, 100, 220, 255}, 5, 0.5f, 0.15f);
         }
         if (boss.hp <= 0 && boss.state != 5) {
@@ -710,6 +717,23 @@ void Game::updatePlaying(float dt)
         if (pl.joined) highest = std::min(highest, pl.y);
     float wantTop = highest - 3.0f;
     if (boss.active) wantTop = std::min(wantTop, boss.y - boss.h / 2 - 1.0f);
+    // ...but the floor under the lowest player always stays in view: a player standing on the
+    // ground sees the ground, however high the other player or the boss is. The highest thing
+    // may be cut at the top instead; the floor never is. The floor counted is the one under each
+    // player (their feet when standing, the ground below them while jumping); a player over a
+    // bottomless pit does not pull the camera down. GameCamera::update applies it after its own
+    // 3D lift, where it knows how far the view looks down.
+    float floorY = -1;
+    for (auto& pl : players) {
+        if (!pl.joined) continue;
+        float f = -1;
+        if (pl.onGround) f = pl.bottom();
+        else {
+            int gt = level.groundTop((int)std::floor(pl.cx()));
+            if (gt >= 0 && gt + 0.01f >= pl.bottom()) f = (float)gt;
+        }
+        floorY = std::max(floorY, f);
+    }
     cam.pixelLock = art::lowRes(era) && cam.swing <= 0.001f;
     {
         float fTop = 1e9f, fBottom = -1e9f, fMin = 1e9f, fMax = -1e9f;
@@ -728,7 +752,7 @@ void Game::updatePlaying(float dt)
         if (fMin < fMax) cam.setFocus(fMin, fMax, fTop, fBottom);
     }
     // never show past the start of the level: no empty strip at the left edge
-    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt);
+    cam.update(target, wantTop, maxX - minX, std::max(wallX - 3.0f, (float)level.firstCol()), dt, floorY);
 
     // ---- endless level: keep ~3 chunks ahead, drop what is far behind the wall
     unsigned mask = 0;
@@ -751,7 +775,7 @@ void Game::updatePlaying(float dt)
         spawnClock = 0;
         Enemy e = makeEnemy(EN_FLYER, cam.right() + 2, 3.0f + (std::rand() % 4), tier(), etune);
         if (!soloNow && era >= 1 && std::rand() % 4 == 0) e.owner = std::rand() % 2;
-        enemies.push_back(e);
+        addEnemy(e);
     }
 
     // ---- passive fill from distance (small; kills are the main source)
@@ -781,23 +805,23 @@ void Game::spawnMarkers()
 {
     for (const auto& m : markers) {
         switch (m.c) {
-        case 'S': enemies.push_back(makeEnemy(EN_BLOB, m.x, m.y, tier(), etune)); break;
-        case 'G': enemies.push_back(makeEnemy(EN_FLYER, m.x, m.y, tier(), etune)); break;
+        case 'S': addEnemy(makeEnemy(EN_BLOB, m.x, m.y, tier(), etune)); break;
+        case 'G': addEnemy(makeEnemy(EN_FLYER, m.x, m.y, tier(), etune)); break;
         case 'B':
             // Fog Brutes appear from the 8-bit era on; before that a Static Blob stands in
-            enemies.push_back(makeEnemy(era >= 1 ? EN_BRUTE : EN_BLOB, m.x, m.y, tier(), etune));
+            addEnemy(makeEnemy(era >= 1 ? EN_BRUTE : EN_BLOB, m.x, m.y, tier(), etune));
             break;
         case 'a':
         case 'b': {
             Enemy e = makeEnemy(EN_BLOB, m.x, m.y, tier(), etune);
             e.owner = solo() ? -1 : (m.c == 'a' ? 0 : 1);
-            enemies.push_back(e);
+            addEnemy(e);
             break;
         }
         case 'F': {
             Fragment f;
             f.x = m.x + 0.5f;
-            f.y = m.y + 0.5f;
+            f.y = freeY(m.x + 0.5f, m.y + 0.5f);
             f.floating = true;
             f.placed = true;
             f.value = config().f("memory.fragment_value", 1.0f) * (opt.fill ? 5 : 1);
@@ -813,12 +837,29 @@ void Game::spawnMarkers()
             }
             int r = total > 0 ? std::rand() % total : 0, type = 0;
             for (int i = 0; i < PU_COUNT; ++i) { r -= w[i]; if (r < 0) { type = i; break; } }
-            powerups.push_back({type, m.x + 0.5f, m.y + 0.5f, 0});
+            powerups.push_back({type, m.x + 0.5f, freeY(m.x + 0.5f, m.y + 0.5f), 0});
             break;
         }
         }
     }
     markers.clear();
+}
+
+// Every enemy enters the world through here: one placed inside the terrain (a marker on a
+// wall, a flyer drifting in where the ground is high, a minion dropped by the boss) is moved to
+// the nearest free spot, or not spawned at all if there is no room.
+void Game::addEnemy(Enemy e)
+{
+    if (settleEnemy(e, level)) enemies.push_back(e);
+}
+
+// A collectable centred at (x, y) that sits inside a solid tile is lifted to the first free cell above.
+float Game::freeY(float x, float y) const
+{
+    int tx = (int)std::floor(x);
+    int ty = (int)std::floor(y);
+    while (ty > 0 && level.isSolidChar(level.tile(tx, ty))) --ty;
+    return std::min(y, ty + 0.5f);
 }
 
 void Game::spawnFragments(float x, float y, int n, float spread)
@@ -840,7 +881,7 @@ void Game::damageEnemy(Enemy& e, int dmg, int byPlayer, float knock)
     if (e.dead) return;
     e.hp -= dmg;
     e.hurt = 0.3f;
-    e.x += knock * 0.08f;
+    if (knock != 0) enemyMove(e, level, knock * 0.08f, 0);   // never knocked into a wall
     if (e.hp <= 0) killEnemy(e, byPlayer);
     else {
         audio.play("hit");

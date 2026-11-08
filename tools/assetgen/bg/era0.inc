@@ -1,242 +1,336 @@
 // Background scene for stage 0, included into SpriteGen.cpp just before bgLayer().
-// 2025, "The night she got lost": a quiet winter street at night, in two colours.
-// Gran and Sam are solid white figures, so everything here recedes: dotted outlines only, almost
-// no fill. The composition still follows the reference style: layered depth (far ridge and a row
-// of houses, mid trees, near street), and trees with recognisable cluster-built crowns, drawn as
-// stepped dotted outlines (round, pine, forked).
+// "Last winter": a winter night street, in exactly two colours.
+// Gran and Sam (and the enemies and platforms) are solid white with a black halo. They need a
+// black backdrop to keep that outline, so the band where they run (the bottom four tiles above
+// the ground line) is kept almost all black:
+//   - scenery there is solid black silhouettes, each edged only by a single solid white line of
+//     snow along its top surfaces (roof slopes, pine tiers, the car, the hedge);
+//   - the snowfield is just its horizon: one rolling snow line, broken by everything in front;
+//   - the only dense dither (checker) is up in the sky band: the snow caps of the mountains.
+// Depth: far mountains carry flat dither and no outlines, the far town only lit windows, the
+// mid pines and near street the solid snow edges. A crescent moon hangs below the HUD.
 
-static void e0_put(Scene& sc, int x, int y)
+namespace e0 {
+// Bayer 4x4 ordered dither: true when a pixel at light level `lvl` (0..16) is lit.
+inline bool lit(int x, int y, int lvl)
+{
+    static const int m[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+    return m[(y & 3) * 4 + (x & 3)] < lvl;
+}
+}  // namespace e0
+
+static void e0_set(Scene& sc, int x, int y, bool light)
 {
     if (y < 0 || y >= sc.H) return;
-    sc.p.set(x, y, ONEBIT_LIGHT);   // Px::set wraps x, so everything tiles
+    sc.p.set(x, y, light ? ONEBIT_LIGHT : ONEBIT_DARK);   // Px::set wraps x, so everything tiles
 }
-// A dotted line (Bresenham, every `gap`-th step lit).
-static void e0_line(Scene& sc, int x0, int y0, int x1, int y1, int gap = 2)
+static void e0_put(Scene& sc, int x, int y) { e0_set(sc, x, y, true); }
+static void e0_dark(Scene& sc, int x, int y) { e0_set(sc, x, y, false); }
+// A pixel of an area at light level lvl/16 (dark where the pattern is off).
+static void e0_tone(Scene& sc, int x, int y, int lvl) { e0_set(sc, x, y, e0::lit(x, y, lvl)); }
+// Added light only: lights the pattern's pixels and leaves the rest as it is.
+static void e0_glow(Scene& sc, int x, int y, int lvl)
 {
-    int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-    int err = dx + dy, n = 0;
-    for (;;) {
-        if (n++ % gap == 0) e0_put(sc, x0, y0);
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x0 += sx; }
-        if (e2 <= dx) { err += dx; y0 += sy; }
+    if (e0::lit(x, y, lvl)) e0_put(sc, x, y);
+}
+static void e0_darkRect(Scene& sc, int x, int y, int w, int h)
+{
+    for (int j = 0; j < h; ++j)
+        for (int i = 0; i < w; ++i) e0_dark(sc, x + i, y + j);
+}
+
+// The top of the snowfield at column x: a gentle wavy line that tiles across the width.
+static int e0_contour(const Scene& sc, int x, float base, int seed, float a1, float a2)
+{
+    return (int)std::lround(base + ridge((float)x, sc.W, seed, a1, a2, 0));
+}
+
+// A snow-edged silhouette: every pixel inside is black, and the top pixel of each column run
+// (the surface snow settles on) is solid white; with `sides` the side edges are lit too, so
+// steep shapes keep an unbroken rim. inside(x, y) decides the shape.
+// Flat tops longer than `maxFlat` pixels get a gap now and then, so no rim reads as a platform.
+template <class F>
+static void e0_solid(Scene& sc, int x0, int y0, int x1, int y1, F inside, bool rim = true, int maxFlat = 7, bool sides = false)
+{
+    int run = 0;
+    for (int y = y0; y <= y1; ++y) {
+        run = 0;
+        for (int x = x0; x <= x1; ++x) {
+            if (!inside(x, y)) { run = 0; continue; }
+            bool top = rim && !inside(x, y - 1);
+            // a flat stretch: the rim runs on along the same row
+            if (top && inside(x - 1, y) && !inside(x - 1, y - 1)) ++run; else run = 0;
+            if (top && run >= maxFlat && run % (maxFlat + 1) == maxFlat) top = false;
+            bool side = rim && sides && (!inside(x - 1, y) || !inside(x + 1, y)) && inside(x, y + 1);
+            e0_set(sc, x, y, top || side);
+        }
     }
 }
 
-struct E0Blob { float x, y, r; };
-
-// Outline of a crown built from clumps, stepped on a 2-px grid like the reference trees, drawn
-// dotted. Inner clump edges (the top of a lower clump in front) get a sparser dotted arc, so the
-// crown reads as clusters without any fill.
-static void e0_crown(Scene& sc, const std::vector<E0Blob>& bl, int seed, bool inner)
+// A pine: a cone of drooping tiers, black, with snow on every tier's shoulders (`snow`).
+static void e0_pine(Scene& sc, int x, int base, float h, int seed, bool snow, bool flip)
 {
-    if (bl.empty()) return;
-    const int b = 2;
-    float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
-    for (auto& q : bl) {
-        minx = std::min(minx, q.x - q.r); maxx = std::max(maxx, q.x + q.r);
-        miny = std::min(miny, q.y - q.r); maxy = std::max(maxy, q.y + q.r);
-    }
-    int gx0 = (int)std::floor(minx / b) - 1, gx1 = (int)std::ceil(maxx / b) + 1;
-    int gy0 = (int)std::floor(miny / b) - 1, gy1 = (int)std::ceil(maxy / b) + 1;
-    int gw = gx1 - gx0 + 1, gh = gy1 - gy0 + 1;
-    std::vector<int> who((size_t)gw * gh, -1);
-    for (int gy = 0; gy < gh; ++gy)
-        for (int gx = 0; gx < gw; ++gx) {
-            float mx = (gx + gx0 + 0.5f) * b, my = (gy + gy0 + 0.5f) * b;
-            for (int k = (int)bl.size() - 1; k >= 0; --k) {
-                float j = 1.0f + 0.1f * (rnd(gx + gx0, gy + gy0, seed + k) - 0.5f);
-                float dx = mx - bl[k].x, dy = (my - bl[k].y) * 1.08f, r = bl[k].r * j;
-                if (dx * dx + dy * dy < r * r) { who[(size_t)gy * gw + gx] = k; break; }
-            }
-        }
-    auto cell = [&](int px, int py) {   // pixel -> clump index (or -1)
-        int gx = (int)std::floor((float)px / b) - gx0, gy = (int)std::floor((float)py / b) - gy0;
-        if (gx < 0 || gy < 0 || gx >= gw || gy >= gh) return -1;
-        return who[(size_t)gy * gw + gx];
-    };
-    for (int py = gy0 * b; py < (gy1 + 1) * b; ++py)
-        for (int px = gx0 * b; px < (gx1 + 1) * b; ++px) {
-            int k = cell(px, py);
-            if (k < 0) continue;
-            sc.p.set(px, py, ONEBIT_DARK);   // the crown hides what is behind it (dark = sky)
-            bool edge = cell(px - 1, py) < 0 || cell(px + 1, py) < 0 || cell(px, py - 1) < 0 || cell(px, py + 1) < 0;
-            if (edge) {
-                if (((px + py) & 1) == 0) e0_put(sc, px, py);
-            } else if (inner) {
-                int u = cell(px, py - 1);
-                // the top edge of a clump that sits in front, only on its sunny (upper left) half
-                if (u >= 0 && u < k && px < bl[k].x + bl[k].r * 0.2f && (px % 3) == 0) e0_put(sc, px, py);
-            }
-        }
-}
-
-// Trees: 0 round, 1 pine (stepped tiers), 2 forked (two crowns), 3 tall oval. R = crown radius.
-static void e0_tree(Scene& sc, int x, int base, int kind, float R, int seed, bool inner)
-{
-    std::vector<E0Blob> bl;
-    auto crown = [&](float cx, float cy, float rx, float ry) {
-        std::vector<E0Blob> c;
-        c.push_back({cx, cy, std::min(rx, ry) * 0.65f});
-        int n = ry > rx * 1.2f ? 8 : 6;
-        for (int i = 0; i < n; ++i) {
-            float a = i * 6.2831853f / n + rnd(i, seed, 61) * 0.6f;
-            float rr = std::min(rx, ry) * (0.42f + 0.14f * rnd(i, seed, 62));
-            c.push_back({cx + std::cos(a) * (rx - rr * 0.95f), cy + std::sin(a) * (ry - rr * 0.95f), rr});
-        }
-        std::sort(c.begin() + 1, c.end(), [](const E0Blob& p, const E0Blob& q) { return p.y < q.y; });
-        for (auto& q : c) bl.push_back(q);
-    };
-    if (kind == 1) {   // pine: stepped tiers, outline only
-        int th = std::max(3, (int)(R * 0.5f));
-        e0_line(sc, x, base, x, base - th);
-        int tiers = 3 + (R > 8 ? 1 : 0);
-        float top = base - th - R * 2.4f, tierH = R * 2.4f / tiers;
+    int trunk = std::max(2, (int)(h * 0.12f));
+    int tiers = h > 26 ? 5 : h > 15 ? 4 : 3;
+    float top = base - h, bodyH = h - trunk;
+    float tierH = bodyH / (tiers * 0.72f + 0.28f);
+    float maxHalf = h * 0.27f;
+    int tw = h > 20 ? 2 : 1;
+    auto inside = [&](int px, int py) {
+        int dx = px - x;
+        if (flip) dx = -dx;
+        if (py > base) return false;
+        if (py > base - trunk) return dx >= -tw / 2 && dx < tw - tw / 2;
+        if (py == (int)std::lround(top) - 1) return dx == 0;   // the leader
         for (int t = 0; t < tiers; ++t) {
-            int y0 = (int)(top + t * tierH * 0.8f), y1 = (int)(y0 + tierH * 1.3f);
-            int half = (int)std::lround(R * (0.4f + 0.6f * (t + 1) / tiers));
-            int hs = std::max(1, half / 3);
-            for (int y = y0; y <= y1; ++y) {   // hide what is behind the tier
-                int h = (int)std::lround((float)half * (y - y0) / std::max(1, y1 - y0));
-                for (int xx = -h; xx <= h; ++xx) sc.p.set(x + xx, y, ONEBIT_DARK);
-            }
-            // stepped slopes down each side, then the tier's flat bottom
-            for (int y = y0; y <= y1; y += 2) {
-                int h = std::max(1, (int)std::lround((float)half * (y - y0) / std::max(1, y1 - y0)) / 2 * 2);
-                e0_put(sc, x - h, y);
-                e0_put(sc, x + h, y);
-            }
-            e0_line(sc, x - half, y1, x - hs, y1);
-            e0_line(sc, x + hs, y1, x + half, y1);
+            float y0 = top + t * tierH * 0.72f, y1 = y0 + tierH;
+            int iy0 = (int)std::lround(y0), iy1 = (int)std::lround(y1);
+            if (py < iy0 || py > iy1) continue;
+            float half = maxHalf * (0.3f + 0.7f * (t + 1) / tiers);
+            float fr = (py - y0) / std::max(1.0f, y1 - y0);
+            int hw = (int)std::lround(half * std::min(1.0f, fr * 1.05f));
+            if (py == iy1 && std::abs(dx) < hw - 1 && rnd(dx, t, seed) < 0.35f) continue;   // ragged hem
+            if (std::abs(dx) <= hw) return true;
         }
-        e0_put(sc, x, (int)top - 2);
-        return;
+        return false;
+    };
+    e0_solid(sc, x - (int)maxHalf - 2, (int)top - 2, x + (int)maxHalf + 2, base - trunk, inside, snow, 7, true);
+    e0_solid(sc, x - 2, base - trunk + 1, x + 2, base, inside, false);
+}
+
+// A gable house: a black silhouette whose roof slopes and chimney carry a snow line, with lit
+// windows as single solid lights. litMask picks which window slots are lit (one bit per slot).
+static void e0_house(Scene& sc, int x, int base, int w, int wall, int roof, int litMask, int seed, bool chimney, bool snow)
+{
+    int top = base - wall;
+    int cx = x + w - 3 - (int)(rnd(seed, 1, 3) * 2);
+    auto inside = [&](int px, int py) {
+        int u = px - x;
+        if (py > base) return false;
+        if (u >= 0 && u < w && py >= top) return true;
+        if (chimney && u >= cx - x && u <= cx - x + 1 && py >= top - roof && py < top) return true;
+        // the roof: a one-pixel eave each side, rising `roof` rows to the ridge
+        if (py < top - roof || py >= top) return false;
+        int r = top - py;
+        int inset = (int)std::lround((float)r * (w / 2 + 1) / std::max(1, roof));
+        return u >= -1 + inset && u <= w - inset;
+    };
+    e0_solid(sc, x - 2, top - roof - 1, x + w + 1, base, inside, snow);
+    int nWin = std::max(1, (w - 2) / 3);
+    for (int i = 0; i < nWin; ++i) {
+        if (!((litMask >> i) & 1)) continue;
+        int wx = x + 1 + i * 3 + (int)(rnd(i, seed, 4) * 1.5f);
+        if (wx >= x + w - 1) continue;
+        e0_put(sc, wx, top + 1 + (wall > 5 ? 1 : 0));
     }
-    if (kind == 2) {   // forked
-        int fy = base - (int)(R * 0.9f);
-        e0_line(sc, x, base, x, fy);
-        int ax = x - (int)(R * 0.8f), ay = fy - (int)(R * 0.8f), bx = x + (int)(R * 0.9f), by = fy - (int)(R * 0.5f);
-        e0_line(sc, x, fy, ax, ay);
-        e0_line(sc, x, fy, bx, by);
-        crown((float)bx, by - R * 0.5f, R * 0.7f, R * 0.65f);
-        e0_crown(sc, bl, seed + 1, inner);
-        bl.clear();
-        crown((float)ax, ay - R * 0.55f, R * 0.85f, R * 0.8f);
-        e0_crown(sc, bl, seed, inner);
-        return;
-    }
-    float rx = R, ry = kind == 3 ? R * 1.4f : R * 0.92f;
-    float cy = base - R * 0.7f - ry;
-    e0_line(sc, x, base, x, (int)(cy + ry * 0.6f));
-    crown((float)x, cy, rx, ry);
-    e0_crown(sc, bl, seed, inner);
 }
 
 bool bgEra0(Scene& sc, int layer)
 {
     const int W = sc.W, H = sc.H;
-    sc.fade = 0;   // two colours exactly; depth comes from size and how sparse the dots are
+    sc.fade = 0;   // two colours exactly
+    const float fieldBase = 58;   // the horizon of the snowfield
+    auto fieldTop = [&](int x) {   // rolling, so it reads as a hill line and never as a platform
+        float t = x * 6.2831853f / W;
+        return (int)std::lround(fieldBase + 2.6f * std::sin(t * 7 + 0.6f) + 1.8f * std::sin(t * 3 + 2.1f) + 1.0f * std::sin(t * 13));
+    };
 
-    if (layer == 0) {   // the night sky: a few stars, a thin crescent moon
+    if (layer == 0) {   // the night sky: black, stars, a crescent moon below the HUD
         sc.rect(0, 0, (float)W, (float)H, ONEBIT_DARK);
-        const int stars[11][2] = {{12, 8}, {44, 19}, {71, 5}, {118, 14}, {150, 11}, {176, 26}, {190, 4}, {231, 7}, {259, 20}, {290, 15}, {303, 3}};
-        for (auto& st : stars) e0_put(sc, st[0] * W / 313, st[1]);
-        sc.disc(W * 0.3f, 14, 6, 6, ONEBIT_LIGHT, ONEBIT_LIGHT, false);
-        sc.disc(W * 0.3f + 3, 12, 6, 6, ONEBIT_DARK, ONEBIT_DARK, false);
+        for (int k = 0; k < 42; ++k) {   // stars thin out toward the horizon
+            float r = rnd(k, 2, 77);
+            e0_put(sc, (int)(rnd(k, 1, 77) * W), 2 + (int)(r * r * 40));
+        }
+        float mx = W * 0.3f, my = 21;   // where the old scene had it, lit from the left
+        for (int y = (int)my - 7; y <= (int)my + 7; ++y)
+            for (int x = (int)mx - 7; x <= (int)mx + 7; ++x) {
+                float dx = x + 0.5f - mx, dy = y + 0.5f - my, ex = dx - 2.8f, ey = dy + 2.0f;
+                if (dx * dx + dy * dy < 6.3f * 6.3f) e0_set(sc, x, y, ex * ex + ey * ey > 5.6f * 5.6f);
+            }
         return true;
     }
 
-    if (layer == 1) {   // far: a gentle ridge with tiny pines, and a row of houses with a few lit windows
-        auto ridgeY = [&](int x) { return (int)std::lround(H * 0.44f + ridge((float)x, W, 3, 3.5f, 1.5f, 0)); };
-        for (int x = 0; x < W; x += 2) e0_put(sc, x, ridgeY(x));
-        // tiny far pines on the first ridge
-        const float pines[7] = {0.04f, 0.08f, 0.22f, 0.25f, 0.66f, 0.7f, 0.95f};
-        for (float f : pines) {
-            int x = (int)(W * f), y = ridgeY(x);
-            for (int k = 0; k < 6; k += 2) { e0_put(sc, x - k / 2, y - 6 + k); e0_put(sc, x + k / 2, y - 6 + k); }
-            e0_put(sc, x, y - 7);
+    if (layer == 1) {   // far: mountains up in the sky band, the snowfield's horizon, the town
+        struct Peak { float x, top, slope; };
+        const Peak pk[] = {{0.10f, 30, 0.70f}, {0.27f, 38, 0.80f}, {0.45f, 27, 0.62f}, {0.61f, 39, 0.85f},
+                           {0.79f, 33, 0.72f}, {0.94f, 40, 0.80f}};
+        const int np = (int)(sizeof(pk) / sizeof(pk[0]));
+        for (int x = 0; x < W; ++x) {
+            int best = 0;
+            float bestTop = 1e9f, bdx = 0;
+            for (int i = 0; i < np; ++i) {
+                float dx = x + 0.5f - pk[i].x * W;
+                dx -= std::round(dx / W) * W;   // wrap, so the range tiles
+                float t = pk[i].top + std::abs(dx) * pk[i].slope;
+                if (t < bestTop) { bestTop = t; best = i; bdx = dx; }
+            }
+            for (int y = std::max(0, (int)bestTop); y < fieldBase + 6; ++y) {
+                float below = y - pk[best].top;
+                bool sunny = bdx < below * 0.15f;
+                // the moonlit face: a checker snow cap torn into gullies, a fainter slope under
+                // it, and black below row 42, so the characters' band stays dark
+                int capLine = 7 + (int)(5 * std::fabs(std::sin(bdx * 0.45f + best)));
+                int lvl = 0;
+                if (sunny && y < 42) lvl = below < capLine ? 8 : 4;
+                // the ridge itself: one solid snow line, fading out above the characters' band
+                bool ridgeLine = y == (int)bestTop && y < 46;
+                e0_set(sc, x, y, ridgeLine || e0::lit(x, y, lvl));
+            }
         }
-        // the far row of houses: gable roofs only, chimneys, a few windows still lit
-        int base = (int)(H * 0.62f);
-        float hx = W * 0.32f;
+        // the snowfield: only its horizon, one solid snow line; black below it
+        for (int x = 0; x < W; ++x) {
+            int t = fieldTop(x), tp = fieldTop(x - 1);
+            for (int y = std::min(t, tp + 1); y <= t; ++y) e0_put(sc, x, y);   // no gaps on slopes
+            for (int y = t + 1; y < H; ++y) e0_dark(sc, x, y);
+        }
+        // the sleeping town on the horizon: black houses, no outline, a few lit windows
+        struct Town { float x; int n; int seed; };
+        const Town towns[] = {{0.03f, 4, 11}, {0.36f, 5, 12}, {0.73f, 3, 13}};
+        for (const Town& t : towns) {
+            float hx = t.x * W;
+            for (int i = 0; i < t.n; ++i) {
+                int w = 5 + (int)(rnd(i, t.seed, 1) * 4);
+                int wall = 3 + (int)(rnd(i, t.seed, 2) * 3);
+                int roof = 2 + (int)(rnd(i, t.seed, 3) * 2);
+                int base = fieldTop((int)hx + w / 2) + 2;
+                int mask = rnd(i, t.seed, 4) < 0.75f ? (rnd(i, t.seed, 5) < 0.5f ? 1 : 2) : 0;
+                e0_house(sc, (int)hx, base, w, wall, roof, mask, t.seed * 7 + i, rnd(i, t.seed, 7) < 0.6f, false);
+                hx += w + 2 + (int)(rnd(i, t.seed, 8) * 2);
+                if (t.seed == 12 && i == 1) {   // the church: a nave and a steeple with a lit belfry
+                    int cx = (int)hx, cb = fieldTop(cx + 6) + 2;
+                    e0_house(sc, cx, cb, 9, 4, 3, 0, 99, false, false);
+                    e0_darkRect(sc, cx + 9, cb - 9, 4, 10);
+                    for (int r = 0; r < 6; ++r)
+                        for (int dx = -(2 - r / 2); dx <= 2 - r / 2; ++dx) e0_dark(sc, cx + 11 + dx, cb - 10 - r);
+                    e0_dark(sc, cx + 11, cb - 16);
+                    e0_put(sc, cx + 10, cb - 7);
+                    hx += 15;
+                }
+            }
+        }
+        return true;
+    }
+
+    if (layer == 2) {   // mid: clumps of pines on the snowfield, snow on their shoulders
+        struct T { float x; float h; int sink; bool flip; };
+        const T trees[] = {{0.020f, 15, 4, false}, {0.040f, 10, 3, true},  {0.058f, 13, 5, false},
+                           {0.180f, 17, 5, true},  {0.200f, 11, 4, false},
+                           {0.330f, 14, 5, false}, {0.346f, 9, 4, true},
+                           {0.470f, 16, 6, true},  {0.490f, 19, 5, false}, {0.511f, 11, 4, false},
+                           {0.640f, 14, 5, true},
+                           {0.735f, 17, 5, false}, {0.912f, 13, 4, true}};   // kept clear of the near pines
         int i = 0;
-        while (hx < W * 0.9f) {
-            if (hx > W * 0.58f && hx < W * 0.74f) { hx = W * 0.74f; continue; }   // a gap in the row
-            int w = 8 + (int)(rnd(i, 1, 5) * 5) / 2 * 2, wall = 4 + (int)(rnd(i, 2, 5) * 3), roof = w / 2;
-            int x0 = (int)hx, top = base - wall;
-            sc.rect((float)x0, (float)top, (float)w + 1, (float)wall + 1, ONEBIT_DARK);   // hide the ridge behind
-            for (int k = 0; k < roof; ++k) sc.rect((float)x0 + k, (float)top - k, (float)w + 1 - 2 * k, 1, ONEBIT_DARK);
-            e0_line(sc, x0, top, x0 + w / 2, top - roof);
-            e0_line(sc, x0 + w, top, x0 + w / 2, top - roof);
-            e0_line(sc, x0, top + 2, x0, base, 2);
-            if (rnd(i, 3, 5) < 0.5f) { e0_put(sc, x0 + w - 3, top - roof / 2 - 2); e0_put(sc, x0 + w - 3, top - roof / 2); }
-            if (rnd(i, 4, 5) < 0.45f) e0_put(sc, x0 + 2 + (int)(rnd(i, 6, 5) * (w - 4)), top + 2);
-            hx += w + 3 + (int)(rnd(i, 7, 5) * 4);
+        for (const T& t : trees) {
+            int x = (int)(t.x * W);
+            e0_pine(sc, x, fieldTop(x) + t.sink, t.h, 200 + i * 17, true, t.flip);
             ++i;
         }
         return true;
     }
 
-    if (layer == 2) {   // mid: a few trees in outline and falling snow
-        int g = (int)(H * 0.74f);
-        e0_tree(sc, (int)(W * 0.05f), g, 0, 11, 1, false);
-        e0_tree(sc, (int)(W * 0.27f), g, 1, 10, 2, false);
-        e0_tree(sc, (int)(W * 0.55f), g, 3, 9, 4, false);
-        e0_tree(sc, (int)(W * 0.73f), g, 2, 10, 5, false);
-        // low snow banks under the trees: short dotted humps
-        const float banks[4] = {0.05f, 0.27f, 0.55f, 0.73f};
-        for (float f : banks) {
-            int x = (int)(W * f);
-            for (int k = -8; k <= 8; k += 2) e0_put(sc, x + k, g + (std::abs(k) > 5 ? 1 : 0));
-        }
-        // falling snow: sparse single dots, kept out of the lowest band
-        for (int k = 0; k < 18; ++k) {
-            int x = (int)(rnd(k, 1, 404) * W), y = 4 + (int)(rnd(k, 2, 404) * H * 0.62f);
-            e0_put(sc, x, y);
-        }
-        return true;
-    }
+    // near: the street. g is the ground line, level with the top of the ground tiles.
+    const int g = 72;
+    // behind the ground tiles (seen through the gaps): dark, so a gap reads as a gap
+    for (int y = g; y < H; ++y)
+        for (int x = 0; x < W; ++x) e0_dark(sc, x, y);
 
-    // near: the street. Gran's house with one warm window, a street lamp, trees, snow.
-    int g = (int)(H * 0.84f);
-    {   // Gran's house, a dotted outline; the kitchen window is the only lit thing in the street
-        int hx = (int)(W * 0.13f);
-        sc.rect((float)hx, (float)g - 14, 21, 15, ONEBIT_DARK);
-        for (int k = 0; k < 10; ++k) sc.rect((float)hx + k, (float)g - 14 - k * 0.75f, (float)21 - 2 * k, 1, ONEBIT_DARK);
-        e0_line(sc, hx, g - 14, hx + 20, g - 14);
-        e0_line(sc, hx, g - 14, hx, g);
-        e0_line(sc, hx + 20, g - 14, hx + 20, g);
-        e0_line(sc, hx - 2, g - 14, hx + 10, g - 23);
-        e0_line(sc, hx + 22, g - 14, hx + 10, g - 23);
-        e0_line(sc, hx + 15, g - 19, hx + 15, g - 23);   // chimney
-        e0_line(sc, hx + 17, g - 20, hx + 17, g - 23);
-        e0_line(sc, hx + 12, g - 8, hx + 16, g - 8);      // door
-        e0_line(sc, hx + 12, g - 8, hx + 12, g);
-        e0_line(sc, hx + 16, g - 8, hx + 16, g);
-        sc.rect((float)hx + 4, (float)g - 10, 3, 3, ONEBIT_LIGHT);   // the lit window, small and solid
-        // snow on the roof edge: a few dots
-        for (int k = 0; k < 4; ++k) e0_put(sc, hx + 1 + k * 3, g - 16 - k * 2);
-    }
-    {   // a street lamp: thin pole, hood, a small lamp, and a sparse ring of light on the snow
-        int lx = (int)(W * 0.64f), top = g - 30;
-        for (int y = top; y <= g; ++y) if ((y & 1) == 0 || y > g - 3) e0_put(sc, lx, y);
-        e0_line(sc, lx, top, lx + 5, top, 1);
-        e0_line(sc, lx + 3, top + 1, lx + 7, top + 1, 2);
-        sc.rect((float)lx + 4, (float)top + 2, 2, 1, ONEBIT_LIGHT);
-        for (int k = 1; k < 5; ++k) {   // falling light: a few dots spreading out, fading
-            int y = top + 3 + k * 5;
-            e0_put(sc, lx + 5 - k * 2, y);
-            e0_put(sc, lx + 5 + k * 2, y);
+    // a street lamp: post, arm, hood, the lamp, a little light down the post
+    auto lamp = [&](int lx, int hgt, bool flip) {
+        int top = g - hgt, f = flip ? -1 : 1;
+        int hx = lx + f * 5;
+        e0_darkRect(sc, lx, top, 2, hgt);
+        e0_darkRect(sc, lx - 1, g - 3, 4, 3);
+        e0_darkRect(sc, lx + (flip ? -4 : 1), top - 1, 5, 1);
+        e0_darkRect(sc, hx - 2, top, 5, 2);
+        e0_put(sc, hx - 1, top + 2); e0_put(sc, hx, top + 2); e0_put(sc, hx + 1, top + 2);
+        e0_put(sc, hx, top + 3);
+        for (int x = hx - 2; x <= hx + 2; ++x) e0_put(sc, x, top - 1);   // snow on the hood
+        e0_put(sc, lx + (flip ? 1 : 0), top - 1);
+        for (int y = top + 1; y < top + 7; ++y) e0_put(sc, lx + (flip ? 0 : 1), y);   // lamplight on the post
+    };
+
+    {   // Gran's house: the biggest shape in the street, one warm kitchen window, smoke
+        int hx = (int)(W * 0.075f), w = 26, wall = 16, roof = 11;
+        int top = g - wall;
+        e0_darkRect(sc, hx + 18, top - 10, 3, 8);   // chimney, behind the roof
+        for (int x = hx + 18; x <= hx + 20; ++x) e0_put(sc, x, top - 11);
+        e0_house(sc, hx, g, w, wall, roof, 0, 7, false, true);
+        for (int k = 0; k < 9; ++k) {   // smoke: sparse puffs rising, drifting, thinning
+            int sy = top - 13 - k * 2, sx = hx + 20 + (int)std::lround(std::sin(k * 0.8f) * 1.5f) + k / 2;
+            for (int dy = 0; dy < 2; ++dy)
+                for (int dx = -1; dx <= 1; ++dx) e0_glow(sc, sx + dx, sy + dy, std::max(2, 6 - k));
         }
-        for (int k = -9; k <= 9; k += 3) e0_put(sc, lx + 5 + k, g - 1 + (std::abs(k) > 6 ? 0 : 1) - 1);
+        // the kitchen window: lit, a dark cross frame; the only warm light in the street
+        int wx = hx + 3, wy = g - 12;
+        for (int y = 0; y < 5; ++y)
+            for (int x = 0; x < 7; ++x) e0_set(sc, wx + x, wy + y, !(x == 3 || y == 2));
+        e0_put(sc, hx + 16, g - 8); e0_put(sc, hx + 18, g - 8);   // the door's little panes, lit
+        e0_put(sc, hx + 15, top + 3); e0_put(sc, hx + 20, top + 3); // snow on the sills
+        // a picket fence along the front garden, snow on each picket's point
+        for (int k = 0; k < 8; ++k) {
+            int px = hx + w + 3 + k * 3;
+            e0_darkRect(sc, px, g - 8, 2, 8);
+            e0_put(sc, px, g - 9);
+        }
+        e0_darkRect(sc, hx + w + 3, g - 6, 23, 1);
+        e0_darkRect(sc, hx + w + 3, g - 3, 23, 1);
     }
-    e0_tree(sc, (int)(W * 0.42f), g, 2, 15, 11, true);
-    e0_tree(sc, (int)(W * 0.83f), g, 1, 15, 12, false);
-    e0_tree(sc, (int)(W * 0.97f), g, 0, 16, 13, true);
-    for (int k = 0; k < 10; ++k) {   // a few nearer flakes, up in the sky band
-        int x = (int)(rnd(k, 1, 505) * W), y = 3 + (int)(rnd(k, 2, 505) * H * 0.45f);
-        e0_put(sc, x, y);
+    lamp((int)(W * 0.225f), 31, false);
+    lamp((int)(W * 0.665f), 27, true);
+    {   // a low hedge, bumpy, with snow along its top
+        int hx0 = (int)(W * 0.285f), hw = 16;
+        auto inside = [&](int px, int py) {
+            int u = px - hx0;
+            if (u < 0 || u >= hw || py > g) return false;
+            float f = (u + 0.5f) / hw;
+            int top = g - 6 - (int)std::lround(2.0f * std::sin(f * 3.14159f)) - ((u / 4) % 2);
+            return py >= top;
+        };
+        e0_solid(sc, hx0 - 1, g - 12, hx0 + hw, g, inside, true, 5);
     }
+    {   // a car parked under snow: rounded roof, bonnet and boot, all edged with snow
+        int cx = (int)(W * 0.455f), w = 24;
+        auto inside = [&](int px, int py) {
+            int u = px - cx;
+            if (py > g || u < 0 || u >= w) return false;
+            if (py >= g - 3) {   // wheels and the sill between them
+                int a = u - 5, b = u - 18;
+                if (std::abs(a) <= 2 || std::abs(b) <= 2) return !(py == g && (std::abs(a) == 2 || std::abs(b) == 2));
+                return py == g - 3;
+            }
+            if (py >= g - 7) {   // the body: bonnet and boot slope down to the bumpers
+                int end = std::min(u, w - 1 - u);
+                return py >= g - 7 + (end < 1 ? 2 : end < 4 ? 1 : 0);
+            }
+            int r = py - (g - 13);   // the cabin: a rounded trapezoid
+            if (r < 0) return false;
+            int l = 8 - r * 3 / 4 + (r == 0 ? 1 : 0), rr = 15 + r * 3 / 4 - (r == 0 ? 1 : 0);
+            return u >= l && u <= rr;
+        };
+        e0_solid(sc, cx - 1, g - 15, cx + w, g, inside, true, 5);
+        e0_put(sc, cx + w - 1, g - 5);   // a tail light catching the lamp
+    }
+    {   // a bench: snow on the back rail and in a few drifts on the seat
+        int bx = (int)(W * 0.585f);
+        e0_darkRect(sc, bx, g - 5, 12, 1);
+        e0_darkRect(sc, bx, g - 9, 12, 2);
+        e0_darkRect(sc, bx + 1, g - 5, 1, 5); e0_darkRect(sc, bx + 10, g - 5, 1, 5);
+        e0_darkRect(sc, bx, g - 9, 1, 4); e0_darkRect(sc, bx + 11, g - 9, 1, 4);
+        for (int x = bx; x <= bx + 11; ++x) if ((x - bx) % 6 != 5) e0_put(sc, x, g - 10);
+        for (int x = bx + 2; x <= bx + 4; ++x) e0_put(sc, x, g - 6);
+        for (int x = bx + 7; x <= bx + 8; ++x) e0_put(sc, x, g - 6);
+    }
+    {   // a postbox with a snow cap
+        int px = (int)(W * 0.745f);
+        e0_darkRect(sc, px, g - 11, 5, 11);
+        e0_darkRect(sc, px + 1, g - 12, 3, 1);
+        e0_put(sc, px + 1, g - 13); e0_put(sc, px + 2, g - 13); e0_put(sc, px + 3, g - 13);
+        e0_put(sc, px, g - 12); e0_put(sc, px + 4, g - 12);
+        e0_put(sc, px + 1, g - 8);   // the slot catches the lamp
+    }
+    // near pines by the road: the tallest shapes in the scene
+    e0_pine(sc, (int)(W * 0.825f), g, 36, 702, true, false);
+    e0_pine(sc, (int)(W * 0.862f), g, 23, 703, true, true);
+    e0_pine(sc, (int)(W * 0.965f), g, 29, 704, true, true);
     return true;
 }

@@ -36,6 +36,7 @@ struct Enemy {
     int hp = 1;
     int dir = -1;
     float t = 0, baseY = 0, hurt = 0;
+    float blink = 0;           // flyer glitch flicker (drawn only; the flyer never jumps position)
     int state = 0;             // brute: 0 walk, 1 wind-up, 2 charge
     float stateTime = 0;
     bool onGround = false;
@@ -49,6 +50,12 @@ struct Enemy {
 
 Enemy makeEnemy(int type, float tileX, float tileY, int era, const EnemyTuning& t);
 // timeScale < 1 while the time-slow pulse is active.
+// The box an enemy keeps clear of the terrain (a little bigger than its hitbox, to fit the art).
+void enemyTerrainBox(const Enemy& e, float& x, float& y, float& w, float& h);
+// Moves by (dx, dy), stopping flush at the first solid tile. True if it was blocked.
+bool enemyMove(Enemy& e, const Level& level, float dx, float dy);
+// Moves an enemy that overlaps the terrain to the nearest free spot. False if there is none.
+bool settleEnemy(Enemy& e, const Level& level);
 void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int era, float timeScale, const EnemyTuning& t);
 
 struct Boss {

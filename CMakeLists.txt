@@ -47,3 +47,15 @@ target_link_libraries(assetgen PRIVATE raylib)
 if(APPLE)
   target_link_libraries(assetgen PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 endif()
+
+# ---- Level checker: plays every chunk in assets/chunks with the real player physics and reports
+# chunks you cannot get through, soft-locks, unreachable fragments and enemies stuck in the terrain.
+# Run:  cmake --build build --target levelcheck && ./build/levelcheck   (--generated 100 for the generator)
+add_executable(levelcheck tools/levelcheck/main.cpp
+  src/level/Level.cpp src/level/Chunk.cpp src/player/Player.cpp src/core/Config.cpp src/core/Paths.cpp)
+target_include_directories(levelcheck PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(levelcheck PRIVATE LEVELCHECK_ASSETS="${CMAKE_SOURCE_DIR}/assets")
+target_link_libraries(levelcheck PRIVATE raylib)
+if(APPLE)
+  target_link_libraries(levelcheck PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
+endif()

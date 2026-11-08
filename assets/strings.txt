@@ -10,8 +10,7 @@ title_join = Player 2: press any of your buttons to join
 title_p2_ready = Player 2 is here!
 title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
 title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
-title_controls_pad = Gamepads: stick or d-pad move, A jump, X attack, B ability, Y second ability, Start pause. First pad plays Gran, second Sam.
-title_credit = GameJam 2026 . theme: Time
+title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B ability   Y second ability   Start pause\nThe first pad plays Gran, the second plays Sam.
 
 p1_name = GRAN
 p2_name = SAM
@@ -167,6 +166,16 @@ memory_when_3 = 1979 . EDIE IS 33
 memory_when_4 = 1964 . EDIE IS 18
 memory_when_5 = 1958 . EDIE IS 12
 memory_when_6 = 1951 . EDIE IS 5
+# Written on the white strip under each photograph, as if by hand (not the title again).
+memory_note_0 = Jan 2025 - the bus stop
+memory_note_1 = Apr 2014 - washing day
+memory_note_2 = Sept 2006 - new shoes!
+memory_note_3 = Aug 1979 - under the pines
+memory_note_4 = Sept 1964 - platform 2
+memory_note_5 = July 1958 - top field
+memory_note_6 = 1951 - Mum at the gate
+story_prologue_note = who is this?
+end_note = home - now
 
 story_0_1 = Last winter Gran woke at three in the morning, sure it was time for work. She put on her coat over her nightie and walked out into the dark.
 story_0_2 = GRAN: Who are you? Sam is five. You're far too tall to be Sam.
