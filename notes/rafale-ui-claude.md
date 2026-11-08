@@ -1,5 +1,25 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (evening): ground upgrade round 2 (baked chunks, CC0 textures, field, flowers)
+
+- Baked static meshes (Models3D bakeBegin/recordPart/drawChunk): part() calls inside a bake are merged per texture into one
+  mesh per chunk of columns (ground 16 wide, field 24 wide, flowers 16 wide), built once from world hashes, rebuilt only when
+  the chunk's tiles change, evicted far from the camera. A frame costs a few DrawMesh calls instead of thousands. Frame time in
+  the software renderer is about +6% on era 5 (400 frames 17.8 s -> 19.0 s) with much more geometry; draw calls were not the
+  only cost there (fill and triangles are).
+- Ground: grass cap now has standing blades (3 shapes, scale 0.6-1.2, tilt, noise-ramp greens), CC0 Poly Haven textures
+  (grass/earth/rock, see assets/textures/SOURCES.md) multiplied into the vertex colours via world-space planar UVs; pebbles use
+  a low-poly sphere. Only the pulsing memory blocks ('1'/'2') are still drawn live.
+- Mid-field: the flat lawn bands are gone. drawField builds a displaced height field (flat near the path so fence/houses/lamps
+  stay put, rolling further back), jittered-Voronoi patchwork of fields (hue +-0.04, per-field brightness; ripe corn; crop rows
+  drawn in lit3d.fs from a vertex alpha below 1 and world z, faded where they would alias), hedgerows and far trees on field
+  edges (none near the path or the cottage).
+- Flowers: three species (poppy/buttercup, daisy/pink, cornflower/violet), five squashed-sphere petals, 5-15 degree bent stalk in
+  two pieces, two leaves, scale 0.7-1.3, hue jitter +-0.03, noise-masked clumps; baked per chunk the first time a clump is asked for.
+- NOT done: Blender make_ground.py kit (no Blender or bpy in this container; the baked code meshes replace it), and the 2D era
+  tile repaint (era0-4 tiles.png already have 8 grass/earth variants, deep stratum, rocky undersides, tufts and edge caps; left alone).
+- Files touched: Models3D.cpp/.h, assets/shaders/lit3d.fs, assets/textures/ (3 new CC0 + 3 derived), SOURCES.md.
+
 ## 2026-11-08 (later): era 6 ground and backdrop "read as generated" pass
 
 - Contact shadows: soft dark decals (Models3D::shadowAt/flushShadows) under houses, cottage, trees, lamps, fence posts,
