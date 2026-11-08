@@ -849,6 +849,18 @@ void Hud::drawTitle(Game& g)
         text(pad.substr(0, nl), 640, 558, 20, hexc(0xe8e6e0), true, false);
         if (nl != std::string::npos) text(pad.substr(nl + 1), 640, 588, 20, hexc(0xe8e6e0), true, false);
     }
+    // whether a controller is connected (not who it plays as)
+    {
+        auto pads = g.input.pads();
+        std::string line;
+        Color c = hexc(0xb8b6b0);
+        if (pads.empty()) line = T("pads_none");
+        for (auto& pd : pads) {
+            line += (line.empty() ? "" : "   ") + pd.name + ": " + T(pd.usable ? "pads_connected" : "pads_unknown");
+            c = pd.usable ? hexc(0x9fe8a8) : hexc(0xffb070);
+        }
+        text(line, 640, 648, 20, c, true, false);
+    }
 }
 
 void Hud::drawPause(Game& g)
