@@ -69,7 +69,7 @@ private:
     void bakeBegin(Chunk& c);
     void bakeEnd();
     void recordPart(Model& m, Matrix t, Color c, float emissive, bool rim);
-    void recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const Vector3* n, Color c, float scale);
+    void recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const Vector3* n, Color c, float scale, const Color* vc = nullptr);
     void uploadChunk(Chunk& c);
     void drawChunk(Chunk& c);
     void freeChunk(Chunk& c);
@@ -100,6 +100,11 @@ private:
     enum { F_BODY, F_SEG, F_TIP, F_PUPIL, F_COUNT };
     Model person_[2][P_COUNT]{}, clock_[C_COUNT]{}, forget_[F_COUNT]{};
     bool personReady_[2] = {false, false}, clockReady_ = false, forgetReady_ = false;
+    Model groundMod_[3][6]{};   // Blender ground kit: grass top, earth, deep earth
+    int groundN_[3] = {0, 0, 0};
+    bool groundKit_ = false;
+    void loadGroundKit();
+    void unloadGroundKit();
     void loadParts(Model* out, const char* const* names, int n, bool& ready);
     void unloadParts(Model* parts, int n, bool& ready);
     void modelPart(Model& m, Matrix t, Color tint, bool rim = true);

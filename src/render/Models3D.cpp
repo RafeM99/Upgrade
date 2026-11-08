@@ -89,6 +89,7 @@ void Models3D::init()
     for (int p = 0; p < 2; ++p) loadParts(person_[p], personNames[p], P_COUNT, personReady_[p]);
     loadParts(clock_, clockNames, C_COUNT, clockReady_);
     loadParts(forget_, forgetNames, F_COUNT, forgetReady_);
+    loadGroundKit();
 }
 
 // The 3D stage's fresh morning light, or (dusk) the low golden sun of the 2.5D hay meadow,
@@ -127,6 +128,34 @@ void Models3D::loadParts(Model* out, const char* const* names, int n, bool& read
         }
     }
     ready = true;
+}
+
+// The Blender ground kit (tools/blender/make_ground.py): grass-top, earth and deep-earth tiles, several
+// variants each. Missing files just leave the box code in charge.
+void Models3D::loadGroundKit()
+{
+    static const char* const kinds[3] = {"grass", "earth", "deep"};
+    static const int counts[3] = {6, 5, 4};
+    groundKit_ = false;
+    for (int k = 0; k < 3; ++k) {
+        groundN_[k] = 0;
+        for (int v = 0; v < counts[k]; ++v) {
+            std::string path = assetPath(std::string("models/ground_") + kinds[k] + "_" + std::to_string(v) + ".glb");
+            if (!FileExists(path.c_str())) return;
+            Model m = LoadModel(path.c_str());
+            if (m.meshCount == 0 || !m.meshes[0].colors) { UnloadModel(m); return; }
+            groundMod_[k][v] = m;
+            groundN_[k] = v + 1;
+        }
+    }
+    groundKit_ = true;
+}
+
+void Models3D::unloadGroundKit()
+{
+    for (int k = 0; k < 3; ++k)
+        for (int v = 0; v < groundN_[k]; ++v) UnloadModel(groundMod_[k][v]);
+    groundKit_ = false;
 }
 
 void Models3D::unloadParts(Model* parts, int n, bool& ready)
@@ -193,7 +222,7 @@ void Models3D::bakeEnd()
     recChunk_ = nullptr;
 }
 
-void Models3D::recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const Vector3* n, Color c, float scale)
+void Models3D::recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const Vector3* n, Color c, float scale, const Color* vc)
 {
     BakeBatch& b = ch.batches[tex * 4 + flags];
     for (int k = 0; k < 3; ++k) {
@@ -203,27 +232,42 @@ void Models3D::recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const 
         float u = ay >= ax && ay >= az ? p[k].x : (az >= ax ? p[k].x : p[k].z);
         float v = ay >= ax && ay >= az ? p[k].z : p[k].y;
         b.uv.insert(b.uv.end(), {u * scale, v * scale});
-        b.c.insert(b.c.end(), {c.r, c.g, c.b, 255});
+        Color cc = vc ? vc[k] : c;
+        b.c.insert(b.c.end(), {cc.r, cc.g, cc.b, 255});
     }
 }
 
 void Models3D::recordPart(Model& m, Matrix t, Color c, float emissive, bool rim)
 {
     Model& src = &m == &sphere_ ? sphereLo_ : (&m == &sphereTiny_ ? sphereTiny_ : m);
-    const Mesh& me = src.meshes[0];
     Matrix nm = MatrixTranspose(MatrixInvert(t));
     nm.m12 = nm.m13 = nm.m14 = 0;
     int flags = (rim && rims_ && &m != &cube_ ? 1 : 0) + (emissive > 0.05f ? 2 : 0);
     static const float scl[4] = {1.0f, 0.45f, 0.5f, 0.6f};
-    int nTri = me.indices ? me.triangleCount : me.vertexCount / 3;
-    for (int tri = 0; tri < nTri; ++tri) {
-        Vector3 p[3], n[3];
-        for (int k = 0; k < 3; ++k) {
-            int i = me.indices ? me.indices[tri * 3 + k] : tri * 3 + k;
-            p[k] = Vector3Transform({me.vertices[i * 3], me.vertices[i * 3 + 1], me.vertices[i * 3 + 2]}, t);
-            n[k] = Vector3Normalize(Vector3Transform({me.normals[i * 3], me.normals[i * 3 + 1], me.normals[i * 3 + 2]}, nm));
+    for (int mi = 0; mi < src.meshCount; ++mi) {
+        const Mesh& me = src.meshes[mi];
+        int tex = recTex_;
+        if (me.colors && recTex_ != 0) {   // a ground tile: its material's red byte names the texture (255 earth, 250 grass, 245 rock)
+            int red = src.materials[src.meshMaterial[mi]].maps[MATERIAL_MAP_DIFFUSE].color.r;
+            tex = red >= 253 ? 2 : (red >= 248 ? 1 : 3);
         }
-        recordTri(*recChunk_, recTex_, flags, p, n, c, scl[recTex_]);
+        int nTri = me.indices ? me.triangleCount : me.vertexCount / 3;
+        for (int tri = 0; tri < nTri; ++tri) {
+            Vector3 p[3], n[3];
+            Color vc[3];
+            for (int k = 0; k < 3; ++k) {
+                int i = me.indices ? me.indices[tri * 3 + k] : tri * 3 + k;
+                if (me.colors) {   // a Blender tile: rgb is painted colour (times the tint), alpha baked occlusion folded into rgb
+                    const unsigned char* q = me.colors + i * 4;
+                    float ao = 0.45f + 0.55f * q[3] / 255.0f;
+                    vc[k] = Color{(unsigned char)(c.r * q[0] / 255.0f * ao), (unsigned char)(c.g * q[1] / 255.0f * ao),
+                                  (unsigned char)(c.b * q[2] / 255.0f * ao), 255};
+                }
+                p[k] = Vector3Transform({me.vertices[i * 3], me.vertices[i * 3 + 1], me.vertices[i * 3 + 2]}, t);
+                n[k] = Vector3Normalize(Vector3Transform({me.normals[i * 3], me.normals[i * 3 + 1], me.normals[i * 3 + 2]}, nm));
+            }
+            recordTri(*recChunk_, tex, flags, p, n, c, scl[tex], me.colors ? vc : nullptr);
+        }
     }
 }
 
@@ -351,6 +395,7 @@ void Models3D::shutdown()
     for (int p = 0; p < 2; ++p) unloadParts(person_[p], personReady_[p] ? P_COUNT : 0, personReady_[p]);
     unloadParts(clock_, clockReady_ ? C_COUNT : 0, clockReady_);
     unloadParts(forget_, forgetReady_ ? F_COUNT : 0, forgetReady_);
+    unloadGroundKit();
     UnloadShader(sh_);
 }
 
@@ -835,6 +880,20 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                 ++e;
             float w = (float)(e - x + 1), cx = x + w / 2;
             Color dirt = dep == 0 ? hexc(0x8a5a3a) : (dep == 1 ? hexc(0x74482e) : hexc(0x5e3a26));
+            if (groundKit_) {   // the Blender kit: one tile model per column, a variant from a world hash (never the left neighbour's)
+                int kind = dep == 0 ? 0 : (dep < 3 ? 1 : 2), n = groundN_[kind];
+                Color tint = dep == 2 ? Color{225, 215, 210, 255} : WHITE;
+                int last = -1;
+                recTex_ = 2;
+                for (int i = x; i <= e; ++i) {
+                    int v = (int)(hashi(i, ty * 131 + 900 + kind) % (unsigned)n);
+                    if (v == last) v = (v + 1 + (int)(hashi(i, ty + 77) % (unsigned)(n - 1))) % n;
+                    last = v;
+                    part(groundMod_[kind][v], T(i + 0.5f, Y3(ty + 0.5f), zc), tint, 0, false);
+                }
+                x = e + 1;
+                continue;
+            }
             recTex_ = 2;
             if (dep == 0)   // stops under the grass cap, so the two tops never fight
                 part(cube_, then(S(w, 0.9f, dz), T(cx, Y3(ty + 0.55f), zc)), dirt);

@@ -1,5 +1,27 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (night): review cycle 1 - pixel-era ground wear and the Blender ground kit
+
+- Correction to the earlier note: bpy 5.2 IS installed here; tools/blender/make_ground.py now exists and runs
+  (`python3 tools/blender/make_ground.py assets/models`).
+- Measured first: the visible ground in the pixel eras is only the grass-top tile plus the deep row (the plain earth tile
+  appears only under thick masses). 1-bit earth was 98% one colour, 4-shade 77%. Variant picks along the ground repeat a
+  3-tile sequence in 133 of 397 windows, a 4-tile sequence in 18, a 5-tile one in 2 (hash picks of 8, never the left neighbour),
+  so the layout repeat is fine; the tiles themselves were flat.
+- SpriteGen.cpp (tiles section): gPatch (damp/dry earth blobs, kept 2 px off the sides), gDashes (strata seams), used in the grass-top,
+  earth and deep frames. Era 0: every top/deep variant now carries seams, grains, a root or a pebble outline. Era 1/2: seams and
+  specks in the existing tones. Era 3/4: mixed-in damp/dry patches, seams, flint chips. Colour counts verified: era 0 = 2, era 1 = 4,
+  era 2 = 16. Sheet layouts unchanged; only era0-4 tiles.png changed (assetgen also rewrites era5/6 files: restore them with
+  `git checkout assets/art/era5 assets/art/era6` after every run, era6 bg_0/bg_1 come from tools/backdrop).
+- Ground kit: 15 .glb tiles (grass 6, earth 5, deep 4; 356-662 tris, 400 KB total) in assets/models/ground_*.glb. Bevelled noisy grass lip
+  (overhang 0.04-0.1, ragged lower edge), 12-14 double-sided blades with Poisson spacing, wavy strata with real ledges (0.014 push, fixed
+  line heights per kind so every variant joins every other), Poisson pebbles sunk 30%, a few roots, analytic vertex-colour AO in alpha.
+  Models3D::bakeGround uses them when all files exist (loadGroundKit), else the old box code. recordPart now loops all meshes and
+  reads vertex colours (rgb times AO folded in); the material's red byte (255/250/245) picks the CC0 earth/grass/rock texture.
+- Timing (software renderer, era 6, seed 3, 400 frames): 33.2 s before, 31.4 s after. Era 5 not re-timed (kit is era 6 only).
+- Files touched: tools/assetgen/SpriteGen.cpp, assets/art/era0-4/tiles.png, tools/blender/make_ground.py, assets/models/ground_*.glb,
+  Models3D.cpp/.h (loadGroundKit, recordPart, bakeGround).
+
 ## 2026-11-08 (evening): ground upgrade round 2 (baked chunks, CC0 textures, field, flowers)
 
 - Baked static meshes (Models3D bakeBegin/recordPart/drawChunk): part() calls inside a bake are merged per texture into one
