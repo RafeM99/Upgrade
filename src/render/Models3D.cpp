@@ -1245,8 +1245,8 @@ void Models3D::drawClockModel(Game& g, const Enemy& e)
 {
     (void)g;
     // pivots of the Blender parts (printed by make_models.py)
-    const float FOOT_H = 0.0984f, PEND_X = 0.0518f, PEND_Y = 1.0363f, DIAL_X = 0.1845f, DIAL_Y = 1.5440f;
-    const float FACE_X = 0.1782f, FACE_Y = 1.772f;
+    const float FOOT_H = 0.1231f, PEND_X = 0.0648f, PEND_Y = 1.2953f, DIAL_X = 0.2306f, DIAL_Y = 1.9301f;
+    const float FACE_X = 0.2228f, FACE_Y = 2.215f;
     float a = e.dead ? std::max(0.0f, 1 - e.deadTime / 0.45f) : 1.0f;
     Color tint = withA(WHITE, a);
     Vector4 look{0, 0, 0, 0};
@@ -1283,11 +1283,11 @@ void Models3D::drawClockModel(Game& g, const Enemy& e)
     Color ink = withA(hexc(0x1c1420), a), red = withA(hexc(0xff4040), a);
     for (int s = -1; s <= 1; s += 2) {
         if (!e.dead)
-            part(sphere_, at(then(S(0.02f, mad ? 0.042f : 0.036f, 0.03f), T(FACE_X + 0.006f, FACE_Y, s * 0.052f))),
+            part(sphere_, at(then(S(0.025f, mad ? 0.052f : 0.045f, 0.0375f), T(FACE_X + 0.008f, FACE_Y, s * 0.065f))),
                  mad ? red : ink, mad ? 1.0f : 0.0f, false);
         float tilt = mad ? 0.6f : 0.42f;
-        part(cube_, at(then(then(S(0.03f, 0.022f, 0.075f), MatrixRotateX(-s * tilt)),
-                            T(FACE_X + 0.01f, FACE_Y + 0.048f - (mad ? 0.008f : 0), s * 0.05f))),
+        part(cube_, at(then(then(S(0.0375f, 0.0275f, 0.094f), MatrixRotateX(-s * tilt)),
+                            T(FACE_X + 0.012f, FACE_Y + 0.06f - (mad ? 0.01f : 0), s * 0.0625f))),
              ink, 0, false);
     }
     setLook({0, 0, 0, 0}, 0.0f);

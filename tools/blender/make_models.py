@@ -396,7 +396,9 @@ def attach_file_textures(o):
         mix.data_type = "RGBA"
         mix.blend_type = "MULTIPLY"
         mix.inputs["Factor"].default_value = 1.0
-        mix.inputs["B"].default_value = (m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0)
+        k = 2.2 if m.name.startswith("walnut") else 1.0   # the veneer is dark already: lighten so the grain shows
+        mix.inputs["B"].default_value = (min(1.0, m.diffuse_color[0] * k), min(1.0, m.diffuse_color[1] * k),
+                                         min(1.0, m.diffuse_color[2] * k), 1.0)
         nt.links.new(node.outputs["Color"], mix.inputs["A"])
         nt.links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
 
@@ -442,7 +444,9 @@ def bake_textures(o):
         mix.data_type = "RGBA"
         mix.blend_type = "MULTIPLY"
         mix.inputs["Factor"].default_value = 1.0
-        mix.inputs["B"].default_value = (m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0)
+        k = 2.2 if m.name.startswith("walnut") else 1.0   # the veneer is dark already: lighten so the grain shows
+        mix.inputs["B"].default_value = (min(1.0, m.diffuse_color[0] * k), min(1.0, m.diffuse_color[1] * k),
+                                         min(1.0, m.diffuse_color[2] * k), 1.0)
         if m.name.startswith("wool"):
             # the fleece photo is dark and brown: keep only its light/dark pattern (grey, scaled
             # up so its average is about 1) and let the wool's own tone colour it
@@ -793,7 +797,7 @@ def sam():
 # weight shows, through a round window (the lenticle) in the door.
 # Built at the sizes below, then scaled so the case is CLOCK_H tall. The game reads the pivots
 # printed at the end (pendulum, dial centre, arch face, feet).
-CLOCK_H = 2.0
+CLOCK_H = 2.5
 
 
 def walnut_recipe(dark, light):
