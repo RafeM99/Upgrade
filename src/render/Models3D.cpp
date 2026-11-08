@@ -61,7 +61,7 @@ void Models3D::init()
     locMetal_ = GetShaderLocation(sh_, "metallic");
     locUseTex_ = GetShaderLocation(sh_, "useTexture");
     locMacro_ = GetShaderLocation(sh_, "macro");
-    sphereLo_ = LoadModelFromMesh(GenMeshSphere(1, 4, 6));
+    sphereLo_ = LoadModelFromMesh(GenMeshSphere(1, 4, 7));   // baked blobs (tree canopies): 5x8, was 4x6, so the facets are smaller
     sphereTiny_ = LoadModelFromMesh(GenMeshSphere(1, 3, 5));
     for (int i = 1; i <= 3; ++i) {
         static const char* nm[4] = {"", "ground_grass_512.jpg", "ground_earth_512.jpg", "ground_rock_512.jpg"};
@@ -474,7 +474,7 @@ void Models3D::begin(Game& g, const Camera3D& cam)
 void Models3D::tree(float x, float z, int seed, int kind)
 {
     if (kind < 0) kind = (int)(hashi(seed, 21) % 4);
-    float sc = 0.8f + rndf(seed, 22) * 0.5f, rot = rndf(seed, 23) * 2 * PI;
+    float sc = 0.62f + rndf(seed, 22) * 0.36f, rot = rndf(seed, 23) * 2 * PI;   // about 25% smaller than before: the canopies stood twice Gran's height
     Matrix root = then(then(S(sc, sc, sc), MatrixRotateY(rot)), T(x, 2, z));
     auto at = [&](Matrix m) { return then(m, root); };
     float v = rndf(seed, 24);
@@ -495,12 +495,12 @@ void Models3D::tree(float x, float z, int seed, int kind)
         float h = 1.3f + rndf(seed, 25) * 0.5f;
         Color leaf = mixc(hexc(0x4f9a3e), hexc(0x7cb44c), v);
         flare(0.17f, h + 0.3f);
-        int n = 5 + var % 3;
-        blob(leaf, 0, h + 0.5f, 0, 0.95f, 0.8f, 0.95f, 0.55f);
+        int n = 8 + var % 3;   // more, smaller lumps: a softer, less chunky canopy
+        blob(leaf, 0, h + 0.5f, 0, 0.85f, 0.7f, 0.85f, 0.55f);
         for (int i = 0; i < n - 1; ++i) {
             float a = i * 2.4f + rndf(seed, 28) * 6, hy = (float)i / (n - 1);
-            float rr = 0.5f + 0.2f * rndf(seed + i, 29);
-            blob(leaf, std::cos(a) * 0.62f, h + 0.15f + 0.85f * hy + (i % 2) * 0.1f, std::sin(a) * 0.55f, rr, rr * 0.85f, rr, 0.25f + 0.75f * hy);
+            float rr = 0.38f + 0.16f * rndf(seed + i, 29);
+            blob(leaf, std::cos(a) * 0.66f, h + 0.15f + 0.85f * hy + (i % 2) * 0.1f, std::sin(a) * 0.55f, rr, rr * 0.85f, rr, 0.25f + 0.75f * hy);
         }
     } else if (kind == 1) {   // tall oval, like a poplar: stacked overlapping blobs
         Color leaf = mixc(hexc(0x5c9c44), hexc(0x84bc56), v);
@@ -531,7 +531,7 @@ void Models3D::tree(float x, float z, int seed, int kind)
 void Models3D::house(float x, float z, int seed)
 {
     float w = 3.0f, h = 2.4f + rndf(seed, 5) * 0.7f, d = 2.8f;
-    Color wall = mixc(hexc(0xe8d4b8), hexc(0xc89a80), rndf(seed, 6));
+    Color wall = mixc(mixc(hexc(0xe8d4b8), hexc(0xc89a80), rndf(seed, 6)), hexc(0x8a9a78), 0.18f * rndf(seed, 11));   // a little weathering green/grey
     Color roof = hashi(seed, 8) % 2 ? hexc(0xa0503e) : hexc(0x6a6a88);
     shadowAt(x + 0.3f, 2.0f, z + 0.1f, w * 0.85f, d * 0.8f, 0.45f);
     part(cube_, then(S(w, h, d), T(x, 2 + h / 2, z)), wall);
@@ -542,10 +542,31 @@ void Models3D::house(float x, float z, int seed)
         Vector3 c = {x, 2 + h + d / 4 + 0.06f, z + sgn * (d / 4 + 0.06f)};
         part(cube_, then(then(S(w + 0.4f, 0.14f, L), MatrixRotateX(sgn * PI / 4)), T(c.x, c.y, c.z)), roof);
     }
-    part(cube_, then(S(0.6f, 1.1f, 0.06f), T(x, 2.55f, z + d / 2 + 0.03f)), hexc(0x6a3a2a));
-    for (int wi = 0; wi < 2; ++wi)
-        part(cube_, then(S(0.55f, 0.5f, 0.06f), T(x + (wi ? 0.9f : -0.9f), 2 + h * 0.6f, z + d / 2 + 0.03f)), hexc(0xffe2a0), 0.7f);
-    part(cube_, then(S(0.35f, 0.9f, 0.35f), T(x + 0.8f, 2 + h + 0.8f, z - 0.4f)), hexc(0x8a5a4a));
+    // trim and weathering: a stone plinth, pale corner boards, a darker eave edge, door and windows that vary by house
+    const unsigned hv = hashi(seed, 9);
+    Color trim = hexc(0xf4ecdc), plinth = mixc(wall, hexc(0x7a7468), 0.6f);
+    part(cube_, then(S(w + 0.08f, 0.28f, d + 0.08f), T(x, 2.14f, z)), plinth);
+    for (int sx = -1; sx <= 1; sx += 2)
+        part(cube_, then(S(0.12f, h, 0.12f), T(x + sx * (w / 2 - 0.02f), 2 + h / 2, z + d / 2 + 0.02f)), trim, 0, false);
+    part(cube_, then(S(w + 0.5f, 0.1f, 0.12f), T(x, 2 + h + 0.02f, z + d / 2 + 0.18f)), mixc(roof, BLACK, 0.25f), 0, false);   // eave edge
+    part(cube_, then(S(w * 0.96f, 0.35f, 0.02f), T(x, 2 + h - 0.18f, z + d / 2 + 0.015f)), mixc(wall, hexc(0x6a5a4a), 0.12f), 0, false);   // weather stain under the eave
+    Color door = hv % 3 == 0 ? hexc(0x3f6f8a) : (hv % 3 == 1 ? hexc(0x6a3a2a) : hexc(0x7a3a3a));
+    float dx = hv % 2 ? 0.0f : 0.55f;
+    part(cube_, then(S(0.74f, 1.2f, 0.07f), T(x + dx, 2.6f, z + d / 2 + 0.035f)), trim, 0, false);
+    part(cube_, then(S(0.6f, 1.1f, 0.08f), T(x + dx, 2.55f, z + d / 2 + 0.04f)), door);
+    part(cube_, then(S(0.9f, 0.1f, 0.4f), T(x + dx, 2.21f, z + d / 2 + 0.2f)), plinth, 0, false);   // step
+    const int nWin = hv % 2 ? 2 : 1;
+    for (int wi = 0; wi < nWin; ++wi) {
+        float wx = x + (nWin == 1 ? -0.8f : (wi ? 0.9f : -0.9f)), wy = 2 + h * 0.6f;
+        part(cube_, then(S(0.7f, 0.64f, 0.06f), T(wx, wy, z + d / 2 + 0.03f)), trim, 0, false);
+        part(cube_, then(S(0.54f, 0.48f, 0.07f), T(wx, wy, z + d / 2 + 0.05f)), hexc(0xffe2a0), 0.7f, false);
+        part(cube_, then(S(0.05f, 0.48f, 0.07f), T(wx, wy, z + d / 2 + 0.07f)), trim, 0, false);
+        part(cube_, then(S(0.8f, 0.07f, 0.16f), T(wx, wy - 0.38f, z + d / 2 + 0.08f)), plinth, 0, false);   // sill
+    }
+    // a brick chimney with a cap
+    Color brick = mixc(hexc(0x9a5a48), hexc(0x8a6a5a), rndf(seed, 10));
+    part(cube_, then(S(0.35f, 0.9f, 0.35f), T(x + 0.8f, 2 + h + 0.8f, z - 0.4f)), brick);
+    part(cube_, then(S(0.46f, 0.08f, 0.46f), T(x + 0.8f, 2 + h + 1.28f, z - 0.4f)), mixc(brick, BLACK, 0.3f), 0, false);
 }
 
 // Gran's cottage: the hero landmark. Bigger and closer than the street houses.
@@ -715,7 +736,7 @@ void Models3D::drawField(Game&, float l, float r)
                                 for (int bl = 0; bl < 2; ++bl)
                                     part(sphere_, then(S(0.7f * dep, 0.3f * dep, 0.4f * dep), T(xm + (bl - 0.5f) * 1.0f, hy + hh2 * dep, za)), mixc(hcol, hexc(0x8fb85a), 0.25f));
                             if (hashi((int)xa, j * 23 + 7) % 3 == 0) {   // a far tree on the hedge
-                                float sc = (0.9f + 0.7f * rndf((int)xa, j * 29 + 3)) * dep * 1.4f, tx = xm + (rndf((int)xa, j * 31) - 0.5f) * 1.2f;
+                                float sc = (0.9f + 0.7f * rndf((int)xa, j * 29 + 3)) * dep * 1.05f, tx = xm + (rndf((int)xa, j * 31) - 0.5f) * 1.2f;
                                 Color leaf = mixc(hexc(0x3f8a3c), hexc(0x70aa4c), rndf((int)xa, j * 37));
                                 part(cyl_, then(S(0.07f * sc, 0.9f * sc, 0.07f * sc), T(tx, hy, za)), hexc(0x5e4030), 0, false);
                                 for (int bl = 0; bl < 3; ++bl) {
@@ -850,7 +871,7 @@ void Models3D::drawGround(Game& g, bool meadow)
     meadow_ = meadow;
     struct Done { Models3D* m; ~Done() { m->setMacro(0.0f); } } done{this};   // the ground noise off again
     int x0 = (int)std::floor(g.cam.left()) - 6, x1 = (int)std::ceil(g.cam.right()) + 18;
-    const int W = 8;   // narrow chunks: less off-screen geometry sent each frame (16 drew about twice the visible columns)
+    const int W = meadow ? 8 : 16;   // narrow chunks: less off-screen geometry sent each frame (16 drew about twice the visible columns)
     auto fdiv = [](int a, int b) { return (int)std::floor((float)a / b); };
     int c0 = fdiv(x0, W), c1 = fdiv(x1, W);
     for (int c = c0; c <= c1; ++c) {

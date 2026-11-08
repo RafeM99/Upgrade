@@ -1,5 +1,36 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (review cycle 3): era 6 in motion, window sizes, shadows, era 5 leftovers
+
+- Motion (era 6, --autoplay --fill --two, seed 3, 1500 frames, 1280x720, contact sheets /tmp/c3/long/sheet*.png): no chunk popping or seams
+  seen at 50-frame steps, no z-fighting/flicker, props and decals stay put. Frame time median 87 ms (software); non-screenshot frames never
+  exceed 1.7x the median (max 150 ms), so chunk builds cause no visible spikes. RSS 371 MB at start, 475 MB by frame 600, flat at 477 MB
+  to frame 1500 (eviction works). Not checked: sub-frame popping between 50-frame samples.
+- New debug switch: GAMEJAM_FRAMELOG=path writes "frame draw_ms rss_kb" per frame (Game::run). GAMEJAM_NOKIT=1 disables the ground kit.
+- Backdrop cut-off (diagonal at top right, 1280x720 era 6 seed 3 frame 200): cause was the far plane (dist + 120). The backdrop at z -88 on
+  the far side of the yawed view lay beyond it. GameCamera.cpp farPlane = dist + 260. Fixed (before /tmp/c3/before/e6_200.png, after /tmp/c3/after/e6_200.png).
+- Window sizes 1280x800, 1024x768, 1920x1080 for eras 5 and 6 (/tmp/c3/sz): no black bars, backdrop covers. HUD bug at 1920x1080 (centre panel
+  lines overlapped): modern-stage HUD scale rounded 1.5 to 2; Hud.cpp setup() now scales proportionally (720: 2/3/2/4, 1080: 3/5/3/6). At 1024x768
+  the two-row centre block drops its second row one text size when the lines would touch.
+- Shadows: the old character blob was a hard black disc 0.3 behind the figure (nearly invisible in era 5). Players, enemies and boss now use
+  the same soft decal as the props (Models3D::characterShadow / flushCharacterShadows, depth-tested, no depth write), at the figure's own z, offset
+  to the sun side (sun upper left).
+- Era 5: contact-shadow strips along the back and front foot of the ground block, fence post shadows, front lawn pulled towards the olive,
+  kit grass tint slightly less saturated (210,190,124). Frame time: the kit cost 8 ms of 51 ms per frame (GAMEJAM_NOKIT test). Added a lite kit
+  (python3 tools/blender/make_ground.py assets/models --lite: groundlite_*.glb, 168-322 tris vs 360-660; coarser lip/face grids, fewer pebbles and
+  blades) used by the 2.5D meadow, and ground chunks of 8 columns in era 5 (16 drew about twice the visible columns). Era 5 400 frames, seed 3:
+  22.7 s (cycle 2) -> about 19.8 s; draw median 50.8 -> 46.9 ms.
+- Era 6 art: tree scale 0.8-1.3 -> 0.62-0.98, round trees 8-10 smaller lumps (was 5-7), far field trees 1.4 -> 1.05 scale, baked sphere 4x6 -> 4x7
+  (smaller facets). Street houses: stone plinth, corner boards, eave edge, weather stain, door colour/position and window count vary per house,
+  sills, brick chimney with cap, slight green/grey weathering. Cottage untouched.
+- Era 6 timing (200 frames, seed 3): 15.6 s before this cycle, 18.3 s now. The tree/house edits cost nothing (stash test: 18.5 s without them);
+  the rise is from earlier commits of this cycle (far plane now shows more backdrop, extra decal flush). Not bisected further.
+- Regression: eras 0-4 run 120 frames with exit 0; eras 5 and 6 two-player autoplay 300 frames exit 0.
+- Files touched: Game.cpp (debug log), GameCamera.cpp, Hud.cpp, Renderer.cpp (shadow block, front lawn colour), Models3D.cpp/.h, make_ground.py,
+  assets/models/groundlite_*.glb.
+- For cycle 4: era 6 timing bisect (far plane vs decals), era 6 colour grade (greens still saturated against the muted backdrop; not changed),
+  era 5/6 boss readability and hit flash in motion (not looked at), run-cycle foot contact (not verified), eras 0-2 backgrounds, era 1 enemy contrast.
+
 ## 2026-11-08 (late night): review cycle 2 - pixel eras beyond ground, and the 2.5D meadow
 
 - Platforms (T_BLOCK/T_CRACKED/hay): single frames, so Renderer.cpp tile loop now varies them from a world-position hash:
