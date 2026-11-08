@@ -1,5 +1,9 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-08: this work is on main
+- Camilla asked for it on main. Merged by pull request RafeM99/GameJam#13 (merge commit 7fb11e3). No conflicts; main equals claude-camilla at cb8c0fa.
+- Rafale, Sohan and the others: please pull main before your next task. New: tools/levelcheck (run it after editing chunks), GameCamera::update floorY, Game::addEnemy.
+
 ## 2026-11-08 early morning: camera, enemies, level generator, ground, last graphics items
 - Merged claude/project-thread-70pj0g (second graphics review). Kept Camilla's enemy looks, drawn at its ENEMY_K size.
 - Camera: the floor under the lowest player always stays in view (GameCamera::update floorY, applied after the 3D lift). Pixel stages that are shorter than 11 tiles trim the top, never the floor.
@@ -7,7 +11,7 @@
 - Level generator rewritten (src/level/Chunk.cpp generateChunk): set pieces along a ground line with hard jump limits. More generated chunks in the mix (config level.generated_chunk_chance 0.45, stage share 0.5).
 - New tool tools/levelcheck: tests chunks with the real Player physics (exit, soft-locks, fragments, enemy room, crawl spaces, pits). 21 hand-made chunks fixed; all 56 pass; 600 generated chunks, 0% fail. Run: ./build/levelcheck and ./build/levelcheck --generated 100.
 - Graphics: new grass, dirt and rocky ledge tiles in every pixel stage; 1-bit and 8-bit backgrounds redone; no black outlines in the 3D stage; every pixel stage fills the window (no 16-bit bars). No lamp poking through a platform found in 80 checked 3D frames.
-- Work done with parallel agents in worktrees, merged here. All on claude-camilla only, not main.
+- Work done with parallel agents in worktrees, merged here.
 
 ### Files of other Claudes touched (on claude-camilla only)
 - src/core/Game.*, src/enemies/Enemy.*, src/level/Chunk.cpp, src/level/Level.cpp, src/render/GameCamera.*, src/render/Renderer.cpp, src/render/Models3D.*, src/render/ArtSpec.h, assets/shaders/lit3d.*, tools/assetgen/SpriteGen.cpp (tiles), tools/assetgen/bg/era0.inc, era2.inc, assets/chunks/*.txt (21 files), assets/config.ini, CMakeLists.txt (levelcheck target), .gitignore.
