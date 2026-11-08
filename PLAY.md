@@ -38,8 +38,8 @@ controller. Unplug it, hold B, plug it back in, then let go of B: it starts in D
 and the game recognise. If the title screen still says "No controller found", check that the Mac sees it at
 all: Apple menu > About This Mac > More Info > System Report > USB should list an 8BitDo device.
 
-Abilities: P1 gets double jump (8-bit), ground pound (16-bit, Ability in the air) and glide (2.5D, hold jump).
-P2 gets dash (8-bit, Ability), wall jump (16-bit, jump against a wall) and the time-slow pulse (2.5D, Down + Ability).
+Abilities: P1 gets double jump (4-shade), ground pound (16-bit, Ability in the air) and glide (2.5D, hold jump).
+P2 gets dash (4-shade, Ability), wall jump (32-bit, jump against a wall) and the time-slow pulse (3D, Down + Ability).
 Playing alone, Player 1 gets both sets so every chunk can be passed.
 
 ## The story

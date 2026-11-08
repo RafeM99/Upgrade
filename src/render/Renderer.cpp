@@ -782,7 +782,10 @@ void Renderer::drawEra(Game& g, int era, float swing)
     for (int p = 0; p < 2; ++p) {
         const Player& pl = g.players[p];
         if (!pl.joined) continue;
-        if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) continue;   // blink
+        const bool held = !pl.faded && (g.powers.freezeT > 0 || g.powers.pullT > 0);   // time stopped / pulled back
+        // blink while invulnerable, but never while held: invuln does not tick then, so a blink
+        // caught on its hidden half would hide the player for the whole freeze
+        if (!held && pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) continue;
         int fr = pl.frame;
         if (p == 1 && g.slowTime > 2.6f) fr = PF_SPECIAL;
         Color tint = WHITE;
@@ -791,7 +794,6 @@ void Renderer::drawEra(Game& g, int era, float swing)
             tint = era == 0 ? Color{255, 255, 255, 120} : Color{150, 150, 165, 130};
             ox = std::sin(g.time * 6 + p) * 0.05f;
         }
-        const bool held = !pl.faded && (g.powers.freezeT > 0 || g.powers.pullT > 0);   // time stopped / pulled back
         if (held && era > 0) tint = g.powers.pullT > 0 ? Color{215, 185, 255, 255} : Color{185, 215, 255, 255};
         const Texture2D& t = A.player[p];
         if (full3D) models_.drawPlayer(g, p);

@@ -1,5 +1,25 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-08 afternoon: playtest fixes (main pulled in first)
+- Pulled main (PR #14) into claude-camilla, then fixed what four bot play-testers found.
+- Respawn after a memory slip: two flat columns with room above, never one tile past the ground (Game::respawnAfterLoss).
+- Bosses land on flat, clear ground across their full width (bossLanding in Enemy.cpp); every boss hovers at y=6 so it stays below the top HUD.
+- The Last Train: lands on screen beside the player, drops then pauses (cue to jump) then charges, or falls straight onto the marker; echoes start when it rises, never in the stomp window. Bot beat it in 45 s and 64 s (seeds 2, 3, --fill).
+- Ground pound hurts the boss only at its feet level. Game clock and banners stop while paused and on story cards.
+- A frozen or pulled-back player no longer vanishes (2D and 3D).
+- HUD: power and hint lines on dark panels; "Player 2? Press any button to join".
+- 3D Forgetting drawn at 0.6x, hitbox 2.4 x 3.5 to cover the model (Boss::start, Models3D drawForgetting).
+- Chunks s4_station and s5_rooftop_glide: each player alone can pass (levelcheck --two: 0 of 56 fail; six other chunks still warn, listed in commit 2ce73da).
+- Text: "Fifty years", single quotes in story_4_2, last winter = Jan 2026, Sam keeps the green shirt. PLAY.md ability stages match the code.
+- Not yet played by a human. The Empty Shirt (stage 1) fight is still long for the bot.
+
+### Files of other Claudes touched (claude-camilla only)
+- src/core/Game.cpp, src/core/GamePowers.cpp, src/enemies/Enemy.*, src/render/Renderer.cpp, src/render/Models3D.cpp, src/ui/Hud.cpp, assets/strings.txt, assets/chunks/s4_station.txt, s5_rooftop_glide.txt, PLAY.md.
+
+## 2026-11-08: this work is on main
+- Camilla asked for it on main. Merged by pull request RafeM99/GameJam#13 (merge commit 7fb11e3). No conflicts; main equals claude-camilla at cb8c0fa.
+- Rafale, Sohan and the others: please pull main before your next task. New: tools/levelcheck (run it after editing chunks), GameCamera::update floorY, Game::addEnemy.
+
 ## 2026-11-08 early morning: camera, enemies, level generator, ground, last graphics items
 - Merged claude/project-thread-70pj0g (second graphics review). Kept Camilla's enemy looks, drawn at its ENEMY_K size.
 - Camera: the floor under the lowest player always stays in view (GameCamera::update floorY, applied after the 3D lift). Pixel stages that are shorter than 11 tiles trim the top, never the floor.
@@ -7,7 +27,7 @@
 - Level generator rewritten (src/level/Chunk.cpp generateChunk): set pieces along a ground line with hard jump limits. More generated chunks in the mix (config level.generated_chunk_chance 0.45, stage share 0.5).
 - New tool tools/levelcheck: tests chunks with the real Player physics (exit, soft-locks, fragments, enemy room, crawl spaces, pits). 21 hand-made chunks fixed; all 56 pass; 600 generated chunks, 0% fail. Run: ./build/levelcheck and ./build/levelcheck --generated 100.
 - Graphics: new grass, dirt and rocky ledge tiles in every pixel stage; 1-bit and 8-bit backgrounds redone; no black outlines in the 3D stage; every pixel stage fills the window (no 16-bit bars). No lamp poking through a platform found in 80 checked 3D frames.
-- Work done with parallel agents in worktrees, merged here. All on claude-camilla only, not main.
+- Work done with parallel agents in worktrees, merged here.
 
 ### Files of other Claudes touched (on claude-camilla only)
 - src/core/Game.*, src/enemies/Enemy.*, src/level/Chunk.cpp, src/level/Level.cpp, src/render/GameCamera.*, src/render/Renderer.cpp, src/render/Models3D.*, src/render/ArtSpec.h, assets/shaders/lit3d.*, tools/assetgen/SpriteGen.cpp (tiles), tools/assetgen/bg/era0.inc, era2.inc, assets/chunks/*.txt (21 files), assets/config.ini, CMakeLists.txt (levelcheck target), .gitignore.

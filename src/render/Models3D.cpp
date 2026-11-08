@@ -1388,7 +1388,7 @@ void Models3D::drawPlayer(Game& g, int p)
     const Player& pl = g.players[p];
     const bool gran = p == 0;
     float a = 1.0f;
-    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
+    if (pl.invuln > 0 && !pl.faded && !(g.powers.freezeT > 0 || g.powers.pullT > 0) && (int)(pl.invuln * 12) % 2 == 0) a = 0.35f;
     if (pl.faded) a = 0.45f;
     auto col = [&](unsigned h) {
         Color c = hexc(h);
@@ -1673,7 +1673,7 @@ void Models3D::drawPersonModel(Game& g, int p)
     const Player& pl = g.players[p];
     Model* parts = person_[p];
     float a = 1.0f;
-    if (pl.invuln > 0 && !pl.faded && (int)(pl.invuln * 12) % 2 == 0) a = 0.4f;
+    if (pl.invuln > 0 && !pl.faded && !(g.powers.freezeT > 0 || g.powers.pullT > 0) && (int)(pl.invuln * 12) % 2 == 0) a = 0.4f;
     if (pl.faded) a = 0.55f;
     Color tint = withA(WHITE, a);
     setLook(pl.faded ? Vector4{0.8f, 0.82f, 0.9f, 0.25f} : Vector4{0, 0, 0, 0}, pl.faded ? 0.85f : 0.0f);
@@ -1837,15 +1837,18 @@ void Models3D::drawForgetting(Game& g)
     };
 
     float t = b.t;
-    float bob = std::sin(t * 2.2f) * 0.15f;
+    float bob = std::sin(t * 2.2f) * 0.1f;
     float slam = b.state == 3 ? 1.0f : 0.0f;
-    const float k = 1.8f;    // size in the level
+    // size in the level: 1.1 (was 1.8, which hid Gran). The ball (radius about 0.95 in the model)
+    // sits at the top of the boss's hitbox (Boss::start, kind 6: 2.4 x 3.5) and the strands hang
+    // down to its bottom, so what you see is what you bump into.
+    const float k = 1.1f;
     // the nearest player: the ball turns a little towards them and the eye follows them
     float px = g.players[0].cx(), py = g.players[0].cy();
     if (g.players[1].joined && std::fabs(g.players[1].cx() - b.x) < std::fabs(px - b.x)) { px = g.players[1].cx(); py = g.players[1].cy(); }
     float yaw = px < b.x ? -PI / 2 - 0.3f : -PI / 2 + 0.3f;
     float tilt = std::sin(t * 1.3f) * 0.06f;
-    Vector3 centre = {b.x, Y3(b.y) + 0.4f + bob, 0.4f};
+    Vector3 centre = {b.x, Y3(b.y) + b.h / 2 - 0.95f * k + bob, 0.4f};
     Matrix turn = then(MatrixRotateX(tilt), MatrixRotateY(yaw));
     Matrix root = then(then(S(k, k, k), turn), T(centre.x, centre.y, centre.z));
 

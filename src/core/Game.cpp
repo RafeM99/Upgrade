@@ -270,8 +270,12 @@ void Game::run()
 
 void Game::update(float dt)
 {
-    time += dt;
-    bannerT = std::max(0.0f, bannerT - dt);
+    // the game clock (and the messages on it) stop while paused or reading a story card, so the
+    // Forgetting Wall's start delay is counted from when play really begins
+    if (screen != Screen::Paused && screen != Screen::Story) {
+        time += dt;
+        bannerT = std::max(0.0f, bannerT - dt);
+    }
     switch (screen) {
     case Screen::Title: updateTitle(); break;
     case Screen::Playing: {
@@ -468,7 +472,9 @@ void Game::updatePlaying(float dt)
                 if (e.dead || (e.owner >= 0 && e.owner != p && !soloNow)) continue;
                 if (std::fabs(e.cx() - pl.cx()) < 2.6f && std::fabs((e.y + e.h) - pl.bottom()) < 1.6f) damageEnemy(e, 3, p, 0);
             }
-            if (boss.active && boss.vulnerable() && std::fabs(boss.x - pl.cx()) < 2.8f) {
+            // the pound reaches the boss only when it lands on the same level as the boss's feet
+            if (boss.active && boss.vulnerable() && std::fabs(boss.x - pl.cx()) < 2.8f &&
+                std::fabs((boss.y + boss.h / 2) - pl.bottom()) < 1.6f) {
                 boss.hp = std::max(0, boss.hp - 2);
                 boss.hurt = 0.6f;
                 audio.play("boss_hit");
@@ -990,10 +996,24 @@ void Game::respawnAfterLoss()
     powers.freezeT = powers.pullT = 0;
     if (!boss.active) bar = std::max(0.0f, bar - config().f("memory.lost_penalty", 10.0f));
     // find solid ground a little ahead of the wall
-    int x = (int)std::max(cam.x - 3, wallX + 10);
-    int gt = -1;
-    for (int k = 0; k < 40 && gt < 0; ++k, ++x) gt = level.groundTop(x);
-    if (gt < 0) gt = LEVEL_H - 2;
+    // Both players stand on columns x and x+1, so both need the same ground top and room above it.
+    const int x0 = (int)std::max(cam.x - 3, wallX + 10);
+    auto standable = [&](int c, int top) {
+        if (level.groundTop(c) != top) return false;
+        for (int yy = std::max(0, top - 2); yy < top; ++yy)
+            if (level.isSolidChar(level.tile(c, yy))) return false;
+        return true;
+    };
+    int x = x0, gt = -1;
+    for (int k = 0; k < 40 && gt < 0; ++k) {
+        int top = level.groundTop(x0 + k);
+        if (top >= 2 && standable(x0 + k, top) && standable(x0 + k + 1, top)) { x = x0 + k; gt = top; }
+    }
+    if (gt < 0) {   // nothing two tiles wide: any ground at all, never a pit
+        for (int k = 0; k < 40 && gt < 0; ++k)
+            if (level.groundTop(x0 + k) >= 0) { x = x0 + k; gt = level.groundTop(x); }
+    }
+    if (gt < 0) { x = x0; gt = LEVEL_H - 2; }
     for (int p = 0; p < 2; ++p) {
         Player& pl = players[p];
         if (!pl.joined) continue;
@@ -1155,7 +1175,19 @@ PlayerInput Game::botInput(int p)
     if (pl.has[AB_GROUND_POUND] && !pl.onGround && level.tile((int)std::floor(pl.cx()), feet + 1) == '=') { in.abilityPressed = true; in.down = true; }
     if (pl.has[AB_TIME_SLOW] && pl.slowCooldown <= 0 && boss.active) { in.abilityPressed = true; in.down = true; }
     // dodge the swoop marker, then jump on the boss when it rests
-    if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
+    const bool trainCharge = boss.active && boss.kind == 4 && boss.charge && boss.aiming();
+    if (trainCharge) {
+        // the train drops beside us and charges through: stand still, out of the drop, and
+        // jump it when it is about 0.2 s away
+        in.right = in.left = false;
+        in.jumpPressed = false;
+        float dropDist = pl.cx() - boss.fromX;
+        if (std::fabs(dropDist) < boss.w / 2 + 1.5f) { in.right = dropDist > 0; in.left = !in.right; }
+        float dir = boss.toX > boss.fromX ? 1.0f : -1.0f;
+        float gap = (pl.cx() - boss.x) * dir - (boss.w + pl.w) / 2;
+        bool rolling = boss.dangerous() && std::fabs(boss.x - boss.fromX) > 0.05f;
+        if (rolling && pl.onGround && gap > 2.2f && gap < 3.6f) { in.jumpPressed = true; hold[p] = 20; }
+    } else if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
         in.right = pl.cx() > boss.toX;
         in.left = !in.right;
     }
@@ -1164,6 +1196,6 @@ PlayerInput Game::botInput(int p)
         in.left = !in.right;
         if (pl.onGround && std::fabs(boss.x - pl.cx()) < 3.5f) { in.jumpPressed = true; hold[p] = 25; }
     }
-    if (std::rand() % 90 == 0 && pl.onGround) { in.jumpPressed = true; hold[p] = 10; }
+    if (!trainCharge && std::rand() % 90 == 0 && pl.onGround) { in.jumpPressed = true; hold[p] = 10; }
     return in;
 }

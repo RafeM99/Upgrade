@@ -15,7 +15,7 @@ title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B abili
 p1_name = GRAN
 p2_name = SAM
 p2_join_1 = Player 2?
-p2_join_2 = Press any of your buttons to join
+p2_join_2 = Press any button to join
 p2_joined = SAM IS HERE
 pad_connected = GAMEPAD CONNECTED
 pads_none = No controller found (keyboard works). 8BitDo on a Mac: hold B while plugging it in.
@@ -152,7 +152,7 @@ memory_title_3 = The camping trip
 memory_title_4 = The train to the city
 memory_title_5 = The hay meadow
 memory_title_6 = Home
-memory_year_0 = 2025
+memory_year_0 = 2026
 memory_year_1 = 2014
 memory_year_2 = 2006
 memory_year_3 = 1979
@@ -167,7 +167,7 @@ memory_when_4 = 1964 . EDIE IS 18
 memory_when_5 = 1958 . EDIE IS 12
 memory_when_6 = 1951 . EDIE IS 5
 # Written on the white strip under each photograph, as if by hand (not the title again).
-memory_note_0 = Jan 2025 - the bus stop
+memory_note_0 = Jan 2026 - the bus stop
 memory_note_1 = Apr 2014 - washing day
 memory_note_2 = Sept 2006 - new shoes!
 memory_note_3 = Aug 1979 - under the pines
@@ -184,7 +184,7 @@ story_0_4 = GRAN: I was only going to the shop.
 
 story_1_1 = The spring after Grandpa Arthur died, Gran kept washing his shirts and pegging them out on the line.
 story_1_2 = GRAN: He likes them dried in the wind. He says they smell of outside.
-story_1_3 = SAM: I helped you peg them. I was thirteen. You let me keep the blue one.
+story_1_3 = SAM: I helped you peg them. I was thirteen. You let me keep the green one.
 
 story_2_1 = Mum had to work, so Gran walked Sam to school on his first day. At the gate he would not let go of her hand.
 story_2_2 = GRAN: Off you go, little man. I'll be right here at three o'clock.
@@ -195,7 +195,7 @@ story_3_2 = GRAN: Arthur held the tent pole till morning. Rose slept through the
 story_3_3 = SAM: Mum still tells that one at Christmas.
 
 story_4_1 = Edie was eighteen, leaving home for a job in the city. The train was packed. A boy in a borrowed suit stood up and gave her his seat.
-story_4_2 = GRAN: He said, "I'm Arthur. I'll get off wherever you do."
+story_4_2 = GRAN: He said, 'I'm Arthur. I'll get off wherever you do.'
 story_4_3 = SAM: You never told me that, Gran.
 
 story_5_1 = Every summer the whole village brought in the hay. Edie was twelve, and faster than any of the boys.
@@ -211,7 +211,7 @@ remembered_0 = "I was looking for the shop. You walked me home."
 remembered_1 = "His blue shirt. I wore it to bed for a whole year."
 remembered_2 = "You let go of my hand first. You were braver than me."
 remembered_3 = "The sun came up and we fried eggs on the little stove."
-remembered_4 = "I got off at his stop. Sixty years, Sam."
+remembered_4 = "I got off at his stop. Fifty years, Sam."
 remembered_5 = "The swallows. I'd forgotten the swallows."
 
 # ------------------------------------------------------------------ the ending

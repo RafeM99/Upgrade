@@ -206,10 +206,119 @@ void updateEnemy(Enemy& e, Level& level, const Player* players, float dt, int er
 }
 
 // ------------------------------------------------------------------ Boss
+// A place to land: every column under the boss's width has the same ground top, and the
+// space above it is clear. Searches outward from tx inside the view. -1 if there is none.
+static float bossLanding(const Level& level, float tx, float w, float h, float lo, float hi, int& gtOut)
+{
+    const int half = (int)std::ceil(w / 2);
+    for (int d = 0; d <= 10; ++d) {
+        for (int sgn = -1; sgn <= 1; sgn += 2) {
+            if (d == 0 && sgn > 0) continue;
+            int c = (int)std::floor(tx) + sgn * d;
+            if (c + 0.5f < lo || c + 0.5f > hi) continue;
+            int gt = level.groundTop(c);
+            if (gt < 4) continue;   // a pit, or so high it would sit under the HUD
+            bool ok = true;
+            for (int k = c - half + 1; k <= c + half - 1 && ok; ++k) ok = level.groundTop(k) == gt;
+            for (int k = c - half + 1; k <= c + half - 1 && ok; ++k)
+                for (int yy = gt - (int)std::ceil(h); yy < gt && ok; ++yy) ok = !level.isSolidChar(level.tile(k, yy));
+            if (ok) { gtOut = gt; return c + 0.5f; }
+        }
+    }
+    return -1;
+}
+
+// Every column from a to b has ground top gt and room for a body h tall above it.
+// (Platforms higher up are fine: the train runs underneath them.)
+static bool flatRun(const Level& level, int a, int b, int gt, float h)
+{
+    for (int c = a; c <= b; ++c) {
+        if (!level.isSolidChar(level.tile(c, gt))) return false;
+        for (int yy = gt - (int)std::ceil(h); yy < gt; ++yy)
+            if (level.isSolidChar(level.tile(c, yy))) return false;
+    }
+    return true;
+}
+
+// The Last Train's charge: it drops onto the line a few tiles to one side of the target, waits
+// a moment (the cue to jump), then charges through the target's spot and stops a little past
+// it, on screen, where it rests to be stomped. Picks the side it is already on if the ground
+// allows. Returns false if there is no flat line long enough round the target.
+static bool trainCharge(const Level& level, float tx, float feetY, float trainX, float w, float h, float lo, float hi,
+                        float& dropX, float& endX, int& gtOut)
+{
+    const float half = w / 2;
+    // the ground under the target's feet (not a platform above them)
+    int gt = -1;
+    for (int yy = (int)std::floor(feetY); yy < (int)std::floor(feetY) + 4 && yy < LEVEL_H && gt < 0; ++yy)
+        if (yy >= 0 && level.isSolidChar(level.tile((int)std::floor(tx), yy))) gt = yy;
+    if (gt < 4) return false;
+    const int first = trainX >= tx ? 1 : -1;   // the side the train comes from
+    for (int side = 0; side < 2; ++side) {
+        const int from = side == 0 ? first : -first;
+        for (float dist : {5.0f, 6.0f, 4.5f}) {
+            float d = std::floor(tx + from * dist) + 0.5f;
+            float e = std::floor(tx - from * 3.0f) + 0.5f;
+            if (std::min(d, e) - half < lo || std::max(d, e) + half > hi) continue;
+            // nothing over the drop spot, all the way up: it comes straight down there
+            if (level.groundTop((int)std::floor(d)) != gt) continue;
+            if (!flatRun(level, (int)std::floor(std::min(d, e) - half), (int)std::floor(std::max(d, e) + half - 0.01f), gt, h)) continue;
+            dropX = d; endX = e; gtOut = gt;
+            return true;
+        }
+    }
+    return false;
+}
+
+void Boss::aimAt(float camLeft, float camRight, const Level& level, const Player* players)
+{
+    // keep the player picked when the aim began; switch only if that player is no longer alive
+    if (state != 6 || !players[aimPlayer].alive()) {
+        aimPlayer = -1;
+        for (int i = 0; i < 2; ++i)
+            if (players[i].alive()) { aimPlayer = i; if ((int)(t * 10) % 2 == i) break; }
+        if (aimPlayer < 0) aimPlayer = 0;
+    }
+    float tx = x;
+    const Player* target = players[aimPlayer].alive() ? &players[aimPlayer] : nullptr;
+    if (target) tx = target->cx();
+    tx = std::max(camLeft + 2.0f, std::min(camRight - 2.0f, tx));
+    // The train charges along the ground when there is a flat line round the target: fromX is
+    // where it drops (it glides over that spot while it aims), toX where it stops.
+    charge = false;
+    if (kind == 4 && target) {
+        float d, e;
+        int gt;
+        if (trainCharge(level, tx, target->bottom() + 0.1f, x, w, h, camLeft + 0.5f, camRight - 0.5f, d, e, gt)) {
+            charge = true;
+            fromX = d;
+            toX = e;
+            toY = gt - h / 2;
+            return;
+        }
+    }
+    int gt = -1;
+    float lx = bossLanding(level, tx, w, h, camLeft + 1.5f, camRight - 1.5f, gt);
+    if (lx < 0) {   // nowhere flat: the nearest column with any ground under it
+        for (int d = 0; d <= 12 && gt < 0; ++d)
+            for (int sgn = -1; sgn <= 1 && gt < 0; sgn += 2) {
+                int c = (int)std::floor(tx) + sgn * d;
+                if (level.groundTop(c) >= 0) { gt = level.groundTop(c); lx = c + 0.5f; }
+            }
+        if (lx < 0) lx = tx;
+    }
+    toX = lx;
+    toY = (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
+}
 void Boss::start(float camX, int era, int hpBase, int hpPerEra, int kind_)
 {
     active = true;
     kind = kind_;
+    // Hitbox. The 3D Forgetting (stage 6) is a ball of wool with yarn hanging below; its box covers
+    // the ball (top) down to the strand tips, so it matches the model drawn in Models3D::drawForgetting
+    // (scale 1.1: ball 2.1 wide, strands to about 2.3 below its centre). The 2D bosses keep 2.4 x 2.2.
+    if (kind == 6) { w = 2.4f; h = 3.5f; }
+    else { w = 2.4f; h = 2.2f; }
     landed = false;
     defeated = false;
     maxHp = hp = hpBase + era * hpPerEra;
@@ -241,7 +350,7 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
     case 0: {   // enter from the top right
         float k = ease(stateTime / 1.6f);
         x = fromX + (hoverX - fromX) * k;
-        y = fromY + (4.0f - fromY) * k;
+        y = fromY + (6.0f - fromY) * k;
         if (stateTime > 1.6f) { state = 1; stateTime = 0; }
         break;
     }
@@ -249,52 +358,63 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         if (kind == 0) {
             // the clock ticks: it jumps from place to place twice a second
             if (std::fmod(t, 0.5f) < dt) x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 0.6f;
-            y = 4.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
+            y = 6.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
         } else if (kind == 1) {
             // the shirt flutters wide and slow, like washing in the wind
             x += (hoverX + std::sin(t * 0.6f) * 5 - x) * 1.5f * dt;
-            y = 4.0f + std::sin(t * 1.3f) * 1.0f;
+            y = 6.0f + std::sin(t * 1.3f) * 1.0f;
         } else {
-            x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 2.0f * dt;
-            y = 4.0f + std::sin(t * 2.0f) * 0.6f;
+            // the train keeps up with the camera, so it never hangs back off screen
+            x += (hoverX + std::sin(t * 0.9f) * 3 - x) * (kind == 4 ? 5.0f : 2.0f) * dt;
+            y = 6.0f + std::sin(t * 2.0f) * 0.6f;
         }
         spawnTimer -= dt;
         if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = (4.5f - era * 0.5f) * (kind == 5 ? 0.7f : 1.0f); }
         if (stateTime > 2.6f - era * 0.25f) {
-            // pick a target player and swoop
-            float tx = x;
-            for (int i = 0; i < 2; ++i)
-                if (players[i].alive()) { tx = players[i].cx(); if ((int)(t * 10) % 2 == i) break; }
-            tx = std::max(camLeft + 2.0f, std::min(camRight - 2.0f, tx));
-            int gt = level.groundTop((int)std::floor(tx));
             fromX = x; fromY = y;
-            toX = tx;
-            toY = (gt < 0 ? LEVEL_H - 2.0f : (float)gt) - h / 2;
-            // The train charges along the ground only where the line is flat all the way from
-            // where it drops to the target; anywhere else it swoops like the others.
-            charge = false;
-            if (kind == 4 && gt >= 0) {
-                int a = (int)std::floor(std::min(x, tx)), b = (int)std::floor(std::max(x, tx));
-                charge = true;
-                for (int c = a; c <= b && charge; ++c) charge = level.groundTop(c) == gt;
-            }
+            aimAt(camLeft, camRight, level, players);
             state = 6;
             stateTime = 0;
         }
         break;
     }
     case 6:     // aim: a warning marker shows where it will land
-        x += (fromX - x) * 0.5f * dt;
+        // the train glides over the spot it will drop on (the start of its charge, or the marker)
+        if (kind == 4) x += ((charge ? fromX : toX) - x) * std::min(1.0f, 8.0f * dt);
+        else x += (fromX - x) * 0.5f * dt;
         y = fromY + std::sin(t * 30) * 0.05f;
+    {
         // the storm takes longer to aim, then strikes much faster
-        if (stateTime > 0.85f - era * 0.08f + (kind == 3 ? 0.35f : 0.0f)) { state = 2; stateTime = 0; fromX = x; fromY = y; }
+        const float aimLen = 0.85f - era * 0.08f + (kind == 3 ? 0.35f : 0.0f);
+        // the marker follows the players for the first half of the aim, so it lands where they
+        // are now, then holds still so there is time to get out of the way
+        if (stateTime < aimLen * 0.5f) aimAt(camLeft, camRight, level, players);
+        if (stateTime > aimLen) {
+            state = 2; stateTime = 0;
+            if (kind == 4 && charge) x = fromX;   // drop exactly at the planned start of the charge
+            fromX = x; fromY = y;
+        }
+    }
         break;
     case 2: {   // swoop down
         float k = std::min(1.0f, stateTime / swoopLen());
+        float len = swoopLen();
         if (kind == 4 && charge) {
-            // the train drops onto the line where it is, then charges along the ground
-            if (k < 0.3f) { float d = ease(k / 0.3f); x = fromX; y = fromY + (toY - fromY) * d; }
-            else { x = fromX + (toX - fromX) * ease((k - 0.3f) / 0.7f); y = toY; }
+            // the train drops onto the line beside its target, waits a moment shaking (the cue
+            // to jump), then charges at an even speed through the target's spot and stops a
+            // little past it
+            const float drop = 0.35f, wait = 0.45f, speed = 15.0f;
+            const float run = std::max(0.1f, std::fabs(toX - fromX));
+            len = drop + wait + run / speed;
+            if (stateTime < drop) { float d = stateTime / drop; x = fromX; y = fromY + (toY - fromY) * d * d; }
+            else if (stateTime < drop + wait) { x = fromX + std::sin(t * 60) * 0.04f; y = toY; }
+            else { x = fromX + (toX - fromX) * std::min(1.0f, (stateTime - drop - wait) * speed / run); y = toY; }
+        } else if (kind == 4) {
+            // no flat line round the target: it falls straight down onto the marker (step aside)
+            len = 0.55f;
+            k = std::min(1.0f, stateTime / len);
+            x = fromX + (toX - fromX) * ease(k * 3);
+            y = fromY + (toY - fromY) * k * k;
         } else if (kind == 1) {
             // the shirt glides in on the wind
             x = fromX + (toX - fromX) * std::sin(k * 1.5707963f);
@@ -304,15 +424,18 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
             x = fromX + (toX - fromX) * e;
             y = fromY + (toY - fromY) * e * e;
         }
-        if (stateTime > swoopLen()) { state = 3; stateTime = 0; landed = true; }
+        if (stateTime > len) {
+            state = 3; stateTime = 0; landed = true;
+            if (kind == 4) { x = toX; y = toY; }
+        }
         break;
     }
     case 3:     // resting on the ground: stomp it now (the bell rests a little longer after it rings)
-        if (stateTime > 2.0f - era * 0.2f + (kind == 2 ? 0.4f : 0.0f)) { state = 4; stateTime = 0; fromX = x; fromY = y; }
+        if (stateTime > 2.0f - era * 0.2f + (kind == 2 ? 0.4f : 0.0f) + (kind == 4 ? 0.6f : 0.0f)) { state = 4; stateTime = 0; fromX = x; fromY = y; }
         break;
     case 4: {   // rise again
         float k = ease(stateTime / 0.8f);
-        y = fromY + (4.0f - fromY) * k;
+        y = fromY + (6.0f - fromY) * k;
         x += (hoverX - x) * 1.5f * dt;
         if (stateTime > 0.8f) { state = 1; stateTime = 0; }
         break;
