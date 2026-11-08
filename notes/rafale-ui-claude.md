@@ -1,5 +1,23 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (later): era 6 ground and backdrop "read as generated" pass
+
+- Contact shadows: soft dark decals (Models3D::shadowAt/flushShadows) under houses, cottage, trees, lamps, fence posts,
+  stepping stones, flagstones, stooks and bales. Collected in a dry first pass, laid on the lawn before props are drawn.
+- Ground: no Blender tile kit (too many draws for the software renderer); instead per-tile boxes with variation:
+  grass lip with different overhang/height per tile, yellow-green lit top and blue-green shaded lip face, hanging blades,
+  soil darkened under the lip, wavy earth strata, non-overlapping pebbles sunk a third (more deeper down), tapering roots.
+  lit3d.fs has a new `macro` uniform: large world-space noise over lawns/ground (light/dark patches, hue shift).
+- Front lawn: bevelled stepping stones with colour variation, pond with mud ring, shallow/deep water and reeds, flowers with
+  bent stalks, leaves and petals (close ones), hue jitter. Trees: 5-7 blobs, dark bottom to light top, flared trunk.
+- Backdrop: tools/backdrop/make_era6_backdrop.py renders assets/art/era6/bg_0.png (smooth dithered sky, sun glow, soft clouds)
+  and bg_1.png (ridged-multifractal peaks with snow/rock, forest foothills, farmland with crop rows, hedgerows, varied trees),
+  anti-aliased, 2560x720. haze.fs now has a vertical haze gradient and soft alpha. Backdrop layer moved to z -88 (it was cut
+  by the far plane on the right).
+- Not done: Blender make_ground.py kit, cloud sprites as separate geometry, crop-row displaced mid-field geometry (the
+  flat lawn bands are only broken up by the macro noise). No textures downloaded: everything is procedural.
+- Files touched: Models3D.cpp/.h, Renderer.cpp (day layer), lit3d.fs, haze.fs, era6 bg_0/bg_1.png, tools/backdrop/.
+
 ## 2026-11-08 morning: CC0 textures from Poly Haven
 
 - assets/textures/ holds natural_walnut_veneer and knitted_fleece (CC0, 1k diffuse maps), with SOURCES.md.

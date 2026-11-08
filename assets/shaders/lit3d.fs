@@ -28,7 +28,16 @@ uniform float emissive;     // 0 lit, 1 flat colour (glowing parts)
 uniform float rim;          // 0 none, 1 the lighter rim (spheres, cylinders, cones, the Blender models)
 uniform vec4 blendCol;      // rgb: colour to blend towards, a: how much (0 none)
 uniform float grey;         // 0 full colour, 1 grey
+uniform float macro;        // >0: the ground and scenery: a large soft noise over the world position
 out vec4 finalColor;
+
+float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p)
+{
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y);
+}
 
 float bayer4(vec2 p)
 {
@@ -43,6 +52,13 @@ void main()
     vec3 n = normalize(fragNormal);
     vec3 base = colDiffuse.rgb * fragColor.rgb;
     if (useTexture > 0.5) base *= texture(texture0, fragTexCoord).rgb;
+    if (macro > 0.0) {
+        // world-space (never camera-space), so it stays put as the camera scrolls: patches of
+        // lighter yellow-green and darker blue-green that hide any repeat in the tiles
+        vec2 q = fragPosition.xz * vec2(0.09, 0.2) + fragPosition.y * 0.05;
+        float n = 0.55 * vnoise(q) + 0.3 * vnoise(q * 3.1 + 7.0) + 0.15 * vnoise(q * 9.0 + 3.0);
+        base *= (1.0 + macro * (n - 0.5) * 0.9) * mix(vec3(0.94, 0.99, 1.05), vec3(1.06, 1.03, 0.92), n);
+    }
     float ao = fragColor.a;
     float diff = dot(n, -sunDir);
     float band = diff > 0.2 ? 1.0 : 0.62;

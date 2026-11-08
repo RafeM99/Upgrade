@@ -297,7 +297,7 @@ void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
     struct Layer { int l; float z, height, baseFrac, haze; };
     // baseFrac: how far up the picture its ground line sits (that part goes below the lawn)
     const Layer dusk[3] = {{1, -64.0f, 24.0f, 0.0f, 0.6f}, {2, -38.0f, 11.0f, 0.16f, 0.45f}, {3, -20.0f, 6.5f, 0.14f, 0.3f}};
-    const Layer day[1] = {{1, -100.0f, 40.0f, 0.0f, 0.35f}};
+    const Layer day[1] = {{1, -88.0f, 35.2f, 0.0f, 0.1f}};   // the rendered backdrop carries its own atmosphere
     const Layer* L = era == LAST_ERA ? day : dusk;
     int n = era == LAST_ERA ? 1 : 3;
     Vector3 horizon = era == LAST_ERA ? Vector3{0.86f, 0.92f, 0.97f} : Vector3{0.97f, 0.76f, 0.58f};

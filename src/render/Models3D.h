@@ -3,6 +3,7 @@
 // cylinders, a torus) instead of drawn as flat sprites. Everything is made in code.
 #pragma once
 #include "raylib.h"
+#include <vector>
 
 class Game;
 struct Player;
@@ -30,6 +31,7 @@ private:
     int locView_ = -1, locEmissive_ = -1, locRim_ = -1;
     int locLightPos_ = -1, locLightCol_ = -1, locLightRad_ = -1;
     int locSunDir_ = -1, locSunCol_ = -1, locSkyCol_ = -1, locGroundCol_ = -1;
+    int locMacro_ = -1;
     int locBlend_ = -1, locGrey_ = -1, locMetal_ = -1, locUseTex_ = -1;
     // Applied to every part drawn until changed: blend the lit colour towards blend_.xyz by
     // blend_.w (hit flash, the wool's pale tips) and take out grey_ of the colour (faded).
@@ -50,6 +52,16 @@ private:
     // a rounded part gets a thin lighter rim along its silhouette so it reads against the next.
     void part(Model& m, Matrix t, Color c, float emissive = 0.0f, bool rim = true);
     void tree(float x, float z, int seed, int kind = -1);
+    // Soft dark decals lying on the ground under props, collected while the scene is drawn and
+    // laid down together by flushShadows (after the lit parts, blended, no depth writes).
+    struct Decal { float x, y, z, rx, rz, a; };
+    std::vector<Decal> decals_;
+    void shadowAt(float x, float y, float z, float rx, float rz, float a = 0.4f) { if (dry_) decals_.push_back({x, y, z, rx, rz, a}); }
+    bool dry_ = false;   // collecting shadows only: part() draws nothing
+    void sceneryPass(Game& g);
+    void meadowPass(Game& g);
+    void flushShadows();
+    void setMacro(float m);   // the world-space ground noise on or off (lit3d.fs)
     // Gran, Sam, the grandfather clock and the Forgetting (the boss) are modelled in Blender
     // (tools/blender/make_models.py), one .glb per moving part, put together and animated here.
     // Each falls back to the primitives if its files are missing.

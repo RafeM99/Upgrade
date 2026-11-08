@@ -59,6 +59,7 @@ void Models3D::init()
     locGrey_ = GetShaderLocation(sh_, "grey");
     locMetal_ = GetShaderLocation(sh_, "metallic");
     locUseTex_ = GetShaderLocation(sh_, "useTexture");
+    locMacro_ = GetShaderLocation(sh_, "macro");
     setLight(false);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
@@ -158,6 +159,39 @@ void Models3D::modelPart(Model& m, Matrix t, Color tint, bool rim)
     SetShaderValue(sh_, locUseTex_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
+void Models3D::setMacro(float m) { SetShaderValue(sh_, locMacro_, &m, SHADER_UNIFORM_FLOAT); }
+
+// Contact shadows: each decal is a soft dark ellipse (two rings fading to nothing at the rim)
+// just above the surface, drawn blended without writing depth so neighbours never cut into
+// each other. Placed from world positions only, so they never move against the scenery.
+void Models3D::flushShadows()
+{
+    if (decals_.empty()) return;
+    rlDrawRenderBatchActive();
+    rlSetTexture(rlGetTextureIdDefault());
+    rlDisableDepthTest();   // laid down over the lawn before any prop is drawn, so the props cover them (no depth fight)
+    rlBegin(RL_TRIANGLES);
+    const int N = 14;
+    auto vtx = [&](const Decal& d, float k, float a, int i) {
+        float an = i * 6.2831853f / N;
+        rlColor4ub(12, 14, 28, (unsigned char)(255 * std::min(1.0f, a * d.a * 2.4f)));
+        rlVertex3f(d.x + std::cos(an) * d.rx * k, d.y, d.z + std::sin(an) * d.rz * k);
+    };
+    auto ctr = [&](const Decal& d) { rlColor4ub(12, 14, 28, (unsigned char)(255 * std::min(1.0f, d.a * 2.4f))); rlVertex3f(d.x, d.y, d.z); };
+    for (const Decal& d : decals_) {
+        for (int i = 0; i < N; ++i) {
+            ctr(d); vtx(d, 0.6f, 0.82f, i + 1); vtx(d, 0.6f, 0.82f, i);
+            vtx(d, 0.6f, 0.82f, i); vtx(d, 0.6f, 0.82f, i + 1); vtx(d, 1.0f, 0.0f, i);
+            vtx(d, 0.6f, 0.82f, i + 1); vtx(d, 1.0f, 0.0f, i + 1); vtx(d, 1.0f, 0.0f, i);
+        }
+    }
+    rlEnd();
+    rlDrawRenderBatchActive();   // the depth state applies when the batch is drawn
+    rlEnableDepthTest();
+    rlSetTexture(0);
+    decals_.clear();
+}
+
 void Models3D::pushLook()
 {
     SetShaderValue(sh_, locBlend_, &blend_, SHADER_UNIFORM_VEC4);
@@ -178,6 +212,7 @@ void Models3D::shutdown()
 
 void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool rim)
 {
+    if (dry_) return;   // the shadow pass only collects decals
     // boxes get no rim: their flat faces would light up whole, and the face bands already
     // separate them. Rounded parts get the thin lighter rim.
     float r = rim && rims_ && &m != &cube_ ? 1.0f : 0.0f;
@@ -211,6 +246,8 @@ void Models3D::begin(Game& g, const Camera3D& cam)
 
 // ------------------------------------------------------------------ the street
 // One tree, picked and sized by its seed: round, tall oval, pine (stacked cones) or a bush.
+// Foliage is made of overlapping blobs, dark at the bottom and light at the top (a hand-painted
+// vertex-colour gradient), on a trunk that flares at the root; every one casts a soft shadow.
 void Models3D::tree(float x, float z, int seed, int kind)
 {
     if (kind < 0) kind = (int)(hashi(seed, 21) % 4);
@@ -219,30 +256,51 @@ void Models3D::tree(float x, float z, int seed, int kind)
     auto at = [&](Matrix m) { return then(m, root); };
     float v = rndf(seed, 24);
     Color trunk = hexc(0x6a4430);
-    if (kind == 0) {   // round: a cluster of three balls
+    float cr = kind == 1 ? 0.55f : (kind == 3 ? 0.75f : 1.1f);
+    shadowAt(x + 0.3f * sc, 2.0f, z + 0.12f * sc, cr * sc * 1.15f, cr * sc * 0.85f, 0.42f);
+    // a blob: its colour darkens towards the underside of the canopy (hy 0 bottom .. 1 top)
+    auto blob = [&](Color leaf, float bx, float by, float bz, float rx, float ry, float rz, float hy) {
+        Color c = mixc(mixc(leaf, BLACK, 0.2f * (1 - hy)), mixc(leaf, hexc(0xe8f08c), 0.5f), hy * hy * 0.5f);
+        part(sphere_, at(then(S(rx, ry, rz), T(bx, by, bz))), c);
+    };
+    auto flare = [&](float r, float h) {   // a trunk that widens into its roots
+        part(cyl_, at(then(S(r, h, r), T(0, 0, 0))), trunk);
+        part(cone_, at(then(S(r * 2.6f, 0.38f, r * 2.6f), T(0, 0, 0))), mixc(trunk, BLACK, 0.12f));
+    };
+    int var = (int)(hashi(seed, 27) % 4);   // four variants of every kind
+    if (kind == 0) {   // round: five to seven blobs
         float h = 1.3f + rndf(seed, 25) * 0.5f;
-        Color leaf = mixc(hexc(0x4f9a3e), hexc(0x74b24c), v);
-        part(cyl_, at(then(S(0.17f, h + 0.3f, 0.17f), T(0, 0, 0))), trunk);
-        part(sphere_, at(then(S(0.95f, 0.85f, 0.95f), T(0, h + 0.55f, 0))), leaf);
-        part(sphere_, at(then(S(0.62f, 0.58f, 0.62f), T(0.62f, h + 0.15f, 0.25f))), mixc(leaf, WHITE, 0.08f));
-        part(sphere_, at(then(S(0.55f, 0.5f, 0.55f), T(-0.55f, h + 0.25f, -0.2f))), mixc(leaf, BLACK, 0.1f));
-    } else if (kind == 1) {   // tall oval, like a poplar
-        Color leaf = mixc(hexc(0x5c9c44), hexc(0x7cb456), v);
-        part(cyl_, at(then(S(0.14f, 1.0f, 0.14f), T(0, 0, 0))), trunk);
-        part(sphere_, at(then(S(0.62f, 1.55f, 0.62f), T(0, 2.3f, 0))), leaf);
-    } else if (kind == 2) {   // pine: three stacked cones
-        Color leaf = mixc(hexc(0x2e7a4c), hexc(0x449058), v);
-        part(cyl_, at(then(S(0.15f, 0.7f, 0.15f), T(0, 0, 0))), hexc(0x5a3a28));
-        for (int i = 0; i < 3; ++i) {
-            float r = 1.0f - i * 0.25f, y = 0.5f + i * 0.75f;
-            part(cone_, at(then(S(r, 1.25f, r), T(0, y, 0))), i % 2 ? mixc(leaf, WHITE, 0.06f) : leaf);
+        Color leaf = mixc(hexc(0x4f9a3e), hexc(0x7cb44c), v);
+        flare(0.17f, h + 0.3f);
+        int n = 5 + var % 3;
+        blob(leaf, 0, h + 0.5f, 0, 0.95f, 0.8f, 0.95f, 0.55f);
+        for (int i = 0; i < n - 1; ++i) {
+            float a = i * 2.4f + rndf(seed, 28) * 6, hy = (float)i / (n - 1);
+            float rr = 0.5f + 0.2f * rndf(seed + i, 29);
+            blob(leaf, std::cos(a) * 0.62f, h + 0.15f + 0.85f * hy + (i % 2) * 0.1f, std::sin(a) * 0.55f, rr, rr * 0.85f, rr, 0.25f + 0.75f * hy);
         }
-    } else {   // a low bush of two or three balls
-        Color leaf = mixc(hexc(0x4a8f3c), hexc(0x66a84a), v);
-        part(sphere_, at(then(S(0.6f, 0.45f, 0.55f), T(0, 0.3f, 0))), leaf);
-        part(sphere_, at(then(S(0.45f, 0.36f, 0.42f), T(0.55f, 0.22f, 0.1f))), mixc(leaf, WHITE, 0.07f));
-        if (hashi(seed, 26) % 2)
-            part(sphere_, at(then(S(0.4f, 0.32f, 0.4f), T(-0.5f, 0.2f, -0.05f))), mixc(leaf, BLACK, 0.08f));
+    } else if (kind == 1) {   // tall oval, like a poplar: stacked overlapping blobs
+        Color leaf = mixc(hexc(0x5c9c44), hexc(0x84bc56), v);
+        flare(0.14f, 1.0f);
+        for (int i = 0; i < 5; ++i) {
+            float hy = i / 4.0f, rr = (0.5f - 0.12f * std::fabs(hy - 0.4f)) * (0.9f + 0.2f * rndf(seed + i, 29));
+            blob(leaf, (rndf(seed + i, 30) - 0.5f) * 0.15f, 1.3f + 1.9f * hy, (rndf(seed + i, 31) - 0.5f) * 0.15f, rr, 0.6f, rr, hy);
+        }
+    } else if (kind == 2) {   // pine: stacked cones, darker towards the ground
+        Color leaf = mixc(hexc(0x2e7a4c), hexc(0x449058), v);
+        flare(0.15f, 0.7f);
+        int n = 3 + var % 2;
+        for (int i = 0; i < n; ++i) {
+            float r = 1.0f - i * (0.75f / n), y = 0.5f + i * (2.25f / n), hy = (float)i / (n - 1);
+            part(cone_, at(then(S(r, 1.25f, r), T(0, y, 0))), mixc(mixc(leaf, BLACK, 0.2f * (1 - hy)), WHITE, 0.04f + 0.05f * (i % 2) + 0.05f * hy));
+        }
+    } else {   // a low bush of four or five balls
+        Color leaf = mixc(hexc(0x4a8f3c), hexc(0x6cae4c), v);
+        int n = 4 + var % 2;
+        for (int i = 0; i < n; ++i) {
+            float a = i * 2.1f + rndf(seed, 28) * 6, rr = 0.34f + 0.18f * rndf(seed + i, 29), hy = i == 0 ? 0.8f : 0.3f;
+            blob(leaf, i == 0 ? 0.0f : std::cos(a) * 0.45f, (i == 0 ? 0.42f : 0.25f) * 1.0f, i == 0 ? 0.0f : std::sin(a) * 0.35f, rr * 1.2f, rr, rr * 1.1f, hy);
+        }
     }
 }
 
@@ -252,6 +310,7 @@ void Models3D::house(float x, float z, int seed)
     float w = 3.0f, h = 2.4f + rndf(seed, 5) * 0.7f, d = 2.8f;
     Color wall = mixc(hexc(0xe8d4b8), hexc(0xc89a80), rndf(seed, 6));
     Color roof = hashi(seed, 8) % 2 ? hexc(0xa0503e) : hexc(0x6a6a88);
+    shadowAt(x + 0.3f, 2.0f, z + 0.1f, w * 0.85f, d * 0.8f, 0.45f);
     part(cube_, then(S(w, h, d), T(x, 2 + h / 2, z)), wall);
     float a = d / std::sqrt(2.0f);   // gable: a square turned 45 degrees, its top half above the walls
     part(cube_, then(then(S(w - 0.02f, a, a), MatrixRotateX(PI / 4)), T(x, 2 + h, z)), wall);
@@ -271,6 +330,7 @@ void Models3D::cottage(float x, float z)
 {
     const float w = 4.8f, h = 2.7f, d = 3.6f, fz = z + d / 2;   // fz: the front wall
     const Color wall = hexc(0xf4e6c8), trim = hexc(0xfaf6ee), roof = hexc(0xb4483a), wood = hexc(0x7a4a32);
+    shadowAt(x + 0.4f, 2.0f, z + 0.2f, w * 0.78f, d * 0.78f, 0.5f);
     part(cube_, then(S(w + 0.1f, 0.3f, d + 0.1f), T(x, 2.15f, z)), hexc(0x9a948a));   // stone footing
     part(cube_, then(S(w, h, d), T(x, 2 + h / 2 + 0.1f, z)), wall);
     const float top = 2 + h + 0.1f;
@@ -308,7 +368,13 @@ void Models3D::cottage(float x, float z)
     part(cube_, then(then(S(2.5f, 0.12f, 1.35f), MatrixRotateX(0.3f)), T(x, 4.2f, fz + 0.6f)), roof);
     // stepping stones out to the gate
     for (int i = 0; i < 2; ++i)
-        part(cube_, then(S(0.6f, 0.06f, 0.4f), T(x + (i % 2 ? 0.1f : -0.1f), 2.02f, fz + 1.35f + i * 0.5f)), hexc(0xb8b0a0));
+    {
+        float sx = x + (i % 2 ? 0.1f : -0.1f), sz = fz + 1.35f + i * 0.5f;
+        Color sc = mixc(hexc(0xb8b0a0), hexc(0x9c968a), rndf(i, 311));
+        shadowAt(sx + 0.05f, 2.0f, sz + 0.03f, 0.42f, 0.32f, 0.3f);
+        part(cube_, then(S(0.6f, 0.06f, 0.4f), T(sx, 2.01f, sz)), sc, 0, false);
+        part(cube_, then(S(0.54f, 0.03f, 0.34f), T(sx, 2.045f, sz)), mixc(sc, WHITE, 0.1f), 0, false);   // bevel: a lighter, smaller top
+    }
     // garden fence along both sides of the front yard, up to the street fence
     for (int s = -1; s <= 1; s += 2) {
         float fx = x + s * (w / 2 + 0.5f);
@@ -330,9 +396,20 @@ void Models3D::cottage(float x, float z)
     }
 }
 
+// Two passes over the same code: the first draws nothing and only collects the contact shadows,
+// which are laid down on the lawn (flushShadows, below) before anything stands on it in the second.
 void Models3D::drawScenery(Game& g)
 {
+    dry_ = true;
+    sceneryPass(g);
+    dry_ = false;
+    sceneryPass(g);
+}
+
+void Models3D::sceneryPass(Game& g)
+{
     float l = g.cam.left() - 16, r = g.cam.right() + 36, mid = (l + r) / 2, wdt = r - l;
+    setMacro(0.6f);   // big soft patches of lighter and darker turf over the lawns, set from world position
     // lawns. In front of the path the lawn lies at the foot of the path (pits are ditches down to
     // it); behind it, at path height, in flat bands that step lighter towards the horizon.
     part(cube_, then(S(wdt + 300, 0.4f, 18), T(mid, -0.2f, 6.0f)), hexc(0x4a9040), 0, false);
@@ -343,6 +420,7 @@ void Models3D::drawScenery(Game& g)
         float z0 = bandZ[i + 1], z1 = bandZ[i];
         part(cube_, then(S(wdt + 300, 0.1f, z1 - z0), T(mid, 1.95f, (z0 + z1) / 2)), hexc(bandC[i]), 0, false);
     }
+    if (!dry_) flushShadows();   // the lawn is down: the shadows go on it, then everything stands over them
     float cot = nearestCottage(mid);
     bool cotOn = cot > l - 8 && cot < r + 8;
     auto nearCot = [&](float x, float m) { return cotOn && std::fabs(x - cot) < m; };
@@ -355,6 +433,7 @@ void Models3D::drawScenery(Game& g)
         float ph = 0.66f + 0.1f * rndf(x, 302);
         float lean = (rndf(x, 303) - 0.5f) * (hashi(x, 304) % 6 == 0 ? 0.16f : 0.04f);
         Color pc = mixc(hexc(0xf4f0e6), hexc(0xe2dccd), rndf(x, 305));
+        shadowAt(px + 0.12f, 2.0f, -3.4f, 0.17f, 0.1f, 0.33f);
         part(cube_, then(then(then(S(0.12f, ph, 0.08f), T(0, ph / 2, 0)), MatrixRotateZ(lean)), T(px, 2.0f, -3.5f)), pc);
     }
     part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.5f, -3.46f)), hexc(0xe8e2d6), 0, false);
@@ -387,6 +466,7 @@ void Models3D::drawScenery(Game& g)
         }   // a lamp would poke through a platform: a bush
         if (kind == 0) {   // street lamp (on the line clearAbove checks)
             float z = -4.3f;
+            shadowAt(x + 0.25f, 2.0f, z + 0.05f, 0.3f, 0.16f, 0.38f);
             part(cyl_, then(S(0.07f, 2.6f, 0.07f), T(x, 2, z)), hexc(0x2a2a36));
             part(cube_, then(S(0.3f, 0.32f, 0.3f), T(x, 4.75f, z)), hexc(0xfff0c0), 1.0f);
             part(cube_, then(S(0.42f, 0.08f, 0.42f), T(x, 4.95f, z)), hexc(0x2a2a36));
@@ -432,6 +512,7 @@ void Models3D::drawScenery(Game& g)
 // of ground is merged into long boxes; floating blocks stay single so they read as blocks.
 void Models3D::drawGround(Game& g)
 {
+    struct Done { Models3D* m; ~Done() { m->setMacro(0.0f); } } done{this};   // the ground noise off again
     const float zf = 1.0f, zb = -3.0f, zc = (zf + zb) / 2, dz = zf - zb;
     int x0 = (int)std::floor(g.cam.left()) - 6, x1 = (int)std::ceil(g.cam.right()) + 18;
     // left of the level's first column the level reports solid rock; show plain ground there
@@ -474,28 +555,65 @@ void Models3D::drawGround(Game& g)
                 part(cube_, then(S(w, 0.9f, dz), T(cx, Y3(ty + 0.55f), zc)), dirt);
             else
                 part(cube_, then(S(w, 1.0f, dz), T(cx, Y3(ty + 0.5f), zc)), dirt, 0, false);
-            if (dep == 0) {   // grass cap with a lip that overhangs the earth a little
-                // its top sits flush with the path (y 0) so drop shadows lie on it cleanly
-                part(cube_, then(S(w + 0.08f, 0.26f, dz + 0.1f), T(cx, Y3(ty + 0.13f), zc)), hexc(0x62c24a));
-            }
-            // stones in the earth face: none to three a tile, each its own size, shape, tilt,
-            // depth and kind of stone, all from the tile's world position
-            static const unsigned stone[5] = {0xc8bca8, 0x9a948c, 0xc4a87a, 0x7a6e64, 0xdcd4c6};
-            const float yTop = dep == 0 ? 0.34f : 0.06f, yBot = 0.94f;
+            // The faces below are made tile by tile, every one from its own world-position hash
+            // (never the camera), so no two tiles match and the edges are not dead straight.
+            // Grass shifts yellow-green where it is lit and blue-green where it shades.
+            const Color gLit = hexc(0x86c24a), gMid = hexc(0x5aa84a), gShade = hexc(0x3c9a5c);
             for (int i = x; i <= e; ++i) {
-                unsigned nh = hashi(i, ty * 131 + 90) % 10;
-                int n = nh < 2 ? 0 : (nh < 6 ? 1 : (nh < 9 ? 2 : 3));
-                for (int k = 0; k < n; ++k) {
-                    int s = (i * 4 + k) * 61 + ty;
-                    float px = i + 0.06f + 0.88f * rndf(s, 91), py = yTop + (yBot - yTop) * rndf(s, 92);
-                    float sz = 0.055f + 0.09f * rndf(s, 93) * rndf(s, 94);   // mostly small, the odd big one
-                    float sq = 0.45f + 0.4f * rndf(s, 95), rot = (rndf(s, 96) - 0.5f) * 1.6f;
-                    Color c = mixc(hexc(stone[hashi(s, 97) % 5]), dirt, 0.18f + 0.3f * rndf(s, 98));
-                    Matrix face = then(MatrixRotateZ(rot), T(px, Y3(ty + py), zf + 0.005f));
-                    if (hashi(s, 99) % 3)   // a rounded stone: a thin disc set into the face
-                        part(cyl_, then(then(then(T(0, -0.5f, 0), S(sz, 0.035f, sz * sq)), MatrixRotateX(PI / 2)), face), c, 0, false);
-                    else                    // a chip of broken stone
-                        part(cube_, then(S(sz * 1.6f, sz * sq * 1.6f, 0.035f), face), c, 0, false);
+                unsigned th = hashi(i, ty * 131 + 7);
+                float r1 = (th & 255) / 255.0f, r2 = ((th >> 8) & 255) / 255.0f, r3 = ((th >> 16) & 255) / 255.0f;
+                if (dep == 0) {
+                    // the cap: its top flush with the path (y 0), the front edge of its lip a different
+                    // distance out on every tile and its height a hair different
+                    float j = (r2 - 0.5f) * 0.05f, zFront = zf + 0.03f + 0.08f * r1, zBack = zb - 0.05f;
+                    Color top = mixc(mixc(gMid, gLit, r3), gShade, 0.25f * (1 - r1) * (1 - r3));
+                    part(cube_, then(S(1.04f, 0.26f + j, zFront - zBack), T(i + 0.5f, Y3(ty + 0.13f + j * 0.5f), (zFront + zBack) / 2)), top, 0, false);
+                    // the lip's face in shade: bluer, darker, a bit proud of the cap; then the soil under it in the cap's shadow
+                    part(cube_, then(S(1.04f, 0.1f, 0.035f), T(i + 0.5f, Y3(ty + 0.2f + j), zFront)), mixc(gShade, gMid, r2 * 0.6f), 0, false);
+                    part(cube_, then(S(1.0f, 0.08f, 0.02f), T(i + 0.5f, Y3(ty + 0.3f), zf + 0.003f)), mixc(dirt, BLACK, 0.45f), 0, false);
+                    for (int b = 0; b < 2; ++b) {   // a few blades hanging over the lip
+                        if (hashi(i * 2 + b, ty * 17 + 211) % 100 > 38) continue;
+                        float bx = i + 0.1f + 0.8f * rndf(i * 2 + b, 212 + ty), len = 0.16f + 0.12f * rndf(i * 2 + b, 213 + ty);
+                        part(cone_, then(then(then(S(0.03f, len, 0.03f), MatrixRotateX(PI / 2 + 0.5f + rndf(i * 2 + b, 214) * 0.5f)),
+                                          MatrixRotateZ((rndf(i * 2 + b, 215) - 0.5f) * 0.5f)), T(bx, Y3(ty + 0.17f), zFront - 0.01f)),
+                             mixc(gMid, gLit, rndf(i * 2 + b, 216)), 0, false);
+                    }
+                }
+                // strata: bands of earth that run on across tiles and wave a little, each its own shade
+                const float yS = dep == 0 ? 0.36f : 0.0f;
+                const int bands = dep == 0 ? 3 : 4;
+                const float bh = (1.0f - yS) / bands;
+                for (int bnd = 0; bnd < bands; ++bnd) {
+                    unsigned bhsh = hashi(i / 3 + bnd * 57, ty * 7 + 301);
+                    float warm = ((bhsh & 255) / 255.0f - 0.5f), lite = (((bhsh >> 8) & 255) / 255.0f - 0.5f);
+                    Color sc = mixc(mixc(dirt, hexc(0x9a6a44), warm > 0 ? warm * 0.5f : 0.0f), warm < 0 ? hexc(0x4a3a30) : dirt, std::max(0.0f, -warm) * 0.5f);
+                    sc = lite > 0 ? mixc(sc, WHITE, lite * 0.12f) : mixc(sc, BLACK, -lite * 0.3f);
+                    float wave = 0.035f * std::sin(i * 0.9f + bnd * 2.4f + ty * 2.0f) + (r3 - 0.5f) * 0.02f;
+                    float cy = yS + bh * (bnd + 0.5f) + wave;
+                    if (bnd == bands - 1 && dep > 0) continue;   // the last band is the next row's first
+                    part(cube_, then(S(1.0f, bh * 0.92f, 0.02f), T(i + 0.5f, Y3(ty + cy), zf + 0.004f + 0.003f * bnd)), sc, 0, false);
+                }
+                // pebbles, one at most per cell of a 3 x 3 grid and small enough never to touch a
+                // neighbour (no overlap), set in the face a third sunk and lying with the surface
+                // (a few degrees off), more of them deeper down
+                static const unsigned stone[5] = {0xc8bca8, 0x9a948c, 0xc4a87a, 0x7a6e64, 0xdcd4c6};
+                const float yTop = dep == 0 ? 0.4f : 0.02f, yBot = 0.97f;
+                for (int cx = 0; cx < 3; ++cx)
+                    for (int cy = 0; cy < 3; ++cy) {
+                        int sd = ((i * 3 + cx) * 7 + cy) * 61 + ty * 13;
+                        float fy = (cy + 0.5f) / 3.0f;
+                        if (rndf(sd, 91) > 0.1f + 0.26f * fy) continue;
+                        float px = i + (cx + 0.5f) / 3.0f + (rndf(sd, 92) - 0.5f) * 0.12f;
+                        float py = yTop + (yBot - yTop) * (cy + 0.5f + (rndf(sd, 93) - 0.5f) * 0.4f) / 3.0f;
+                        float sz = 0.03f + 0.045f * rndf(sd, 94) * rndf(sd, 95) + 0.012f;
+                        float sq = 0.6f + 0.35f * rndf(sd, 96), rot = (rndf(sd, 97) - 0.5f) * 0.7f;
+                        Color c = mixc(hexc(stone[hashi(sd, 98) % 5]), dirt, 0.15f + 0.3f * rndf(sd, 99));
+                        part(sphere_, then(then(S(sz, sz * sq, 0.045f), MatrixRotateZ(rot)), T(px, Y3(ty + py), zf + 0.01f)), c, 0, false);
+                    }
+                // now and then a root coming out under the lip, tapering to a hair
+                if (dep == 0 && hashi(i, ty * 31 + 77) % 7 == 0) {
+                    float rx = i + 0.2f + 0.6f * r2, len = 0.35f + 0.3f * r3;
+                    part(cone_, then(then(S(0.03f, len, 0.03f), MatrixRotateZ(PI + (r1 - 0.5f) * 1.0f)), T(rx, Y3(ty + 0.34f), zf + 0.012f)), hexc(0x3a2618), 0, false);
                 }
             }
             x = e + 1;
@@ -518,6 +636,8 @@ void Models3D::grassTuft(float x, float y, float z, float h, int seed, Color c)
 }
 
 // A clump of one kind of wild flower: poppies, daisies, cornflowers, buttercups or clover.
+// Each stalk bends in two pieces and carries a leaf; close-up (stems, size over 1.2) the heads
+// have real petals. The colour of every head jitters a little, so no two match.
 void Models3D::flowerClump(float x, float y, float z, int seed, float size, bool stems)
 {
     static const unsigned heads[5] = {0xd8382e, 0xf6f2e4, 0x4a6ad0, 0xf2cc3a, 0xd88ab0};
@@ -525,9 +645,29 @@ void Models3D::flowerClump(float x, float y, float z, int seed, float size, bool
     for (int i = 0; i < n; ++i) {
         float px = x + (rndf(seed + i, 113) - 0.5f) * 0.9f * size, pz = z + (rndf(seed + i, 114) - 0.5f) * 0.5f * size;
         float hh = (0.2f + 0.22f * rndf(seed + i, 115)) * size, r = 0.065f * size;
-        if (stems) part(cyl_, then(S(0.012f, hh, 0.012f), T(px, y, pz)), hexc(0x4a7a34), 0, false);
-        part(sphere_, then(S(r, r * 0.7f, r), T(px, y + hh, pz)), hexc(heads[kind]), 0.15f, false);
-        if (kind == 1) part(sphere_, then(S(r * 0.4f, r * 0.4f, r * 0.4f), T(px, y + hh + r * 0.45f, pz)), hexc(0xf2c030), 0.2f, false);
+        float jit = (rndf(seed + i, 116) - 0.5f) * 0.3f;
+        Color hc = jit > 0 ? mixc(hexc(heads[kind]), WHITE, jit) : mixc(hexc(heads[kind]), BLACK, -jit);
+        float bend = (rndf(seed + i, 117) - 0.5f) * 0.25f * size;   // how far the top leans from its root
+        Color stem = mixc(hexc(0x4a7a34), hexc(0x6a9a3c), rndf(seed + i, 118));
+        float hx = px + bend, hy = y + hh;
+        if (stems) {
+            float mh = hh * 0.55f;   // lower stalk, then the upper stalk leaning on
+            part(cyl_, then(S(0.012f, mh, 0.012f), T(px, y, pz)), stem, 0, false);
+            part(cyl_, then(then(S(0.011f, hh - mh + 0.02f, 0.011f), MatrixRotateZ(-bend / std::max(0.05f, hh - mh) * 0.9f)), T(px + bend * 0.1f, y + mh, pz)), stem, 0, false);
+            part(sphere_, then(S(0.07f * size * 0.5f, 0.012f, 0.03f * size), then(MatrixRotateZ(bend > 0 ? -0.5f : 0.5f), T(px + (bend > 0 ? 0.04f : -0.04f) * size, y + mh * 0.6f, pz))), stem, 0, false);   // a leaf
+        }
+        if (stems && size > 1.2f && kind != 2 && kind != 4) {   // petals round a centre
+            int np = kind == 1 ? 7 : 5;
+            float pr = r * (kind == 1 ? 1.05f : 0.95f);
+            for (int k = 0; k < np; ++k) {
+                float a = k * 6.2831853f / np + rndf(seed + i, 119) * 2;
+                part(sphere_, then(S(pr * 0.55f, pr * 0.2f, pr * 0.8f), then(MatrixRotateY(-a), T(hx + std::cos(a) * pr * 0.9f, hy, pz + std::sin(a) * pr * 0.9f))), hc, 0.12f, false);
+            }
+            part(sphere_, then(S(r * 0.5f, r * 0.45f, r * 0.5f), T(hx, hy + 0.01f, pz)), kind == 0 ? hexc(0x2a2020) : hexc(0xf2c030), 0.2f, false);
+        } else {
+            part(sphere_, then(S(r, r * 0.7f, r), T(hx, hy, pz)), hc, 0.15f, false);
+            if (kind == 1) part(sphere_, then(S(r * 0.4f, r * 0.4f, r * 0.4f), T(hx, hy + r * 0.45f, pz)), hexc(0xf2c030), 0.2f, false);
+        }
     }
 }
 
@@ -553,8 +693,17 @@ bool Models3D::clearAbove(Game& g, float x0, float x1)
 // bands as the lawn under them.
 void Models3D::drawMeadow(Game& g)
 {
+    dry_ = true;
+    meadowPass(g);
+    dry_ = false;
+    meadowPass(g);
+}
+
+void Models3D::meadowPass(Game& g)
+{
     setLight(true);
     rims_ = false;
+    if (!dry_) { setMacro(0.45f); flushShadows(); }
     const float l = g.cam.left() - 8, r = g.cam.right() + 14;
     const Color dusk = hexc(0xf0b48a);
     auto hz = [&](Color c, float z) { return mixc(c, dusk, z > -1.5f ? 0.0f : (z > -8 ? 0.1f : (z > -20 ? 0.24f : 0.36f))); };
@@ -603,6 +752,7 @@ void Models3D::drawMeadow(Game& g)
         switch (h % 7) {
         case 0: case 1: {   // a stook: sheaves leaned together, tied round the waist, ears on top
             float hh = 0.85f * sc;
+            shadowAt(x + 0.2f, G, z + 0.05f, 0.5f * sc, 0.36f * sc, 0.32f);
             part(cone_, then(then(S(0.34f * sc, hh, 0.34f * sc), MatrixRotateY(rot * 3)), T(x, G, z)), hz(straw, z), 0, false);
             part(cyl_, then(S(0.19f * sc, 0.07f, 0.19f * sc), T(x, G + hh * 0.48f, z)), hz(hayD, z), 0, false);
             part(cone_, then(then(S(0.16f * sc, 0.28f * sc, 0.16f * sc), MatrixRotateX(PI)), T(x, G + hh + 0.12f, z)), hz(hayL, z), 0, false);
@@ -614,6 +764,7 @@ void Models3D::drawMeadow(Game& g)
         }
         case 2: case 3: {   // small square bales: one, two side by side, or three stacked
             int n = 1 + (int)(h / 7 % 3);
+            shadowAt(x + 0.15f, G, z + 0.05f, 0.85f * (n == 2 ? 1.4f : 1.0f), 0.5f, 0.34f);
             Matrix root = then(MatrixRotateY(rot), T(x, G, z));
             const Vector3 at[3] = {{-0.48f, 0.21f, 0}, {0.48f, 0.21f, 0.05f}, {0.0f, 0.63f, 0.02f}};
             for (int i = 0; i < n; ++i) {
@@ -655,6 +806,7 @@ void Models3D::drawMeadow(Game& g)
         else if (h == 4 && hashi(k, 156) % 3 == 0)
             part(sphere_, then(S(0.28f, 0.14f, 0.22f), T(x, 0.03f, z)), mixc(hexc(0x8a8478), hexc(0xb0a898), rndf(k, 157)), 0, false);
     }
+    if (!dry_) setMacro(0.0f);
     setLight(false);
     rims_ = true;
 }
@@ -671,14 +823,27 @@ void Models3D::drawGardenFront(Game& g, float l, float r)
         float x = k * 0.95f + (rndf(k, 201) - 0.5f) * 0.14f, z = 2.9f + (rndf(k, 207) - 0.5f) * 0.26f;
         if (hashi(k / 5, 202) % 9 == 0 && k % 5 >= 1 && k % 5 <= 3) {   // a puddle across a few stones
             if (k % 5 == 2) {
-                part(cyl_, then(S(1.15f, 0.012f, 0.55f), T(x, 0.004f, 2.9f)), hexc(0x8ab4dc), 0.55f, false);
-                part(cyl_, then(S(0.5f, 0.014f, 0.16f), T(x - 0.3f, 0.006f, 2.85f)), hexc(0xd8ecf8), 0.8f, false);
+                // a pond: a wet dark mud ring, shallow water, deeper water in the middle, a glint, reeds
+                part(cyl_, then(S(1.5f, 0.008f, 0.74f), T(x, 0.002f, 2.9f)), hexc(0x4e3c2c), 0, false);
+                part(cyl_, then(S(1.25f, 0.012f, 0.6f), T(x, 0.004f, 2.9f)), hexc(0x7aa8cc), 0.35f, false);
+                part(cyl_, then(S(0.85f, 0.014f, 0.38f), T(x + 0.05f, 0.006f, 2.92f)), hexc(0x4f7fa8), 0.3f, false);
+                part(cyl_, then(S(0.45f, 0.016f, 0.13f), T(x - 0.3f, 0.008f, 2.82f)), hexc(0xd8ecf8), 0.7f, false);
+                for (int rd = 0; rd < 5; ++rd) {
+                    float rx = x + (rd < 3 ? -1.35f : 1.3f) + (rndf(k * 5 + rd, 231) - 0.5f) * 0.4f, rz = 2.75f + rndf(k * 5 + rd, 232) * 0.35f;
+                    float rh = 0.5f + 0.35f * rndf(k * 5 + rd, 233);
+                    part(cone_, then(then(S(0.035f, rh, 0.035f), MatrixRotateZ((rndf(k * 5 + rd, 234) - 0.5f) * 0.25f)), T(rx, 0, rz)), mixc(hexc(0x5a8a3a), hexc(0x8aa04a), rndf(k * 5 + rd, 235)), 0, false);
+                }
             }
             continue;
         }
         float w = 0.72f + 0.12f * rndf(k, 203), d = 0.62f + 0.14f * rndf(k, 204);
         Color c = mixc(hexc(0xc4bcae), hexc(0xa8a094), rndf(k, 205));
-        part(cube_, then(then(S(w, 0.07f, d), MatrixRotateY((rndf(k, 206) - 0.5f) * 0.18f)), T(x, 0.02f, z)), c, 0, false);
+        // bevelled: a wider, darker slab with a smaller lighter top, sunk a hair, with its own cool or warm cast
+        c = mixc(c, hashi(k, 209) % 2 ? hexc(0xc8b49a) : hexc(0x9aa0a4), 0.25f * rndf(k, 210));
+        float yaw = (rndf(k, 206) - 0.5f) * 0.18f;
+        shadowAt(x + 0.06f, 0.0f, z + 0.04f, w * 0.68f, d * 0.68f, 0.3f);
+        part(cube_, then(then(S(w, 0.07f, d), MatrixRotateY(yaw)), T(x, 0.01f, z)), mixc(c, BLACK, 0.1f), 0, false);
+        part(cube_, then(then(S(w - 0.07f, 0.03f, d - 0.07f), MatrixRotateY(yaw)), T(x, 0.05f, z)), mixc(c, WHITE, 0.08f), 0, false);
     }
     // box hedges and flower beds in front of the flagstones, in hashed stretches
     for (int k = (int)std::floor(l / 4.0f); k <= (int)(r / 4.0f); ++k) {
@@ -839,7 +1004,7 @@ void Models3D::drawEnemy(Game& g, const Enemy& e)
         for (int i = 0; i < 6; ++i) {
             const float* L = lumps[i];
             float ph = e.t * (2.3f + i * 0.85f) + i * 1.9f;
-            float kx = 1 + 0.13f * std::sin(ph * 1.7f + 2), ky = 1 + 0.13f * std::sin(ph * 1.1f), kz = 1 + 0.1f * std::cos(ph * 1.3f);
+            float kx = 1 + 0.13f * std::sin(ph * 2.4f + 2), ky = 1 + 0.13f * std::sin(ph * 1.1f), kz = 1 + 0.1f * std::cos(ph * 1.3f);
             Vector3 c = {(L[0] + std::sin(ph) * 0.05f) * (1 + flat * 0.5f), (L[1] + std::sin(ph * 1.3f + 1) * 0.035f) * (1 - flat * 0.7f),
                          L[2] + std::cos(ph * 0.8f) * 0.04f};
             Vector3 r = {L[3] * kx * (1 + flat * 0.4f), L[4] * ky * (1 - flat * 0.6f), L[5] * kz * (1 + flat * 0.2f)};
@@ -982,7 +1147,7 @@ void Models3D::drawBoss(Game& g)
     Matrix root = T(cx, cy + wob, 0.4f);
     auto at = [&](Matrix m) { return then(m, root); };
     for (int i = 0; i < 6; ++i) {   // tendrils
-        float x = -1.0f + i * 0.4f, sway = std::sin(i * 1.7f + b.t * 3) * 0.35f;
+        float x = -1.0f + i * 0.4f, sway = std::sin(i * 2.4f + b.t * 3) * 0.35f;
         part(cyl_, at(then(then(then(S(0.1f, 1.0f, 0.1f), T(0, -1.0f, 0)), MatrixRotateZ(sway)), T(x, -0.6f + slam, std::cos(i * 2.0f) * 0.4f))),
              col(i % 2 ? 0x6a2c6e : 0x26305e));
     }
@@ -1179,7 +1344,7 @@ void Models3D::drawForgetting(Game& g)
             look((float)j / segs);
             modelPart(forget_[F_SEG], then(S(sc, sc, sc), m), tint);
             float wave = std::sin(t * 2.6f + i * 0.9f - j * 0.8f) * (0.32f - 0.2f * slam) + 0.06f * j * (1 - slam);
-            float sway = std::cos(t * 1.9f + i * 1.7f - j * 0.6f) * 0.15f;
+            float sway = std::cos(t * 1.9f + i * 2.4f - j * 0.6f) * 0.15f;
             m = then(then(MatrixRotateZ(wave), MatrixRotateX(sway)), then(T(0, -0.4f * sc, 0), m));
             sc *= 0.9f;
         }
