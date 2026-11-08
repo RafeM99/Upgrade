@@ -111,3 +111,20 @@ cmake --build build --target assetgen
 `--no-story`, `--difficulty gentle|medium|hard`, `--frames N`, `--shot file.png`, `--shot-every N prefix`, `--seed N`, `--ending`, `--play` (skip the title), `--size W H`.
 Example: `./build/upgrade --autoplay --two --fill --era 4` shows the 2.5D swing and then the full 3D stage.
 The Memory Bar speed is `memory.fill_speed` in `assets/config.ini` (2.0 = twice the old speed).
+
+## Debug switches (environment variables)
+- `GAMEJAM_FRAMELOG=path` writes one line per frame ("frame draw_ms rss_kb") for timing and memory checks.
+- `GAMEJAM_NOKIT=1` turns the Blender ground kit off (the old box ground is used): handy to time what the kit costs.
+- The game still loads when model files in `assets/models` are missing: each model (Gran, Sam, clock, Forgetting, ground kit)
+  falls back to the primitive shapes on its own.
+
+## Regenerating the Blender art (bpy 5.2, `python3 -c "import bpy"` must work)
+```
+python3 tools/blender/make_models.py assets/models            # Gran, Sam, clock, Forgetting (prints the clock pivot constants:
+                                                              #   copy them into Models3D::drawClockModel if they change)
+python3 tools/blender/make_ground.py assets/models            # ground kit: ground_{grass,earth,deep}_N.glb (full)
+python3 tools/blender/make_ground.py assets/models --lite     # groundlite_*.glb (half the triangles, used by the 2.5D meadow)
+python3 -I tools/backdrop/make_era6_backdrop.py               # era 6 sky and far backdrop (assets/art/era6/bg_*.png)
+```
+`./build/assetgen assets` also rewrites assets/art/era5 and era6: restore them with `git checkout assets/art/era5 assets/art/era6`
+unless you meant to change them. Textures and their licences are listed in `assets/textures/SOURCES.md`.

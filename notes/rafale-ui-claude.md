@@ -1,5 +1,33 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (review cycle 4, final): whole-game pass, summary of the UI work (cycles 1-4)
+
+Summary for the other Claudes (what the UI thread changed in the whole game; nothing is on main, no PR opened):
+- Cycle 1: pixel-era ground tile wear (SpriteGen.cpp tiles, assets/art/era0-4 tiles.png), Blender ground kit (tools/blender/make_ground.py, assets/models/ground_*.glb), Models3D bakeGround.
+- Cycle 2: platform variation and sky dithering (Renderer.cpp tile loop, bg/era3.inc, bg/era4.inc), era 5 ground from the kit.
+- Cycle 3: far-plane backdrop cut fix (GameCamera.cpp), HUD scale at 1080 (Hud.cpp), soft contact shadows, lite kit (groundlite_*.glb), smaller trees, house trim, GAMEJAM_FRAMELOG / GAMEJAM_NOKIT.
+- Cycle 4 (this entry):
+  - Era 6 frame time: the +17% of cycle 3 does NOT reproduce. Bisect (200 frames, seed 3, 1280x720, software renderer): current 18.5/17.9 s, far plane back to dist+120 18.7 s,
+    character-shadow flush off 18.1 s, kit off (GAMEJAM_NOKIT) 17.0 s (so the kit costs about 1 s, 5%), and a build of the cycle-2 end commit f05f0d5 18.6/17.9 s: the same.
+    The 15.6 s of cycle 3 was a quieter machine. With the final code at a quiet moment: era 6 15.8 s (median 74 ms), era 5 10.7 s (50.8 ms). No further optimisation needed or made.
+  - Era 6 colour grade: there was no distance fog in lit3d.fs, so mid and far trees were as saturated as the lawn against a muted backdrop. Added aerial perspective:
+    lit3d.fs uniforms fogCol (0.80,0.88,0.95, the backdrop's horizon colour) and fogRange (start = camera distance + 5, end = + 80, strongest mix 0.62; z = 0 disables), 35% desaturation
+    towards luma with the mix. Models3D::begin(g, cam, fog=false) sets it; only the full 3D scenery pass passes true (era 5 and the characters at the play plane are untouched).
+    Before /tmp/c4/e6_600.png, after /tmp/c4/after_e6_600.png (seed 3, 1280x720; not in the repo). Toon style kept, no outlines. Lawn and near trees unchanged.
+  - Bug found in motion: in the full 3D view `swing` runs to 2, so the character contact shadows had double alpha and were hard black discs. Renderer.cpp now caps it at 1 (soft like era 5).
+  - Foot contact: Models3D::drawPersonModel solves the body height each frame from the two legs' angles (thigh 0.26 + shin to the shoe centre 0.27 + the rotated shoe ellipsoid), so the lower
+    sole touches the ground through the run cycle (it sank 4.5 cm when standing and hovered mid-stride; the old fake bob is gone when grounded). Checked in 12-frame crops (/tmp/c4/gran_feet.png). Sam uses his own shoe numbers, looked at only through the contact sheet.
+  - Motion over 1500 frames (era 6, --autoplay --two, sheets /tmp/c4/long/sheet0-4.png): Gran and Sam run cycles read, glide umbrella OK, clock waddles and reads at game size,
+    the Forgetting is dark and clear against the light backdrop, eye follows the players. The boss often sits half off the top edge of the screen when it hovers high (camera framing, not changed).
+    Hit flash and the faded look were not seen in these frames (not verified in motion).
+  - HUD bug (eras 0 and 1, 1280x720): "Player 2? Press any of your buttons to join" ran under the centre Memory block in the 1-bit/4-shade strip. Hud.cpp: the one-line rule now only applies to the boxed layouts, the strip wraps it to two lines.
+  - Eras 0-2 backgrounds / era 1 blob and flyer contrast / tiny flyers: NOT done (time). Looked at 200-frame shots: they hold together; the era 1 flyer is still small.
+  - Regression: build has no warnings (touched all render/ui/core sources and rebuilt everything); ./build/levelcheck 0 of 56 chunks fail; all 7 eras at 1280x720, 1280x800 and 1920x1080, 300 frames --autoplay --two: exit 0 and no shader/model
+    warnings in any of the 21 logs (only ALSA no-sound-card lines). Ground and clock .glb files moved away: eras 5 and 6 still run 120 frames, exit 0 (fallback boxes).
+  - PLAY.md: debug env vars and the Blender regeneration commands added. assets/textures/SOURCES.md already lists all 10 files (no change).
+- Shared files touched in the whole UI thread: Renderer.cpp, Models3D.cpp/.h, Hud.cpp, GameCamera.cpp, Game.cpp (debug log), lit3d.fs, haze.fs, SpriteGen.cpp, bg/era3.inc, bg/era4.inc, assets/art/era0-4 tiles.png, assets/art/era3 bg_0, PLAY.md.
+- Not on main. Merging needs raf and Camilla to agree in chat first.
+
 ## 2026-11-08 (review cycle 3): era 6 in motion, window sizes, shadows, era 5 leftovers
 
 - Motion (era 6, --autoplay --fill --two, seed 3, 1500 frames, 1280x720, contact sheets /tmp/c3/long/sheet*.png): no chunk popping or seams

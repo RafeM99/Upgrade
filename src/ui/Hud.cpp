@@ -357,10 +357,12 @@ int lineW(const Line& l)
     return l.empty() ? 0 : w - chipGap();
 }
 
+bool stripMode = false;   // set while the 1-bit/4-shade strip lays out
 std::vector<Line> detailLines(Game& g, const PView& v, int maxW)
 {
     std::vector<Line> out;
-    if (!v.joined) maxW = std::max(maxW, textW(T("p2_join_2"), th.ts));   // keep the join prompt on one line
+    // the join prompt stays on one line in the boxed layouts (they size to it); the strip has no room and wraps it, or it ran under the centre block
+    if (!v.joined && !stripMode) maxW = std::max(maxW, textW(T("p2_join_2"), th.ts));
     auto textLines = [&](const std::string& s) { for (auto& l : wrap(s, th.ts, maxW)) out.push_back({{l, false}}); };
     if (!v.joined) { textLines(T("p2_join_2")); return out; }
     if (v.faded) {
@@ -507,6 +509,7 @@ void centreBlock(Game& g, int x, int y, int w, int barH, Color pctCol)
 // 1-bit and 4-shade: one full-width strip along the top.
 int stripLayout(Game& g, bool bottom)
 {
+    struct Mode { Mode() { stripMode = true; } ~Mode() { stripMode = false; } } mode;
     const int U = th.U, pad = 2 * U, side = 4 * U;
     PView a = view(g, 0), b = view(g, 1);
     std::string line2 = stageText(g) + "   " + scoreText(g);
