@@ -812,20 +812,22 @@ void Models3D::sceneryPass(Game& g)
 // of ground is merged into long boxes; floating blocks stay single so they read as blocks.
 // The solid tiles. Static ground is baked in chunks of 16 columns (rebuilt only when the tiles of a
 // chunk change) and drawn in a few calls; the pulsing memory blocks are the only live parts.
-void Models3D::drawGround(Game& g)
+void Models3D::drawGround(Game& g, bool meadow)
 {
+    meadow_ = meadow;
     struct Done { Models3D* m; ~Done() { m->setMacro(0.0f); } } done{this};   // the ground noise off again
     int x0 = (int)std::floor(g.cam.left()) - 6, x1 = (int)std::ceil(g.cam.right()) + 18;
     const int W = 16;
     auto fdiv = [](int a, int b) { return (int)std::floor((float)a / b); };
     int c0 = fdiv(x0, W), c1 = fdiv(x1, W);
     for (int c = c0; c <= c1; ++c) {
-        Chunk& ch = chunks_[chunkKey(0, c)];
+        Chunk& ch = chunks_[chunkKey(meadow ? 3 : 0, c)];
         unsigned h = 2166136261u;
         for (int xx = c * W - 1; xx <= c * W + W; ++xx)
             for (int yy = 0; yy < LEVEL_H; ++yy)
                 h = (h ^ (unsigned char)(xx < g.level.firstCol() ? (yy >= LEVEL_H - 2 ? '#' : '.') : g.level.tile(xx, yy))) * 16777619u;
         h ^= (unsigned)g.level.firstCol() * 31u;
+        h ^= meadow ? 0x9e3779b9u : 0u;
         if (!ch.built || ch.hash != h) {
             bakeBegin(ch);
             bakeGround(g, c * W, c * W + W - 1, 0);
@@ -834,8 +836,9 @@ void Models3D::drawGround(Game& g)
         }
         drawChunk(ch);
     }
-    trimChunks(0, c0 - 3, c1 + 3);
-    bakeGround(g, x0, x1, 1);
+    trimChunks(meadow ? 3 : 0, c0 - 3, c1 + 3);
+    if (!meadow) bakeGround(g, x0, x1, 1);
+    meadow_ = false;
 }
 
 void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
@@ -856,6 +859,9 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
             if (!modelsTile(ch) && ch != '1' && ch != '2') { ++x; continue; }
             if ((mode == 1) != (ch == '1' || ch == '2')) { ++x; continue; }
             bool floating = !solid(x, ty + 1) && ty < LEVEL_H - 1;
+            // the 2.5D meadow takes only the ground the kit models (earth with ground under it); hay bales,
+            // cracked blocks, the wall and rocky undersides stay 2D tiles (Renderer)
+            if (meadow_ && (ch != '#' || floating || !groundKit_)) { ++x; continue; }
             if (ch != '#' || floating) {   // a single block
                 Color c = ch == '=' ? hexc(0xa08a74) : (ch == '|' ? hexc(0x8a8aa4) : hexc(0xb89a7a));
                 if (ch == '1' || ch == '2') {   // memory blocks only one of the two can stand on
@@ -883,6 +889,10 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
             if (groundKit_) {   // the Blender kit: one tile model per column, a variant from a world hash (never the left neighbour's)
                 int kind = dep == 0 ? 0 : (dep < 3 ? 1 : 2), n = groundN_[kind];
                 Color tint = dep == 2 ? Color{225, 215, 210, 255} : WHITE;
+                if (meadow_) {   // golden hour: the kit's greens pulled to warm olive, the earth to a redder brown
+                    tint = dep == 0 ? Color{206, 188, 112, 255} : Color{226, 194, 164, 255};
+                    if (dep >= 3) tint = Color{206, 184, 166, 255};
+                }
                 int last = -1;
                 recTex_ = 2;
                 for (int i = x; i <= e; ++i) {

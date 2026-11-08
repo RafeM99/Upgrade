@@ -1,5 +1,30 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 (late night): review cycle 2 - pixel eras beyond ground, and the 2.5D meadow
+
+- Platforms (T_BLOCK/T_CRACKED/hay): single frames, so Renderer.cpp tile loop now varies them from a world-position hash:
+  mirrored on about half the tiles (eras 0-5), and in eras 3, 4, 5 a brightness/cool jitter (0.90-1.06) plus 2-3 chip specks
+  (dark and light pixel; 2x2 in era 5). Eras 1/2 get no tint or specks (colour counts). Frames repainted with more wear:
+  era 0 (broken pattern, 2 colours), era 1 (scuffs, split slat), era 2 (dog-ear, scribble, stray page; same 4 colours), era 3
+  (face split, moss, rot, peeled strip), era 4 (rust streaks, bare-steel chip, weld, dent). Sheet layouts unchanged.
+- Earth depth tint, eras 3/4: tiles darken 7% and cool per row below the surface (max 3 steps), cap and deep row untouched.
+- Backgrounds: era 3 sky was 3 flat bands with hard edges, now 12-row Bayer-dithered seams; era 4 sky had 9 hard bands (21 px
+  each), now 6-row ordered-dither seams. Eras 0-2 backgrounds, props spacing and atmospheric depth NOT reworked (not reached).
+- Sprites: reviewed all era 0-4 player/enemy/boss sheets at 2-6x: frames animate, scale consistent, outlines per rules; no
+  change made. Weak spots noted: era 1 blob and flyer are low-contrast light grey on the light 4-shade scenery, era 1 and 2 flyer
+  is tiny; 1-bit Gran and Sam silhouettes are close.
+- Era 5 ground: now uses the Blender ground kit (ground_*.glb) through Models3D::drawGround(g, true): chunk kind 3, only earth
+  that has ground below it, warm tint (grass 206,188,112; earth 226,194,164; deep 206,184,166 x vertex colour). The matching 2D
+  tiles are skipped in Renderer (era 5, '#', solid below, kit present). Hay bales, cracked blocks, rocky undersides stay 2D.
+  Era 6 path unchanged (meadow_ false, same chunk hash).
+- Timings (software renderer, seed 3, 1280x720, 400 frames): era 3 7.2 s -> 7.2 s, era 4 7.2 s -> 7.2 s, era 5 19.3 s -> 22.7 s (+18%,
+  kit geometry). Era 6 not re-timed (unchanged path, glanced at a shot).
+- Shots: /tmp/c2/before and /tmp/c2/after (e<era>_<frame>.png; seed 3, 1280x720; not in the repo).
+- Files touched: Renderer.cpp (tile loop, one call in the 2.5D branch), Models3D.cpp/.h (meadow flag), SpriteGen.cpp (T_BLOCK),
+  bg/era3.inc, bg/era4.inc (sky), assets/art/era0-4 tiles.png, era3/era4 bg_0.png.
+- For cycles 3/4: era 5 contact shadow under the new ground block, fence/stooks sitting on it, the saturated front lawn; eras 0-2
+  backgrounds; era 1/2 enemy contrast; era 5 frame time (kit tiles could use a simpler LOD).
+
 ## 2026-11-08 (night): review cycle 1 - pixel-era ground wear and the Blender ground kit
 
 - Correction to the earlier note: bpy 5.2 IS installed here; tools/blender/make_ground.py now exists and runs

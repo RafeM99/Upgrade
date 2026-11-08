@@ -471,6 +471,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             rlDrawRenderBatchActive();
             models_.begin(g, c3);
             models_.drawMeadow(g);
+            models_.drawGround(g, true);
             rlDrawRenderBatchActive();
             BeginShaderMode(world_);
         }
@@ -501,6 +502,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
             char ch = tileAt(tx, ty);
             if (ch == '.') continue;
             if (full3D) continue;   // the 3D stage models its blocks (Models3D::drawGround)
+            // the 2.5D stage models earth that has ground under it from the same kit, in warm tones
+            if (era == 5 && ch == '#' && (g.level.isSolidChar(tileAt(tx, ty + 1)) || ty + 1 >= LEVEL_H) && models_.hasGroundKit()) continue;
             int frame = T_GROUND;
             bool above = g.level.isSolidChar(tileAt(tx, ty - 1));
             bool below = g.level.isSolidChar(tileAt(tx, ty + 1));
@@ -575,10 +578,10 @@ void Renderer::drawEra(Game& g, int era, float swing)
             // tiles, and in the 16- and 32-bit stages a little lighter or darker and with chips
             // (a dark and a light speck pixel) on the surface. The 4-shade and 8-bit stages keep
             // their colour counts: no tint, no specks.
-            const bool platform = lowRes(era) && (frame == T_BLOCK || frame == T_CRACKED);
+            const bool platform = (lowRes(era) || era == 5) && (frame == T_BLOCK || frame == T_CRACKED);
             unsigned ph = hashXY(tx * 5 + 11, ty * 3 + 7);
             if (platform && (ph & 1)) { srcR.x += srcR.width; srcR.width = -srcR.width; }
-            if (platform && era >= 3) {
+            if (platform && era >= 3) {   // (2.5D too: the hay bales)
                 float k = 0.9f + 0.16f * (float)((ph >> 3) & 255) / 255.0f;
                 tint = Color{(unsigned char)std::min(255.0f, 255 * k), (unsigned char)std::min(255.0f, 255 * k),
                              (unsigned char)std::min(255.0f, 255 * (k + 0.03f)), 255};
@@ -595,12 +598,14 @@ void Renderer::drawEra(Game& g, int era, float swing)
             tileBlock(A.tiles, srcR, tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
             if (platform && era >= 3) {
                 const float px = 1.0f / TILE_PX[era];
-                Color dk = era == 3 ? hexc(0x2a1810) : hexc(0x3c1c20), lt = era == 3 ? hexc(0xf6d894) : hexc(0xd88a64);
+                Color dk = era == 3 ? hexc(0x2a1810) : (era == 5 ? hexc(0x8a5a2e) : hexc(0x3c1c20));
+                Color lt = era == 3 ? hexc(0xf6d894) : (era == 5 ? hexc(0xfae6a0) : hexc(0xd88a64));
+                const int big = era == 5 ? 2 : 1;   // a speck is 2 x 2 texels of the 64 px 2.5D tile
                 for (int s = 0; s < 3; ++s) {
                     unsigned sh = hashXY(tx * 13 + s * 31, ty * 17 + 5);
                     int sx = 1 + (int)(sh % (unsigned)(TILE_PX[era] - 3)), sy = 2 + (int)((sh >> 8) % (unsigned)(TILE_PX[era] - 5));
                     if (s == 2 && (sh >> 20) % 3) continue;   // the third only on some tiles
-                    solidQuad(tx + sx * px, ty + sy * px, px * (1 + (int)((sh >> 16) & 1) * (s != 1)), px, 0.021f, s == 1 ? lt : dk);
+                    solidQuad(tx + sx * px, ty + sy * px, px * big * (1 + (int)((sh >> 16) & 1) * (s != 1)), px * big, depth * 0.5f + 0.021f, s == 1 ? lt : dk);
                 }
             }
             // overlays in the air next to a grass cap: tufts and flowers standing on it, and grass

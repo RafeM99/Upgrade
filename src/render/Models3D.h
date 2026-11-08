@@ -19,7 +19,8 @@ public:
     // Sets the lighting for this frame. Call inside BeginMode3D.
     void begin(Game& g, const Camera3D& cam);
     void drawScenery(Game& g);                      // lawns, fence, trees, houses, lamps, Gran's cottage
-    void drawGround(Game& g);                       // the solid tiles as grass-topped blocks
+    bool hasGroundKit() const { return groundKit_; }
+    void drawGround(Game& g, bool meadow = false);                       // the solid tiles as grass-topped blocks
     void drawMeadow(Game& g);                       // 2.5D stage: hay, stooks, hedge, track, flowers, grass
     static bool modelsTile(char c) { return c == '#' || c == '=' || c == '|'; }   // drawn by drawGround
     void drawPlayer(Game& g, int p);
@@ -103,6 +104,7 @@ private:
     Model groundMod_[3][6]{};   // Blender ground kit: grass top, earth, deep earth
     int groundN_[3] = {0, 0, 0};
     bool groundKit_ = false;
+    bool meadow_ = false;   // baking the 2.5D meadow's ground (warm tint, only the kit's tiles)
     void loadGroundKit();
     void unloadGroundKit();
     void loadParts(Model* out, const char* const* names, int n, bool& ready);
