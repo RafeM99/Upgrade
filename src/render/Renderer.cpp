@@ -569,8 +569,40 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 char n = tileAt(tx + dx, ty + dy);
                 return !(g.level.isSolidChar(n) || n == '1' || n == '2');
             };
+            Rectangle srcR = frameRect(A.tiles, frame, 1, 1, era);
+            // The platform tiles are one frame each, so a row of them would repeat on a beat. Vary
+            // them from a hash of the tile's position (never the camera): mirrored on about half the
+            // tiles, and in the 16- and 32-bit stages a little lighter or darker and with chips
+            // (a dark and a light speck pixel) on the surface. The 4-shade and 8-bit stages keep
+            // their colour counts: no tint, no specks.
+            const bool platform = lowRes(era) && (frame == T_BLOCK || frame == T_CRACKED);
+            unsigned ph = hashXY(tx * 5 + 11, ty * 3 + 7);
+            if (platform && (ph & 1)) { srcR.x += srcR.width; srcR.width = -srcR.width; }
+            if (platform && era >= 3) {
+                float k = 0.9f + 0.16f * (float)((ph >> 3) & 255) / 255.0f;
+                tint = Color{(unsigned char)std::min(255.0f, 255 * k), (unsigned char)std::min(255.0f, 255 * k),
+                             (unsigned char)std::min(255.0f, 255 * (k + 0.03f)), 255};
+            }
+            // earth in the 16- and 32-bit stages darkens and cools with every row below the surface
+            // (the grass cap row is untouched, the deep row has its own art)
+            if (era >= 3 && lowRes(era) && !platform && ch == '#' && above && ty < LEVEL_H - 1) {
+                int rows = 0;
+                while (rows < 6 && ty - rows - 1 >= 0 && g.level.isSolidChar(tileAt(tx, ty - rows - 1))) ++rows;
+                float k = 1.0f - 0.07f * std::min(rows - 1, 3);
+                if (rows >= 1) tint = Color{(unsigned char)(255 * k), (unsigned char)(255 * k), (unsigned char)(255 * std::min(1.0f, k + 0.05f)), 255};
+            }
             float d = (ch == '1' || ch == '2') ? depth * 0.6f : depth;
-            tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            tileBlock(A.tiles, srcR, tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            if (platform && era >= 3) {
+                const float px = 1.0f / TILE_PX[era];
+                Color dk = era == 3 ? hexc(0x2a1810) : hexc(0x3c1c20), lt = era == 3 ? hexc(0xf6d894) : hexc(0xd88a64);
+                for (int s = 0; s < 3; ++s) {
+                    unsigned sh = hashXY(tx * 13 + s * 31, ty * 17 + 5);
+                    int sx = 1 + (int)(sh % (unsigned)(TILE_PX[era] - 3)), sy = 2 + (int)((sh >> 8) % (unsigned)(TILE_PX[era] - 5));
+                    if (s == 2 && (sh >> 20) % 3) continue;   // the third only on some tiles
+                    solidQuad(tx + sx * px, ty + sy * px, px * (1 + (int)((sh >> 16) & 1) * (s != 1)), px, 0.021f, s == 1 ? lt : dk);
+                }
+            }
             // overlays in the air next to a grass cap: tufts and flowers standing on it, and grass
             // hanging over a cliff edge (the flat stages: in 2.5D the edge has its own side face)
             if (groundTop) {

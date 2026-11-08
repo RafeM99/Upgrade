@@ -3236,7 +3236,7 @@ void drawTile(Canvas& c, int t)
         Col line = eraCol(0x2a1a1a, 0.0f);
         switch (g_era) {
         case 0:   // 1-bit, the last winter night: an outlined box with snow lying on it
-            stamp(c, {"########", "###.####", "#.#..#.#", "#......#", "#....#.#", "#...#..#", "#..#...#", "########"}, 0, 0);
+            stamp(c, {"########", "##..####", "#.#..#.#", "#.#....#", "#....#.#", "#.#..#.#", "#..##..#", "###.####"}, 0, 0);
             break;
         case 1: { // 4-shade, 2014: a laundry-crate board, dark wood so it stands off the pale shirts
             const float px = 1.0f / c.tpu;
@@ -3248,6 +3248,12 @@ void drawTile(Canvas& c, int t)
             c.rect(0.55f, 4 * px, 0.25f, px, solid(tone(2)));
             c.rect(0.47f, 0.08f, 2 * px, 0.84f, solid(tone(0)));      // the crate's upright with two nails
             c.dot(0.2f, 0.28f, tone(0)); c.dot(0.8f, 0.74f, tone(0));
+            // wear: a scuffed corner, a split in the lower slat, a worn pale patch
+            c.rect(0, 2 * px, 2 * px, px, solid(tone(3)));
+            c.rect(0.6f, 0.5f + 3 * px, 0.14f, px, solid(tone(0)));
+            c.rect(0.62f, 0.5f + 4 * px, 0.06f, px, solid(tone(0)));
+            c.rect(0.72f, 0.14f, 0.1f, px, solid(tone(1)));
+            c.rect(0.06f, 0.78f, 0.12f, px, solid(tone(1)));
             break;
         }
         case 6: { // 3D: wooden planks as garden decking (unused in 3D: the blocks are modelled)
@@ -3272,6 +3278,13 @@ void drawTile(Canvas& c, int t)
             book(px * 0.01f, 0, 1 - px, hex(0x1e8a4c));
             book(-0.66f, 0.5f, 1 - px, hex(0x6a2c6e));
             book(0.34f, 0.5f, 1 - px, hex(0x6a2c6e));
+            // wear: a dog-eared corner, a scuffed cover, a scribble and a stray page
+            c.rect(1 - 3 * px, 0, 3 * px, px, solid(gap));
+            c.rect(1 - 2 * px, px, 2 * px, px, solid(gap));
+            c.dot(0.3f, 0.22f, gap); c.dot(0.3f + 2 * px, 0.22f, gap);
+            c.rect(0.15f, 0.5f + 3 * px, 3 * px, px, solid(gap));
+            c.rect(0.55f, 0.5f + 7 * px, px, px, solid(pages));
+            c.rect(0.62f, 0.5f + 9 * px, 2 * px, px, solid(pages));
             break;
         }
         case 3: { // 16-bit, the camping trip: a split log, bark below, the pale cut face on top
@@ -3290,6 +3303,16 @@ void drawTile(Canvas& c, int t)
             }
             c.ellipse(0.62f, 0.56f, 0.06f, 0.05f, solid(barkD));         // a knot
             c.dot(0.6f, 0.53f, barkL);
+            // wear: a split in the sawn face, rot spots and a moss patch on the bark, a peeled strip
+            c.rect(0.7f, 0.04f, px, 0.2f, solid(barkD));
+            c.rect(0.7f + px, 0.14f, px, 0.08f, solid(barkD));
+            Col moss = hex(0x5a8a3a), mossL = hex(0x8ab84a);
+            c.rect(0.04f, 0.3f + px, 0.18f, 2 * px, solid(moss));
+            c.rect(0.06f, 0.3f + px, 0.08f, px, solid(mossL));
+            c.dot(0.16f, 0.3f + 3 * px, moss);
+            c.rect(0.78f, 0.62f, 0.1f, 2 * px, solid(barkD));
+            c.dot(0.4f, 0.7f, barkD); c.dot(0.92f, 0.5f, barkL);
+            c.rect(0.28f, 0.64f, 0.2f, px, solid(barkL));
             break;
         }
         case 4: { // 32-bit, the train: a riveted plate girder in oxide red, flanges lit from above
@@ -3310,6 +3333,20 @@ void drawTile(Canvas& c, int t)
                 c.dot(rx, 0.1f, hi); c.dot(rx + px, 0.1f + px, webD);
                 c.dot(rx, 0.88f, webL);
             }
+            // wear: rust streaks running down from the rivets, a patch where the paint is chipped to bare
+            // steel, a weld bead, a dent in the lower flange
+            Col rust = hex(0x6a3a22), rustL = hex(0xb06a3a), steel = hex(0xa89a96);
+            for (float rx : {0.31f, 0.81f}) {
+                c.rect(rx, 0.12f, px, 0.14f, solid(rust));
+                c.rect(rx, 0.34f, px, 0.2f, solid(rust));
+                c.dot(rx + px, 0.4f, rustL);
+            }
+            c.rect(0.46f, 0.42f, 3 * px, 2 * px, solid(steel));
+            c.dot(0.46f + 3 * px, 0.42f + px, steel);
+            c.dot(0.47f, 0.42f + 3 * px, rust);
+            c.rect(0.9f, 0.3f, 2 * px, 0.34f, solid(webD));
+            c.rect(0.2f, 0.84f, 3 * px, px, solid(webD));
+            c.rect(0.03f, 0.58f, 0.07f, px, solid(rustL));
             break;
         }
         default: { // 2.5D, the hay meadow: a hay bale, bevelled on every edge, tied with twine.
