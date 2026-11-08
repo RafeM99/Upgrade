@@ -849,21 +849,6 @@ void Hud::drawTitle(Game& g)
         text(pad.substr(0, nl), 640, 558, 20, hexc(0xe8e6e0), true, false);
         if (nl != std::string::npos) text(pad.substr(nl + 1), 640, 588, 20, hexc(0xe8e6e0), true, false);
     }
-    // which controllers the game can see, so a player can tell at once if theirs works
-    {
-        auto pads = g.input.pads();
-        std::string line;
-        Color c = hexc(0xb8b6b0);
-        if (pads.empty()) line = T("pads_none");
-        for (auto& pd : pads) {
-            std::string one = pd.name + ": ";
-            if (!pd.usable) { one += T("pads_unknown"); c = hexc(0xffb070); }
-            else if (pd.player >= 0) { one += T(pd.player == 0 ? "p1_name" : "p2_name"); c = hexc(0x9fe8a8); }
-            else one += T("pads_spare");
-            line += (line.empty() ? "" : "   ") + one;
-        }
-        text(line, 640, 648, 20, c, true, false);
-    }
 }
 
 void Hud::drawPause(Game& g)

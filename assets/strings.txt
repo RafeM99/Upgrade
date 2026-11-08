@@ -10,7 +10,7 @@ title_join = Player 2: press any of your buttons to join
 title_p2_ready = Player 2 is here!
 title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
 title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
-title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B ability   Y second ability   Start pause\nThe first pad plays Gran, the second plays Sam.
+title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B ability   Y second ability   Start pause
 
 p1_name = GRAN
 p2_name = SAM
