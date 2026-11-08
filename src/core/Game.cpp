@@ -93,8 +93,13 @@ void Game::shutdown()
 void Game::startRun()
 {
     screen = Screen::Playing;
-    era = std::max(0, std::min(art::LAST_ERA, opt.startEra));
-    bar = 0;
+    secret = secretNext || opt.startEra == 10;
+    secretNext = false;
+    secretLives = 4;
+    secretCycle = 0;
+    secretPower = 6;
+    era = secret ? art::LAST_ERA : std::max(0, std::min(art::LAST_ERA, opt.startEra));
+    bar = secret ? 100.0f : 0;   // the Forgetting is waiting at once
     score = 0;
     time = 0;
     enemies.clear();
@@ -304,6 +309,7 @@ void Game::updateTitle()
     if (input.menuDown()) d = (d + 1) % DIFF_COUNT;
     for (int n = 0; n < DIFF_COUNT; ++n) if (IsKeyPressed(KEY_ONE + n) || IsKeyPressed(KEY_KP_1 + n)) d = n;
     if (d != difficulty) { difficulty = d; audio.play("select"); return; }
+    if (IsKeyPressed(KEY_ZERO) || IsKeyPressed(KEY_KP_0)) { secretNext = true; audio.play("unlock"); startRun(); return; }   // the secret level
     bool go = p1.any || IsKeyPressed(KEY_ENTER) || (players[1].joined && p2.jumpPressed);
     for (int k = KEY_A; k <= KEY_Z && !go; ++k) go = IsKeyPressed(k) && k != KEY_P;
     if (go) {
@@ -603,6 +609,7 @@ void Game::updatePlaying(float dt)
         if (boss.defeated) {
             boss.active = false;
             bossBeatenThisEra = true;
+            if (secret) { secret = false; screen = Screen::Title; players[1].joined = false; time = 0; era = 0; audio.setEra(0); return; }
             if (era < art::LAST_ERA) beginEraTransition();
             else startEnding();
             return;
@@ -815,11 +822,13 @@ void Game::updatePlaying(float dt)
     // ---- bar full: the Forgetting gathers itself (mini-boss), then the memory returns
     if (bar >= 100.0f && !boss.active && !transActive) {
         if (config().b("boss.enabled", true) && !bossBeatenThisEra) {
-            boss.start(cam.x, tier(), config().i("boss.base_hits", 2) + powerTuning().extraHits, config().i("boss.hits_per_era", 1), era);
+            boss.start(cam.x, tier(), secret ? 24 + powerTuning().extraHits * 4 : config().i("boss.base_hits", 2) + powerTuning().extraHits,
+                       secret ? 0 : config().i("boss.hits_per_era", 1), era);
             startBossPowers();
             audio.play("boss_appear");
             cam.addShake(0.6f);
-            if (storyOn()) story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
+            if (secret) showBanner("ERA 10: THE FORGETTING UNBOUND", "Every power. Gran has 4 lives.", 3.5f);
+            else if (storyOn()) story.showBars(T("story_boss_label"), T("boss_name_" + std::to_string(era)), T("boss_says_" + std::to_string(era)), 3.4f);
             else showBanner(T("boss_name_" + std::to_string(era)), T("boss_hint_short"), 2.5f);
             events().bossAppeared.emit();
         } else if (era < art::LAST_ERA) beginEraTransition();
@@ -954,6 +963,12 @@ void Game::hurtPlayer(int p, bool fromWall)
 void Game::fadePlayer(int p)
 {
     Player& pl = players[p];
+    if (secret && p == 0 && secretLives > 0) {   // Gran's four lives: each time she fades costs one
+        --secretLives;
+        showBanner(secretLives > 0 ? "GRAN: " + std::to_string(secretLives) + (secretLives == 1 ? " LIFE LEFT" : " LIVES LEFT") : "GRAN: NO LIVES LEFT",
+                   secretLives > 0 ? "Sam can bring her back." : "The Forgetting wins this time.", 2.0f);
+        if (secretLives <= 0 && lostTimer <= 0) memoryLost();
+    }
     pl.faded = true;
     pl.fadedTime = 0;
     pl.reviveProgress = 0;
@@ -986,6 +1001,11 @@ void Game::memoryLost()
 
 void Game::respawnAfterLoss()
 {
+    if (secret && secretLives <= 0) {   // out of lives: back to the title
+        secret = false; screen = Screen::Title; players[1].joined = false; time = 0; era = 0; audio.setEra(0);
+        boss = Boss(); powers.reset();
+        return;
+    }
     clearHistory();
     powers.freezeT = powers.pullT = 0;
     if (!boss.active) bar = std::max(0.0f, bar - config().f("memory.lost_penalty", 10.0f));

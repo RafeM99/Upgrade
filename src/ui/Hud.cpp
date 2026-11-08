@@ -800,6 +800,7 @@ void Hud::drawPlaying(Game& g)
     (void)hintBox;
 
     powerUpCorners(g);
+    if (g.secret) text("GRAN  " + std::string(g.secretLives, '*') + std::string(4 - g.secretLives, '-') + "   (ERA 10)", 640, 686, 22, hexc(0xffd890), true, true);
     if (g.bannerT > 0) banner(g, below);
 }
 

@@ -67,6 +67,12 @@ public:
     std::vector<Enemy> enemies;
     Boss boss;
     bool bossBeatenThisEra = false;
+    // The secret level, "era 10" (--era 10, or 0 on the title screen): the Forgetting unbound, with every
+    // boss power in turn and many more hits, while Gran has only 4 lives. Everything is in 3D (stage 6).
+    bool secret = false, secretNext = false;
+    int secretLives = 4;
+    int secretPower = 6;         // the boss power being announced / used (cycles through the timed ones)
+    int secretCycle = 0;
     std::vector<Fragment> frags;
     std::vector<PowerUp> powerups;
     float wallX = -8, wallSpeedNow = 0, wallSlowTime = 0;

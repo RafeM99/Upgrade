@@ -1,5 +1,10 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 secret level "era 10"
+- Done: `--era 10`, or press 0 on the title screen. 3D stage (6), the Forgetting appears at once with 24 hits (+4 per difficulty step), uses every power in turn (clock, bell, storm, scarecrow, pull-back) plus shirt rewind and train echoes, powers 25-50% more often. Gran has 4 lives (each fade costs one; 0 = back to title); beating it returns to the title. HUD shows "GRAN ****".
+- Shared files touched (small edits, Camilla please review): src/core/GamePowers.cpp (secret-mode branches in startBossPowers, applyBossPower, updateBossPowers), src/core/Game.cpp/.h, src/ui/Hud.cpp (one line).
+- Notes: autoplay run to 900 frames: boss appears, powers fire, no errors. Not balanced by hand.
+
 ## 2026-11-08 islands v4: removed the grass cap cube (z-fought with the tile top = glitchy); core now starts 0.22 below the tile top so only the kit tile shows on top
 ## 2026-11-08 islands v3: green grass cap cube on top of every island top block (top was bare soil), core colour closer to the tile earth
 ## 2026-11-08 islands v2: kit tile front (grass-top tile on top row) over a plain dirt core cube (1.03 wide) so underside and ends are filled, no streaks

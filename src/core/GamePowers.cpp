@@ -32,7 +32,7 @@ const PowerTuning& Game::powerTuning() const { return POWER_TUNING[std::max(0, s
 void Game::startBossPowers()
 {
     powers.reset();
-    powers.timer = powerTuning().every * 0.6f;   // the first power comes a little sooner
+    powers.timer = powerTuning().every * (secret ? 0.5f : 0.6f);   // the first power comes a little sooner
     powers.healsLeft = powerTuning().heals;
     powers.lastHp = boss.hp;
 }
@@ -69,10 +69,10 @@ void Game::clearHistory()
 void Game::applyBossPower()
 {
     const PowerTuning& tu = powerTuning();
-    const int k = boss.kind;
+    const int k = secret ? secretPower : boss.kind;
     powers.label = T("power_name_" + std::to_string(k));
     powers.labelT = 2.0f;
-    powers.timer = tu.every;
+    powers.timer = secret ? tu.every * 0.75f : tu.every;
     audio.play("unlock");
     if (opt.autoplay) TraceLog(LOG_INFO, "EVENT t=%.1f boss power %d (%s)", time, k, difficultyId(difficulty));
     cam.addShake(0.5f);
@@ -151,7 +151,7 @@ void Game::updateBossPowers(float dt)
     powers.freezeT = std::max(0.0f, powers.freezeT - dt);
     powers.rainT = std::max(0.0f, powers.rainT - dt);
     powers.rushT = std::max(0.0f, powers.rushT - dt);
-    const int k = boss.kind;
+    const int k = secret ? 6 : boss.kind;   // the secret level uses every power in turn
 
     // ---- announce, then use, an active power while the boss hovers
     if (powers.warnT > 0) {
@@ -161,8 +161,9 @@ void Game::updateBossPowers(float dt)
                powers.rainT <= 0 && powers.rushT <= 0 && powers.pullT <= 0) {
         powers.timer -= dt;
         if (powers.timer <= 0) {
+            if (secret) { static const int order[5] = {0, 2, 3, 5, 6}; secretPower = order[secretCycle++ % 5]; }
             powers.warnT = tu.warn;
-            powers.label = T("power_warn_" + std::to_string(k));
+            powers.label = T("power_warn_" + std::to_string(secret ? secretPower : k));
             powers.labelT = tu.warn;
             audio.play("slow");
         }
@@ -193,7 +194,7 @@ void Game::updateBossPowers(float dt)
     if (boss.hp < powers.lastHp) powers.sinceHit = 0;
     powers.lastHp = boss.hp;
     if (powers.sinceHit >= 0) powers.sinceHit += dt;
-    if (k == 1 && powers.sinceHit >= tu.healWindow && powers.healsLeft > 0 && boss.hp > 0 && boss.hp < boss.maxHp) {
+    if ((k == 1 || secret) && powers.sinceHit >= tu.healWindow && powers.healsLeft > 0 && boss.hp > 0 && boss.hp < boss.maxHp) {
         boss.hp += 1;
         powers.lastHp = boss.hp;
         powers.healsLeft--;
@@ -203,12 +204,12 @@ void Game::updateBossPowers(float dt)
         audio.play("revive");
         particles.burst(boss.x, boss.y, 30, Color{230, 225, 210, 255}, 5, 0.6f, 0.15f);
         if (opt.autoplay) TraceLog(LOG_INFO, "EVENT t=%.1f boss power 1 rewinds to %d hp", time, boss.hp);
-    } else if (k == 1 && powers.sinceHit >= tu.healWindow) {
+    } else if ((k == 1 || secret) && powers.sinceHit >= tu.healWindow) {
         powers.sinceHit = -1;
     }
 
     // ---- the Last Train: record each charge, then send its echoes down the same line
-    if (k == 4) {
+    if (k == 4 || secret) {
         if (boss.state == 2) powers.curPath.push_back({boss.x, boss.y});
         if (boss.landed && !powers.curPath.empty()) {
             for (int i = 0; i < tu.echoes; ++i) {
