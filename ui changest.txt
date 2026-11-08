@@ -1,0 +1,72 @@
+Bugs, worst first
+
+The pendulum pokes through the clock (src/render/Models3D.cpp:841). At its normal swing the weight reaches 0.21 units from the centre, but the window edge sits at 0.19. When the clock charges, the weight reaches 0.33 and passes out through the side of the case, which ends at 0.26. Fix: hold the angry swing to 0.3 radians or below, or widen the window.
+The boss’s hit flash barely shows in 3D (src/render/Models3D.cpp:989). The flash colour is multiplied onto the model, and multiplying darkens. On the dark purple boss each colour value moves by under 15 points out of 255. Faded Gran has the same fault (src/render/Models3D.cpp:922): she goes darker instead of grey. Fix: add a “flash” and a “grey” setting to the 3D shader (assets/shaders/lit3d.fs) and blend towards white or grey there.
+See-through characters show their insides (render 2). This affects Faded Gran, the flicker after a hit, and the boss fading out. Knee balls, shoulder caps and the head inside the hair all show as dark blobs. Fix: draw each character once to depth only, then again in colour. Or swap transparency for a dither pattern, which suits the pixel theme.
+The 3D stages have no anti-aliasing. The request for 4x smoothing (src/core/Game.cpp:27) only applies to the window. The 3D world is drawn into a separate image without it (src/render/Renderer.cpp:207). Fence rails, grass blades and glasses will shimmer. Fix: add an anti-aliasing pass in post.fs for stages 5 and 6.
+On a Retina Mac the 3D renders at half resolution and looks soft. The window never asks for high DPI. This affects Rafale’s Mac.
+2.5D and 3D get black bars on any screen not 16:9 (src/render/Renderer.cpp:236). The pixel stages fill the screen, so on a 16:10 MacBook bars appear at the big upgrade moment.
+Gran’s glasses sink into her face (render 1). The rims sit at 0.175 but the face surface is at 0.178 to 0.189, so the inner half of each rim and the bridge are buried.
+The boss’s eye is hidden at the angle the game uses (render 4). The game turns it 40 degrees from the camera (src/render/Models3D.cpp:998). The eye sits deep inside the dome and the brow covers its top.
+Two stray files at the root of main, “the breif sort of” and “what just got created”, hold an old 4-stage brief. The game has 7 stages, so any Claude reading them picks up the wrong rules.
+
+Design tells that look AI-generated
+
+The final boss is a stock cyclops octopus with eye stalks and antennae, close to a Dungeons and Dragons beholder. Every other boss is an object from the memory (clock, shirt, bell, train). This one has no link to Gran’s story.
+Gran is built from about 15 overlapping balls. The fringe is a flat disc that reads as a beret, and every feature is the same soft blob.
+The detail is the wrong size for the camera. At real game height (render 3, about 96 pixels) the buttons, cheeks and glasses turn to noise.
+Gran is a Blender model and Sam is built from code. The two partners don’t match on screen.
+The trees, blob and umbrella use a low-detail ball (src/render/Models3D.cpp:61) with visible corners. They sit next to smooth Blender meshes.
+The pebbles in the 3D ground are still stamped: two per tile, same size, same colour (src/render/Models3D.cpp:418). This was the first point in the earlier critique.
+The scenery spacing is too even: a fence post every 1.0 unit, a lamp slot every 3. It reads as generated.
+In the 2D sprites (render 5) the clock and boss are almost identical in stages 4, 5 and 6, only at higher resolution. The 1-bit clock reads as a skull. The blob is the same shape in every stage with new colours.
+post.fs works out a vignette and two other values and never uses them. Its header describes a scaling method the code no longer uses. Reviewers spot this kind of leftover in generated code.
+
+How to build a better grandfather clock (Blender)
+
+The clock is built from boxes in code today, and the trunk is too short. A real longcase clock splits roughly 22% base, 50% trunk, 28% hood. Build it in Blender and export it in parts, the same way as Gran (tools/blender/make_models.py), so the code still animates it.
+
+Set up the scene: Z up, front facing +X, total height 1.7 units.
+Plinth: cube 0.48 wide, 0.36 tall, 0.30 deep. Add a Bevel modifier, width 0.008, 2 segments.
+Moulding above the plinth: select the top face, inset 0.02, extrude up 0.03, scale to 1.08. Repeat once for a stepped edge.
+Trunk: cube 0.38 wide, 0.85 tall, 0.26 deep. Inset the front face by 0.05 to make the door, then push it in 0.01.
+Window: cut a round window (a “lenticle”, 0.16 across) in the door at the height of the pendulum weight. Only the weight shows through it, so it never hits a frame.
+Hood: cube 0.50 wide, 0.47 tall, 0.32 deep, with the same stepped moulding underneath.
+Columns: two cylinders at the front corners, radius 0.025, 12 sides, with small cube caps top and bottom.
+Arched top: put a half circle (radius 0.15) on top of a 0.30 square dial. This is the classic “break-arch” shape.
+Swan-neck top: draw an S-curve from the side, extrude it 0.04 thick, and mirror it. Add a brass ball (0.04) in the middle and one on each side.
+Dial: cylinder radius 0.14, 32 sides, ivory 0xefe6cf. Add a brass ring (torus, outer 0.14, thickness 0.008) and 12 small boxes as hour marks.
+Hands: make them as separate flat spade-shaped meshes, pivot at the dial centre.
+Face: put the eyes and brows in the arch above the dial, where a moon disc normally sits. The hands then never cross the eyes, and the face reads as the clock’s own.
+Feet: two carved bracket feet, pivot at the ankle, so the walk uses the clock’s real feet.
+Colours: dark walnut 0x5a3420 case, lighter 0x8a5a34 edge on the door, brass 0xc89a3c. The dark case against the light dial makes the face readable at 96 pixels.
+Shading: auto smooth at 30 degrees. Keep it to about 1,500 triangles.
+Export these as separate .glb files: case, pendulum (pivot at its hanging point), hour hand, minute hand, left foot, right foot.
+Test: render it 96 pixels tall. If you can’t tell it’s an angry clock at that size, simplify.
+
+How to build a better Forgetting
+
+Make it something from home. I suggest a ball of Gran’s dark knitting wool coming unravelled: unravelling wool reads as memory unravelling. This keeps the current setup of one body, chained tentacle pieces and a tip, so the animation code barely changes.
+
+Core: UV sphere radius 0.9, 32 by 16. Add a Displace modifier with a Clouds texture, size 0.25, strength 0.05, for a lumpy wool surface.
+Yarn wraps: add about 20 tori (outer 0.9, thickness 0.04), each turned to a random angle around the sphere. This is the standard way to model a ball of yarn.
+Needles: two cylinders, radius 0.025, length 1.4, crossing through the ball at 30 degrees, with a 0.05 ball on each end. Light steel grey.
+Eye: cut a hollow in the front with a Boolean. Fill it with flat near-black, add a thin cyan ring, and put a small white pupil in it as a separate part so the code turns it towards the players.
+Tentacle piece: two cylinders, radius 0.06, length 0.40, 16 sides, side by side, with a Simple Deform Twist of 180 degrees. This gives two-ply yarn.
+Tip: a frayed end, one cone splitting into 3 or 4 thin cones fanning out.
+Lengths: ask the code to use 3 to 6 pieces per tentacle instead of 5 for all, so the outline varies.
+Colour: wool grey 0x5e5a66 on the body, getting lighter towards the tips so the strands look like they’re fading. It also sets the boss against Gran’s warm red cardigan.
+
+If the team keeps the alien instead
+
+Pull the eye forward so it sticks out of the dome by 0.2, enlarge it to radius 0.42 and remove the brow ball.
+Turn it 0.3 radians from the camera instead of 0.7.
+Move the suckers to the inner side of the tentacles. They face outward now.
+Drop either the antennae or the eye stalks. Two kinds of spikes looks thrown together.
+
+Fixes for Gran
+
+Move the glasses forward to 0.2 and make them a bright colour so they read as two rings.
+Make the head about 1.3 times bigger.
+Cut the buttons and cheeks.
+Build Sam in Blender to the same standard.
