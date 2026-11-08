@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "render/Models3D.h"
 #include "core/Game.h"
 #include "core/Paths.h"
@@ -137,6 +138,7 @@ void Models3D::loadGroundKit()
     static const char* const kinds[3] = {"grass", "earth", "deep"};
     static const int counts[3] = {6, 5, 4};
     groundKit_ = false;
+    if (std::getenv("GAMEJAM_NOKIT")) return;
     for (int k = 0; k < 3; ++k) {
         groundN_[k] = 0;
         for (int v = 0; v < counts[k]; ++v) {
@@ -149,13 +151,31 @@ void Models3D::loadGroundKit()
         }
     }
     groundKit_ = true;
+    liteKit_ = true;
+    for (int k = 0; k < 3 && liteKit_; ++k)
+        for (int v = 0; v < counts[k]; ++v) {
+            std::string path = assetPath(std::string("models/groundlite_") + kinds[k] + "_" + std::to_string(v) + ".glb");
+            Model m = FileExists(path.c_str()) ? LoadModel(path.c_str()) : Model{};
+            if (m.meshCount == 0 || !m.meshes[0].colors) {
+                if (m.meshCount) UnloadModel(m);
+                for (int kk = 0; kk <= k; ++kk)
+                    for (int vv = 0; vv < counts[kk]; ++vv)
+                        if (liteMod_[kk][vv].meshCount && (kk < k || vv < v)) { UnloadModel(liteMod_[kk][vv]); liteMod_[kk][vv] = Model{}; }
+                liteKit_ = false;
+                break;
+            }
+            liteMod_[k][v] = m;
+        }
 }
 
 void Models3D::unloadGroundKit()
 {
     for (int k = 0; k < 3; ++k)
         for (int v = 0; v < groundN_[k]; ++v) UnloadModel(groundMod_[k][v]);
-    groundKit_ = false;
+    if (liteKit_)
+        for (int k = 0; k < 3; ++k)
+            for (int v = 0; v < groundN_[k]; ++v) UnloadModel(liteMod_[k][v]);
+    groundKit_ = liteKit_ = false;
 }
 
 void Models3D::unloadParts(Model* parts, int n, bool& ready)
@@ -830,7 +850,7 @@ void Models3D::drawGround(Game& g, bool meadow)
     meadow_ = meadow;
     struct Done { Models3D* m; ~Done() { m->setMacro(0.0f); } } done{this};   // the ground noise off again
     int x0 = (int)std::floor(g.cam.left()) - 6, x1 = (int)std::ceil(g.cam.right()) + 18;
-    const int W = 16;
+    const int W = 8;   // narrow chunks: less off-screen geometry sent each frame (16 drew about twice the visible columns)
     auto fdiv = [](int a, int b) { return (int)std::floor((float)a / b); };
     int c0 = fdiv(x0, W), c1 = fdiv(x1, W);
     for (int c = c0; c <= c1; ++c) {
@@ -912,7 +932,7 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                     int v = (int)(hashi(i, ty * 131 + 900 + kind) % (unsigned)n);
                     if (v == last) v = (v + 1 + (int)(hashi(i, ty + 77) % (unsigned)(n - 1))) % n;
                     last = v;
-                    part(groundMod_[kind][v], T(i + 0.5f, Y3(ty + 0.5f), zc), tint, 0, false);
+                    part((meadow_ && liteKit_ ? liteMod_ : groundMod_)[kind][v], T(i + 0.5f, Y3(ty + 0.5f), zc), tint, 0, false);
                 }
                 x = e + 1;
                 continue;

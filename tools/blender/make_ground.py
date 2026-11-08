@@ -34,6 +34,12 @@ from mathutils import Vector, noise
 
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
 OUT = args[0] if args else "assets/models"
+# --lite: the same tiles at about a third of the triangles (coarser lip and face grids, fewer pebbles
+# and blades), written as groundlite_*.glb; the 2.5D meadow (era 5) draws these
+LITE = "--lite" in args
+if LITE:
+    args = [a for a in args if a != "--lite"]
+    OUT = args[0] if args else "assets/models"
 os.makedirs(OUT, exist_ok=True)
 
 DY = 2.0  # half depth
@@ -139,7 +145,7 @@ class Tile:
             dmin, rlo, rhi, cap = 0.15, 0.028, 0.065, 4
         ptop = z_top - 0.12 if self.kind != "grass" else 0.1
         for (px, pz) in poisson(rng, 90, -0.4, 0.4, z_bot + 0.1, ptop, dmin):
-            if len(pebbles) >= cap:
+            if len(pebbles) >= (max(2, cap // 2) if LITE else cap):
                 break
             r = rlo + (rhi - rlo) * rng.random() ** 1.8
             pebbles.append((px, pz, r))
@@ -274,7 +280,7 @@ class Tile:
         self.b.mat = 1
         var = self.var
         gLit, gMid, gShade = hexc(0x86c24a), hexc(0x5aa84a), hexc(0x3c9a5c)
-        nu = 12
+        nu = 6 if LITE else 12
 
         def prof(x):
             w = win(x)
@@ -317,7 +323,7 @@ class Tile:
         var = self.var
         self.b.mat = 1
         gLit, gMid, gShade = hexc(0x86c24a), hexc(0x5aa84a), hexc(0x3c9a5c)
-        nu, nv = 5, 5
+        nu, nv = (3, 3) if LITE else (5, 5)
         y0, y1 = -DY - 0.0 + 0.38, DY
 
         def fn(i, j):
@@ -336,7 +342,7 @@ class Tile:
 
         self.b.grid(fn, nu, nv)
         # flat pebbles on the surface, sunk a third into the turf
-        if self.var in (2, 4):
+        if self.var in (2, 4) and not LITE:
             rng = self.rng
             for (px, py) in poisson(rng, 40, -0.35, 0.35, -1.2, 1.4, 0.45)[:2]:
                 r = rng.uniform(0.04, 0.07)
@@ -420,14 +426,14 @@ def build(kind, var):
     if kind == "grass":
         t.cap()
         t.top()
-        t.blades(12 + (var % 3) * 2)
-        t.face(0.21, -0.5, 10, True)
+        t.blades(7 if LITE else 12 + (var % 3) * 2)
+        t.face(0.21, -0.5, 5 if LITE else 10, True)
         t.stones()
         if var % 3 == 0:
             t.roots(1, 0.19)
         t.sides(True)
     else:
-        t.face(0.5, -0.5, 10, False)
+        t.face(0.5, -0.5, 5 if LITE else 10, False)
         t.stones()
         if kind == "earth":
             if var % 3 == 1:
@@ -496,5 +502,5 @@ if __name__ == "__main__":
     total = {}
     for kind, count in (("grass", 6), ("earth", 5), ("deep", 4)):
         for v in range(count):
-            total[(kind, v)] = export("ground_%s_%d" % (kind, v), build(kind, v))
+            total[(kind, v)] = export("ground%s_%s_%d" % ("lite" if LITE else "", kind, v), build(kind, v))
     print("tris min/max", min(total.values()), max(total.values()))

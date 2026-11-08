@@ -107,6 +107,8 @@ private:
     bool personReady_[2] = {false, false}, clockReady_ = false, forgetReady_ = false;
     Model groundMod_[3][6]{};   // Blender ground kit: grass top, earth, deep earth
     int groundN_[3] = {0, 0, 0};
+    Model liteMod_[3][6]{};     // the same kit at about half the triangles (groundlite_*.glb): the 2.5D meadow draws these
+    bool liteKit_ = false;
     bool groundKit_ = false;
     bool meadow_ = false;   // baking the 2.5D meadow's ground (warm tint, only the kit's tiles)
     void loadGroundKit();
