@@ -80,11 +80,14 @@ void setup(Game& g)
         default: th.U = k; th.tb = atLeast1(k * 3 / 2); th.ts = k; th.bt = 2 * k; break;
         }
     } else {
-        const int s = std::max(1, (int)std::lround(r.height / 720.0f));
-        th.U = 2 * s;   // modern stages: 2 px lines
-        th.tb = 3 * s;
-        th.ts = 2 * s;
-        th.bt = 4 * s;
+        // proportional to the height (1080 gave scale 2 from a rounded 1.5, so the text was a third
+        // too big and the centre panel's lines overlapped): 720 -> 2/3/2/4, 1080 -> 3/5/3/6
+        const float hs = r.height / 720.0f;
+        auto sc = [hs](float v) { return std::max(1, (int)std::lround(v * hs)); };
+        th.U = sc(2);   // modern stages: 2 px lines
+        th.tb = sc(3);
+        th.ts = sc(2);
+        th.bt = sc(4);
     }
     // Player names use the small text size on every stage, so each player panel is just a line
     // of name and a line of chips.
@@ -491,8 +494,10 @@ void centreBlock(Game& g, int x, int y, int w, int barH, Color pctCol)
         right = stX - centreSep();
     } else {
         int y2 = y + rh + centreRowGap();
-        txt(st, x, y2, th.ts, th.dim);
-        txt(sc, x + w - textW(sc, th.ts), y2, th.ts, th.fg);
+        // a narrow (4:3) window: the two would touch, so the second row drops one text size
+        const int ts2 = textW(st, th.ts) + textW(sc, th.ts) + 3 * th.ts <= w ? th.ts : std::max(1, th.ts - 1);
+        txt(st, x, y2 + (capH(th.ts) - capH(ts2)) / 2, ts2, th.dim);
+        txt(sc, x + w - textW(sc, ts2), y2 + (capH(th.ts) - capH(ts2)) / 2, ts2, th.fg);
     }
     txt(pct, right - textW(pct, th.ts), ty, th.ts, pctCol);
     const int barX = x + labW + lg;
