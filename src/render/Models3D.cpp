@@ -60,7 +60,7 @@ void Models3D::init()
     setLight(false);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
-    sphere_ = LoadModelFromMesh(GenMeshSphere(1, 7, 10));   // low-poly
+    sphere_ = LoadModelFromMesh(GenMeshSphere(1, 12, 18));   // smooth enough beside the Blender meshes
     cyl_ = LoadModelFromMesh(GenMeshCylinder(1, 1, 8));
     torus_ = LoadModelFromMesh(GenMeshTorus(0.12f, 2.0f, 28, 10));
     cone_ = LoadModelFromMesh(GenMeshCone(1, 1, 8));
@@ -320,21 +320,36 @@ void Models3D::drawScenery(Game& g)
     bool cotOn = cot > l - 8 && cot < r + 8;
     auto nearCot = [&](float x, float m) { return cotOn && std::fabs(x - cot) < m; };
 
-    // a low picket fence along the back of the path, with a gate at the cottage
+    // a low picket fence along the back of the path, with a gate at the cottage. Each post is
+    // hand-set: a little off its mark, a touch taller or shorter, now and then leaning.
     for (int x = (int)std::floor(l); x < (int)r; ++x) {
-        if (nearCot(x + 0.5f, 0.8f)) continue;
-        part(cube_, then(S(0.12f, 0.7f, 0.08f), T(x + 0.5f, 2.35f, -3.5f)), hexc(0xf4f0e6));
+        float px = x + 0.5f + (rndf(x, 301) - 0.5f) * 0.26f;
+        if (nearCot(px, 0.8f)) continue;
+        float ph = 0.66f + 0.1f * rndf(x, 302);
+        float lean = (rndf(x, 303) - 0.5f) * (hashi(x, 304) % 6 == 0 ? 0.16f : 0.04f);
+        Color pc = mixc(hexc(0xf4f0e6), hexc(0xe2dccd), rndf(x, 305));
+        part(cube_, then(then(then(S(0.12f, ph, 0.08f), T(0, ph / 2, 0)), MatrixRotateZ(lean)), T(px, 2.0f, -3.5f)), pc);
     }
     part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.5f, -3.46f)), hexc(0xe8e2d6), 0, false);
     part(cube_, then(S(wdt, 0.08f, 0.05f), T(mid, 2.2f, -3.46f)), hexc(0xe8e2d6), 0, false);
     if (cotOn) cottage(cot, -7.0f);
     drawGardenFront(g, g.cam.left() - 4, g.cam.right() + 10);
 
-    // near row: bushes, flower beds and lamps, just behind the fence
-    for (int k = (int)std::floor(l / 3); k <= (int)(r / 3); ++k) {
-        float x = k * 3.0f + 1.5f + (rndf(k, 31) - 0.5f) * 1.2f;
+    // near row: bushes, flower beds and lamps, just behind the fence. Narrow world-space cells,
+    // each one taken by chance unless the cell before it is taken, so the gaps run 2.5, 3.75, 5
+    // ... units and never repeat in a pattern.
+    auto rowTaken = [](int k) { return hashi(k, 30) % 100 < 58; };
+    auto slotKind = [&](int k) {   // -1 empty, 0 lamp, 1 flower bed, 2 bush
+        if (!rowTaken(k) || rowTaken(k - 1)) return -1;
+        unsigned kh = hashi(k, 32) % 8;
+        return kh < 2 ? 0 : (kh < 4 ? 1 : 2);
+    };
+    for (int k = (int)std::floor(l / 1.25f) - 1; k <= (int)(r / 1.25f); ++k) {
+        int kind = slotKind(k);
+        if (kind < 0) continue;
+        float x = k * 1.25f + 0.625f + (rndf(k, 31) - 0.5f) * 0.7f;
         if (nearCot(x, 4.5f)) continue;
-        int kind = (int)(hashi(k, 32) % 6);
+        if (kind == 0 && (slotKind(k - 2) == 0 || slotKind(k - 3) == 0 || slotKind(k - 4) == 0)) kind = 2;   // no lamps in a huddle
         // a lamp would poke through a platform: a bush instead. Standing behind the path, the 3/4
         // view lines it up on screen with the path columns where the line of sight from the
         // camera crosses the path (z 1 to -3): check those.
@@ -343,39 +358,44 @@ void Models3D::drawScenery(Game& g)
             float a = across(1.0f), b = across(-3.0f);
             if (!clearAbove(g, std::min(a, b) - 0.8f, std::max(a, b) + 0.8f)) kind = 2;
         }   // a lamp would poke through a platform: a bush
-        if (kind == 0) {   // street lamp
+        if (kind == 0) {   // street lamp (on the line clearAbove checks)
             float z = -4.3f;
             part(cyl_, then(S(0.07f, 2.6f, 0.07f), T(x, 2, z)), hexc(0x2a2a36));
             part(cube_, then(S(0.3f, 0.32f, 0.3f), T(x, 4.75f, z)), hexc(0xfff0c0), 1.0f);
             part(cube_, then(S(0.42f, 0.08f, 0.42f), T(x, 4.95f, z)), hexc(0x2a2a36));
-        } else if (kind == 1) {   // flower bed
-            for (int f = 0; f < 6; ++f) {
-                float fx = x - 1 + f * 0.4f, fz = -4.2f + std::sin(f * 2.1f) * 0.3f;
-                part(cyl_, then(S(0.03f, 0.35f, 0.03f), T(fx, 2, fz)), hexc(0x3a7a3a), 0, false);
-                part(sphere_, then(S(0.12f, 0.12f, 0.12f), T(fx, 2.4f, fz)), f % 2 ? hexc(0xf28cb4) : hexc(0xf7d73a));
+        } else if (kind == 1) {   // flower bed: a loose drift of 4 to 7 flowers
+            static const unsigned bed[4] = {0xf28cb4, 0xf7d73a, 0xe8364f, 0xf6f2e4};
+            int n = 4 + (int)(hashi(k, 34) % 4);
+            float w = 1.2f + 0.8f * rndf(k, 35);
+            for (int f = 0; f < n; ++f) {
+                int s = k * 8 + f;
+                float fx = x - w / 2 + w * (f + 0.15f + 0.7f * rndf(s, 36)) / n, fz = -4.2f + (rndf(s, 37) - 0.5f) * 0.6f;
+                float fh = 0.28f + 0.14f * rndf(s, 38), fr = 0.1f + 0.04f * rndf(s, 39);
+                part(cyl_, then(S(0.03f, fh, 0.03f), T(fx, 2, fz)), hexc(0x3a7a3a), 0, false);
+                part(sphere_, then(S(fr, fr * 0.85f, fr), T(fx, 2 + fh + 0.04f, fz)), hexc(bed[hashi(s, 40) % 4]));
             }
-        } else if (kind <= 3) {
+        } else {
             tree(x, -4.4f - rndf(k, 33) * 0.6f, k * 7 + 3, 3);   // a bush
         }
     }
     // middle row: trees of every kind
     for (int k = (int)std::floor(l / 3.5f); k <= (int)(r / 3.5f); ++k) {
         if (hashi(k, 41) % 5 >= 3) continue;
-        float x = k * 3.5f + (rndf(k, 42) - 0.5f) * 1.6f;
+        float x = k * 3.5f + (rndf(k, 42) - 0.5f) * 2.6f;
         if (nearCot(x, 4.0f)) continue;
         tree(x, -6.0f - rndf(k, 43) * 2.5f, k * 13 + 1);
     }
     // houses along the back of the street
     for (int k = (int)std::floor(l / 8); k <= (int)(r / 8); ++k) {
         if (hashi(k, 51) % 3 == 0) continue;
-        float x = k * 8.0f + 4.0f + (rndf(k, 52) - 0.5f) * 1.5f;
+        float x = k * 8.0f + 4.0f + (rndf(k, 52) - 0.5f) * 3.6f;
         if (nearCot(x, 6.0f)) continue;
         house(x, -11.5f - rndf(k, 53) * 1.5f, k);
     }
     // far rows of trees
     for (int k = (int)std::floor((l - 10) / 2.5f); k <= (int)((r + 20) / 2.5f); ++k) {
         if (hashi(k, 61) % 3 == 0) continue;
-        float x = k * 2.5f + (rndf(k, 62) - 0.5f) * 1.5f;
+        float x = k * 2.5f + (rndf(k, 62) - 0.5f) * 2.3f;
         tree(x, -15.0f - rndf(k, 63) * 9.0f, k * 17 + 5);
     }
 }
@@ -431,12 +451,26 @@ void Models3D::drawGround(Game& g)
                 // its top sits flush with the path (y 0) so drop shadows lie on it cleanly
                 part(cube_, then(S(w + 0.08f, 0.26f, dz + 0.1f), T(cx, Y3(ty + 0.13f), zc)), hexc(0x62c24a));
             }
-            for (int i = x; i <= e; ++i)   // pebbles in the earth face
-                for (int k = 0; k < 2; ++k)
-                    if (hashi(i * 2 + k, ty + 90) % 2 == 0)
-                        part(cube_, then(S(0.16f, 0.09f, 0.04f), T(i + 0.2f + rndf(i * 2 + k, 91) * 0.6f,
-                                                                    Y3(ty + (dep == 0 ? 0.4f : 0.15f) + rndf(i * 2 + k, 92) * 0.5f), zf + 0.01f)),
-                             mixc(dirt, WHITE, 0.3f), 0, false);
+            // stones in the earth face: none to three a tile, each its own size, shape, tilt,
+            // depth and kind of stone, all from the tile's world position
+            static const unsigned stone[5] = {0xc8bca8, 0x9a948c, 0xc4a87a, 0x7a6e64, 0xdcd4c6};
+            const float yTop = dep == 0 ? 0.34f : 0.06f, yBot = 0.94f;
+            for (int i = x; i <= e; ++i) {
+                unsigned nh = hashi(i, ty * 131 + 90) % 10;
+                int n = nh < 2 ? 0 : (nh < 6 ? 1 : (nh < 9 ? 2 : 3));
+                for (int k = 0; k < n; ++k) {
+                    int s = (i * 4 + k) * 61 + ty;
+                    float px = i + 0.06f + 0.88f * rndf(s, 91), py = yTop + (yBot - yTop) * rndf(s, 92);
+                    float sz = 0.055f + 0.09f * rndf(s, 93) * rndf(s, 94);   // mostly small, the odd big one
+                    float sq = 0.45f + 0.4f * rndf(s, 95), rot = (rndf(s, 96) - 0.5f) * 1.6f;
+                    Color c = mixc(hexc(stone[hashi(s, 97) % 5]), dirt, 0.18f + 0.3f * rndf(s, 98));
+                    Matrix face = then(MatrixRotateZ(rot), T(px, Y3(ty + py), zf + 0.005f));
+                    if (hashi(s, 99) % 3)   // a rounded stone: a thin disc set into the face
+                        part(cyl_, then(then(then(T(0, -0.5f, 0), S(sz, 0.035f, sz * sq)), MatrixRotateX(PI / 2)), face), c, 0, false);
+                    else                    // a chip of broken stone
+                        part(cube_, then(S(sz * 1.6f, sz * sq * 1.6f, 0.035f), face), c, 0, false);
+                }
+            }
             x = e + 1;
         }
     }
@@ -567,7 +601,7 @@ void Models3D::drawMeadow(Game& g)
             float fz = -2.4f - rndf(k, 136) * 0.6f;
             int n = 2 + (int)(h / 7 % 3);
             for (int i = 0; i < n; ++i) {
-                float px = x + i * 1.1f, ph = 0.75f + 0.25f * rndf(k * 5 + i, 137);
+                float px = x + i * 1.1f + (i > 0 && i < n - 1 ? (rndf(k * 5 + i, 139) - 0.5f) * 0.3f : 0.0f), ph = 0.75f + 0.25f * rndf(k * 5 + i, 137);
                 float lean = (rndf(k * 5 + i, 138) - 0.5f) * 0.25f;
                 part(cube_, then(then(S(0.11f, ph, 0.11f), T(0, ph / 2, 0)), then(MatrixRotateZ(lean), T(px, G, fz))), hz(hexc(0x8a6a4c), fz), 0, false);
             }
@@ -607,7 +641,7 @@ void Models3D::drawGardenFront(Game& g, float l, float r)
     (void)g;
     // the flagstone path
     for (int k = (int)std::floor(l / 0.95f); k <= (int)(r / 0.95f); ++k) {
-        float x = k * 0.95f + (rndf(k, 201) - 0.5f) * 0.1f, z = 2.9f + (k % 2 ? 0.12f : -0.1f);
+        float x = k * 0.95f + (rndf(k, 201) - 0.5f) * 0.14f, z = 2.9f + (rndf(k, 207) - 0.5f) * 0.26f;
         if (hashi(k / 5, 202) % 9 == 0 && k % 5 >= 1 && k % 5 <= 3) {   // a puddle across a few stones
             if (k % 5 == 2) {
                 part(cyl_, then(S(1.15f, 0.012f, 0.55f), T(x, 0.004f, 2.9f)), hexc(0x8ab4dc), 0.55f, false);
@@ -622,18 +656,30 @@ void Models3D::drawGardenFront(Game& g, float l, float r)
     // box hedges and flower beds in front of the flagstones, in hashed stretches
     for (int k = (int)std::floor(l / 4.0f); k <= (int)(r / 4.0f); ++k) {
         unsigned h = hashi(k, 211) % 4;
-        float x = k * 4.0f + 0.4f + rndf(k, 212) * 0.6f;
+        float x = k * 4.0f + rndf(k, 212) * 1.0f;
+        float bz = 4.25f + (rndf(k, 216) - 0.5f) * 0.3f;
         if (h == 0) {   // a low clipped box hedge
-            float len = 2.0f + rndf(k, 213) * 1.2f;
-            part(cube_, then(S(len, 0.34f, 0.42f), T(x + len / 2, 0.17f, 4.2f)), hexc(0x4f9a40));
-            for (float bx = x + 0.3f; bx < x + len - 0.2f; bx += 0.5f)
-                part(sphere_, then(S(0.28f, 0.16f, 0.22f), T(bx, 0.34f, 4.2f)), mixc(hexc(0x5aa848), hexc(0x6cb854), rndf((int)(bx * 7), 215)), 0, false);
+            float len = 1.8f + rndf(k, 213) * 1.4f;
+            part(cube_, then(S(len, 0.34f, 0.42f), T(x + len / 2, 0.17f, bz)), hexc(0x4f9a40));
+            int nb = std::max(2, (int)(len / 0.5f));
+            for (int b = 0; b < nb; ++b) {
+                float bx = x + 0.25f + (len - 0.5f) * (b + 0.5f + (rndf(k * 16 + b, 217) - 0.5f) * 0.5f) / nb;
+                float sw = 0.24f + 0.08f * rndf(k * 16 + b, 218);
+                part(sphere_, then(S(sw, 0.14f + 0.05f * rndf(k * 16 + b, 219), 0.22f), T(bx, 0.34f, bz)),
+                     mixc(hexc(0x5aa848), hexc(0x6cb854), rndf(k * 16 + b, 215)), 0, false);
+            }
         } else if (h <= 2) {   // a flower bed: a soil bed, bushes and flowers
-            part(cube_, then(S(2.8f, 0.1f, 0.85f), T(x + 1.4f, 0.03f, 4.3f)), hexc(0x6a4430), 0, false);
-            for (int i = 0; i < 4; ++i) {
-                float fx = x + 0.35f + i * 0.7f;
-                if (i % 2) flowerClump(fx, 0.08f, 4.3f, k * 13 + i, 1.4f, true);
-                else part(sphere_, then(S(0.3f, 0.26f, 0.28f), T(fx, 0.18f, 4.3f)), mixc(hexc(0x4a8f3c), hexc(0x66a84a), rndf(k + i, 214)), 0, false);
+            float bw = 2.3f + rndf(k, 218) * 1.0f;
+            part(cube_, then(S(bw, 0.1f, 0.85f), T(x + bw / 2, 0.03f, bz)), hexc(0x6a4430), 0, false);
+            int n = 3 + (int)(hashi(k, 219) % 3);
+            for (int i = 0; i < n; ++i) {
+                float fx = x + bw * (i + 0.5f + (rndf(k * 8 + i, 220) - 0.5f) * 0.45f) / n;
+                float fz = bz + (rndf(k * 8 + i, 228) - 0.5f) * 0.3f;
+                if ((i + (int)(hashi(k, 229) % 2)) % 2) flowerClump(fx, 0.08f, fz, k * 13 + i, 1.4f, true);
+                else {
+                    float bs = 0.85f + 0.3f * rndf(k * 8 + i, 230);
+                    part(sphere_, then(S(0.3f * bs, 0.26f * bs, 0.28f * bs), T(fx, 0.18f, fz)), mixc(hexc(0x4a8f3c), hexc(0x66a84a), rndf(k * 8 + i, 214)), 0, false);
+                }
             }
         }
     }
