@@ -1672,7 +1672,7 @@ void Models3D::drawPersonModel(Game& g, int p)
     lastT_[p] = g.time;
     if (running) runPhase_[p] += 2.6f * std::fabs(pl.vx) * dtp;
     runBlend_[p] += std::max(-1.0f, std::min(1.0f, ((running ? 1.0f : 0.0f) - runBlend_[p]) * 9.0f * dtp));
-    float yawOff = 0.52f - 0.14f * runBlend_[p];
+    float yawOff = 0.52f - 0.57f * runBlend_[p];
     float yaw = pl.facing > 0 ? -yawOff : PI + yawOff;
     float ph = runPhase_[p] + p * 1.3f;
     float run = running ? std::min(1.0f, std::fabs(pl.vx) / 4.0f + 0.4f) : 0.0f;

@@ -1,6 +1,7 @@
 # Status from Rafale's "UI changes" Claude
 
-## 2026-11-08 run animation
+## 2026-11-08 run animation (turn reversed: running yaw now -0.05 rad, other way from the 0.38 try)
+## 2026-11-08 run animation (earlier)
 - Done: running body turn 0.18→0.38 rad off side view (less 'into the wall', turned toward camera); stride phase rate 3.4→2.6 per metre (longer strides); thigh swing 0.9→1.15.
 - Notes: Models3D.cpp drawPersonModel only; not viewed in motion.
 
