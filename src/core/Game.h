@@ -73,6 +73,12 @@ public:
     int secretLives = 4;
     int secretPower = 6;         // the boss power being announced / used (cycles through the timed ones)
     int secretCycle = 0;
+    // era 10 extras (core/GameSecret.cpp)
+    struct SecretSlice { float x = 0, y = 0, dx = 1, dy = 0, t = 0; };   // a line through (x, y); red while t < 0.9, then a cut
+    struct SamThrow { float x = 0, y = 0, vx = 0, vy = 0, rot = 0, t = 0; bool dead = false; };
+    std::vector<SecretSlice> slices;
+    std::vector<SamThrow> thrown;
+    float secretPullT = 0, throwCooldown = 0;
     std::vector<Fragment> frags;
     std::vector<PowerUp> powerups;
     float wallX = -8, wallSpeedNow = 0, wallSlowTime = 0;
@@ -148,6 +154,10 @@ private:
     void clearHistory();
     void applyBossPower();
     void updateBossPowers(float dt);
+    void updateSecret(float dt);
+    void secretPull();
+    void secretSlices();
+    void secretThrow(int who);
 
     void update(float dt);
     void updateTitle();

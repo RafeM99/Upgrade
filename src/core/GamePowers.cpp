@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 const char* difficultyId(int d)
 {
@@ -72,7 +73,7 @@ void Game::applyBossPower()
     const int k = secret ? secretPower : boss.kind;
     powers.label = T("power_name_" + std::to_string(k));
     powers.labelT = 2.0f;
-    powers.timer = secret ? tu.every * 0.75f : tu.every;
+    powers.timer = secret ? tu.every * (std::getenv("GAMEJAM_FASTPOWERS") ? 0.1f : 0.75f) : tu.every;   // env: test aid
     audio.play("unlock");
     if (opt.autoplay) TraceLog(LOG_INFO, "EVENT t=%.1f boss power %d (%s)", time, k, difficultyId(difficulty));
     cam.addShake(0.5f);
@@ -136,6 +137,8 @@ void Game::applyBossPower()
         powers.pullT = kPullTime;
         break;
     }
+    case 7: secretPull(); break;     // era 10 only: the Gojo pull
+    case 8: secretSlices(); break;   // era 10 only: telegraphed slices
     default: break;
     }
 }
@@ -161,7 +164,7 @@ void Game::updateBossPowers(float dt)
                powers.rainT <= 0 && powers.rushT <= 0 && powers.pullT <= 0) {
         powers.timer -= dt;
         if (powers.timer <= 0) {
-            if (secret) { static const int order[5] = {0, 2, 3, 5, 6}; secretPower = order[secretCycle++ % 5]; }
+            if (secret) { static const int order[7] = {0, 7, 2, 8, 3, 5, 6}; secretPower = order[secretCycle++ % 7]; if (const char* fp = std::getenv("GAMEJAM_SECRETPOWER")) secretPower = std::atoi(fp); }   // env: test aid
             powers.warnT = tu.warn;
             powers.label = T("power_warn_" + std::to_string(secret ? secretPower : k));
             powers.labelT = tu.warn;

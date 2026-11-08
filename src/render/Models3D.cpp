@@ -1879,3 +1879,41 @@ void Models3D::drawForgetting(Game& g)
     }
     setLook({0, 0, 0, 0}, 0.0f);
 }
+
+// ------------------------------------------------------------------ era 10 effects (see core/GameSecret.cpp)
+void Models3D::drawSecretFx(Game& g)
+{
+    if (!g.secret) return;
+    // slices: a thin red line that widens and pulses while it warns, then a thick white cut
+    for (const auto& s : g.slices) {
+        if (s.t < 0) continue;
+        Vector3 a = {s.x - s.dx * 60.0f, Y3(s.y - s.dy * 60.0f), 1.0f}, b = {s.x + s.dx * 60.0f, Y3(s.y + s.dy * 60.0f), 1.0f};
+        bool cut = s.t >= 0.9f;
+        float k = std::min(1.0f, s.t / 0.9f);
+        Color c = cut ? Color{255, 250, 235, 255} : Color{255, (unsigned char)(40 + 60 * std::sin(s.t * 30) * std::sin(s.t * 30)), 60, (unsigned char)(120 + 100 * k)};
+        float r = cut ? 0.5f : 0.04f + 0.08f * k;
+        DrawCylinderEx(a, b, r, r, 6, c);
+    }
+    // the pull: purple lines from the Forgetting to everyone it drags
+    if (g.secretPullT > 0 && g.boss.active)
+        for (int p = 0; p < 2; ++p) {
+            const Player& pl = g.players[p];
+            if (!pl.joined || !pl.alive()) continue;
+            DrawCylinderEx({g.boss.x, Y3(g.boss.y), 1.2f}, {pl.cx(), Y3(pl.cy()), 1.2f}, 0.05f, 0.05f, 5, Color{190, 130, 255, 160});
+        }
+    // thrown Sams: the whole little figure, spinning
+    if (!g.thrown.empty()) {
+        Model* parts = person_[1];
+        for (const auto& t : g.thrown) {
+            Matrix root = then(MatrixRotateZ(-t.rot), T(t.x, Y3(t.y), 0.3f));
+            Matrix hips = then(T(0, -0.1f, 0), root);
+            Color tint = WHITE;
+            modelPart(parts[P_BODY], hips, tint);
+            modelPart(parts[P_HEAD], then(T(0, 0.48f, 0), hips), tint);
+            modelPart(parts[P_THIGH], then(MatrixRotateZ(0.9f), then(T(0, 0, 0.1f), hips)), tint);
+            modelPart(parts[P_THIGH], then(MatrixRotateZ(-0.9f), then(T(0, 0, -0.1f), hips)), tint);
+            modelPart(parts[P_UPPERARM], then(MatrixRotateZ(2.6f), then(T(0, 0.4f, 0.25f), hips)), tint);
+            modelPart(parts[P_UPPERARM], then(MatrixRotateZ(2.6f), then(T(0, 0.4f, -0.25f), hips)), tint);
+        }
+    }
+}

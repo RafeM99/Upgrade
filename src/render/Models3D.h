@@ -26,6 +26,7 @@ public:
     void drawPlayer(Game& g, int p);
     void drawEnemy(Game& g, const Enemy& e);
     void drawBoss(Game& g);
+    void drawSecretFx(Game& g);   // era 10: slice lines, the pull, thrown Sams
     void drawFragment(float x, float y, float t, float alpha);
     // Soft contact shadow under a player, enemy or the boss (same decal as the props'; lies on the
     // surface at floor height y, nudged along the sun's side). Call between begin() and the models.

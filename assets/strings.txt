@@ -80,6 +80,10 @@ power_name_4 = ECHOES of the last train!
 power_warn_5 = The sun is sinking fast...
 power_name_5 = HARVEST RUSH! The crows fly fast!
 power_warn_6 = It is pulling you back...
+power_warn_7 = It is drawing you in...
+power_name_7 = PULLED IN! Get away from it!
+power_warn_8 = Lines! Get off the red!
+power_name_8 = SLICE!
 power_name_6 = PULLED BACK! It took your last few seconds!
 
 difficulty_label = DIFFICULTY

@@ -98,6 +98,7 @@ void Game::startRun()
     secretLives = 4;
     secretCycle = 0;
     secretPower = 6;
+    slices.clear(); thrown.clear(); secretPullT = throwCooldown = 0;
     era = secret ? art::LAST_ERA : std::max(0, std::min(art::LAST_ERA, opt.startEra));
     bar = secret ? 100.0f : 0;   // the Forgetting is waiting at once
     score = 0;
@@ -617,6 +618,7 @@ void Game::updatePlaying(float dt)
     }
 
     updateBossPowers(dt);
+    updateSecret(dt);
     recordHistory(dt);
 
     // ---- fragments drift to the nearest player and fill the bar

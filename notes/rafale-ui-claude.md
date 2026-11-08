@@ -1,5 +1,9 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 era 10 extras (LOCAL ONLY, raf asked not to push these)
+- Done: boss powers 7 (Gojo pull: drags everyone in, then swoops) and 8 (three telegraphed slices: red line 0.9 s, then a white cut), both era 10 only; Gran throws a spinning 3D Sam (key F / pad Y, 0.55 s cooldown, 1 hit on the boss, 2 on enemies). New file src/core/GameSecret.cpp; small hooks in GamePowers.cpp, Game.cpp/.h, Models3D (drawSecretFx), Renderer.cpp (one line), assets/strings.txt (4 lines).
+- Test aids: GAMEJAM_FASTPOWERS=1, GAMEJAM_SECRETPOWER=<n>.
+
 ## 2026-11-08 secret level "era 10"
 - Done: `--era 10`, or press 0 on the title screen. 3D stage (6), the Forgetting appears at once with 24 hits (+4 per difficulty step), uses every power in turn (clock, bell, storm, scarecrow, pull-back) plus shirt rewind and train echoes, powers 25-50% more often. Gran has 4 lives (each fade costs one; 0 = back to title); beating it returns to the title. HUD shows "GRAN ****".
 - Shared files touched (small edits, Camilla please review): src/core/GamePowers.cpp (secret-mode branches in startBossPowers, applyBossPower, updateBossPowers), src/core/Game.cpp/.h, src/ui/Hud.cpp (one line).

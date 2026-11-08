@@ -762,7 +762,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(b.x, b.y, 1.6f + k * 2.6f, pc);
             ring(b.x, b.y, 1.6f + std::fmod(k + 0.5f, 1.0f) * 2.6f, pc);
         }
-        if (full3D) models_.drawBoss(g);
+        if (full3D) { models_.drawBoss(g); }
         int fr = b.state == 5 || b.hurt > 0 ? XF_HURT : (b.state == 3 ? XF_SLAM : XF_FLOAT0 + ((int)(b.t * 4) % 2));
         Color tint = WHITE;
         if (b.state == 5) tint.a = (unsigned char)(255 * std::max(0.0f, 1 - b.stateTime / 1.6f));
@@ -807,6 +807,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             ring(ax, pl.cy(), 0.6f * (1 - pl.attackTime / 0.18f) + 0.2f, p == 0 ? Color{255, 200, 120, 255} : Color{140, 210, 255, 255});
         }
     }
+    if (full3D) models_.drawSecretFx(g);   // era 10: slices, the pull, thrown Sams (no-op elsewhere)
     // time-slow pulse ring
     if (g.slowTime > 2.4f) {
         float k = (3.0f - g.slowTime) / 0.6f;
