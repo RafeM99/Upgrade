@@ -936,11 +936,18 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                     continue;
                 }
                 recTex_ = ch == '#' ? 2 : 3;
-                if (ch == '#' && groundKit_) {   // a floating island is cut from the same earth tile as the ground, with no gap between neighbours
-                    int n = groundN_[1];
-                    int v = (int)(hashi(x, ty * 131 + 900 + 1) % (unsigned)n);
-                    part((meadow_ && liteKit_ ? liteMod_ : groundMod_)[1][v], T(x + 0.5f, Y3(ty + 0.5f), zc),
-                         meadow_ ? Color{226, 194, 164, 255} : WHITE, 0, false);
+                if (ch == '#' && groundKit_) {   // a floating island: the ground kit's front face over a solid dirt core, so the underside and ends are filled
+                    bool top = !solid(x, ty - 1);
+                    int kind = top ? 0 : 1, n = groundN_[kind];
+                    int v = (int)(hashi(x, ty * 131 + 900 + kind) % (unsigned)n);
+                    Color core = meadow_ ? hexc(0x6a4630) : hexc(0x5e3a26);
+                    recTex_ = 1;   // plain colour: the textured cube streaked on the ends
+                    part(cube_, then(S(1.03f, 1.02f, dz - 0.06f), T(x + 0.5f, Y3(ty + 0.5f), zc - 0.03f)), core, 0, false);
+                    part((meadow_ && liteKit_ ? liteMod_ : groundMod_)[kind][v], T(x + 0.5f, Y3(ty + 0.5f), zc),
+                         meadow_ ? (top ? Color{210, 190, 124, 255} : Color{226, 194, 164, 255}) : WHITE, 0, false);
+                    recTex_ = 1;
+                    ++x;
+                    continue;
                 } else
                 part(cube_, then(S(1.0f, 0.98f, dz), T(x + 0.5f, Y3(ty + 0.5f), zc)), c);
                 if (ch == '=') part(cube_, then(S(0.5f, 0.06f, 0.06f), T(x + 0.45f, Y3(ty + 0.45f), zf + 0.02f)), hexc(0x4a3a30), 0, false);
