@@ -346,7 +346,10 @@ void Renderer::drawLawns25D(Game& g)
         rlTexCoord2f(1, 0); rlVertex3f(r, y3, z0);
         rlEnd();
     };
-    flat(40.0f, -1.5f, 0.0f, mix(grass, 0x203018, 0.25f));                 // the low lawn in front, and the ditch floor
+    {   // the low lawn in front: pulled towards the field's olive so it does not out-shout the golden light
+        Color c0 = mix(grass, dusk, 0.12f);
+        flat(40.0f, -1.5f, 0.0f, mix((unsigned)(c0.r << 16 | c0.g << 8 | c0.b), 0x202814, 0.3f));
+    }                 // the low lawn in front, and the ditch floor
     // the bank behind the ditches: a vertical face at the back of the path
     rlSetTexture(rlGetTextureIdDefault());
     rlBegin(RL_QUADS);
@@ -666,20 +669,25 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
             return -1.0f;
         };
+        // soft contact shadows, the same decal as under the props, at each figure's z (it used to be a
+        // hard dark disc a third of a metre behind them, mostly hidden by the figure itself)
         for (int p = 0; p < 2; ++p) {
             const Player& pl = g.players[p];
             if (!pl.joined) continue;
             float fy = floorBelow(pl.cx(), pl.bottom());
-            if (fy >= 0) shadow(pl.cx(), fy, 0.45f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
+            float k = swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6);
+            if (fy >= 0 && k > 0.02f) models_.characterShadow(pl.cx(), Y3(fy), 0.2f, 0.4f * (1.3f - 0.3f * k), 0.28f, 0.36f * k * (pl.faded ? 0.5f : 1.0f));
         }
         for (const auto& e : g.enemies) {
             float fy = floorBelow(e.cx(), e.y + e.h);
-            if (fy >= 0 && !e.dead) shadow(e.cx(), fy, e.w * 0.6f, swing * std::max(0.0f, 1 - (fy - e.y - e.h) / 6));
+            float k = swing * std::max(0.0f, 1 - (fy - e.y - e.h) / 6);
+            if (fy >= 0 && !e.dead && k > 0.02f) models_.characterShadow(e.cx(), Y3(fy), 0.2f, e.w * 0.62f, e.w * 0.62f * 0.7f, 0.36f * k);
         }
         if (g.boss.active) {
             float fy = floorBelow(g.boss.x, g.boss.y + g.boss.h / 2);
-            if (fy >= 0) shadow(g.boss.x, fy, 1.6f, swing * 0.8f);
+            if (fy >= 0) models_.characterShadow(g.boss.x, Y3(fy), 0.4f, 1.5f, 1.0f, 0.3f * swing * std::max(0.25f, 1 - (fy - g.boss.y) / 9));
         }
+        models_.flushCharacterShadows();
     }
 
     // ---- pickups

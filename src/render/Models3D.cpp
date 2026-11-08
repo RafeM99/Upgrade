@@ -347,12 +347,13 @@ void Models3D::drawFlowers()
 // Contact shadows: each decal is a soft dark ellipse (two rings fading to nothing at the rim)
 // just above the surface, drawn blended without writing depth so neighbours never cut into
 // each other. Placed from world positions only, so they never move against the scenery.
-void Models3D::flushShadows()
+void Models3D::flushShadows(bool depthTest)
 {
     if (decals_.empty()) return;
     rlDrawRenderBatchActive();
     rlSetTexture(rlGetTextureIdDefault());
-    rlDisableDepthTest();   // laid down over the lawn before any prop is drawn, so the props cover them (no depth fight)
+    if (depthTest) rlDisableDepthMask();
+    else rlDisableDepthTest();   // laid down over the lawn before any prop is drawn, so the props cover them (no depth fight)
     rlBegin(RL_TRIANGLES);
     const int N = 14;
     auto vtx = [&](const Decal& d, float k, float a, int i) {
@@ -371,8 +372,20 @@ void Models3D::flushShadows()
     rlEnd();
     rlDrawRenderBatchActive();   // the depth state applies when the batch is drawn
     rlEnableDepthTest();
+    rlEnableDepthMask();
     rlSetTexture(0);
     decals_.clear();
+}
+
+void Models3D::characterShadow(float x, float y, float z, float rx, float rz, float a)
+{
+    // the sun stands up and to the left of the camera (the same side as on the props): the shadow falls a little right and back
+    decals_.push_back({x + rx * 0.28f, y + 0.04f, z - 0.02f, rx, rz, a});
+}
+
+void Models3D::flushCharacterShadows()
+{
+    flushShadows(true);
 }
 
 void Models3D::pushLook()
@@ -890,7 +903,7 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                 int kind = dep == 0 ? 0 : (dep < 3 ? 1 : 2), n = groundN_[kind];
                 Color tint = dep == 2 ? Color{225, 215, 210, 255} : WHITE;
                 if (meadow_) {   // golden hour: the kit's greens pulled to warm olive, the earth to a redder brown
-                    tint = dep == 0 ? Color{206, 188, 112, 255} : Color{226, 194, 164, 255};
+                    tint = dep == 0 ? Color{210, 190, 124, 255} : Color{226, 194, 164, 255};
                     if (dep >= 3) tint = Color{206, 184, 166, 255};
                 }
                 int last = -1;
@@ -1114,6 +1127,18 @@ void Models3D::meadowPass(Game& g)
     const float G = 1.98f;   // the field behind the path
     const Color hayL = hexc(0xf0d890), hayD = hexc(0xa88a50), straw = hexc(0xe6c878);
 
+    // the ground block's contact shadow: the ground it stands on (the field behind, the low lawn in front)
+    // is darkened along its back and front foot, so the block sits in the scene instead of floating over it
+    if (dry_) {
+        for (int ix = (int)std::floor(l); ix <= (int)r; ++ix) {
+            char top = ix < g.level.firstCol() ? '#' : g.level.tile(ix, LEVEL_H - 2);
+            if (top != '#') continue;
+            float j = (rndf(ix, 171) - 0.5f) * 0.2f;
+            shadowAt(ix + 0.55f, G, -3.2f + j, 0.95f, 0.5f, 0.26f);   // behind, on the field (the lip's overhang)
+            shadowAt(ix + 0.55f, 0.0f, 1.35f + j, 0.95f, 0.45f, 0.3f);   // in front, on the low lawn
+        }
+    }
+
     // a cart track winding through the field: two worn ruts with grass between
     for (float x = std::floor(l * 2) / 2; x < r; x += 0.5f) {
         auto zc = [](float xx) { return -7.0f + 1.3f * std::sin(xx * 0.11f) + 0.6f * std::sin(xx * 0.29f + 1.0f); };
@@ -1185,6 +1210,7 @@ void Models3D::meadowPass(Game& g)
             for (int i = 0; i < n; ++i) {
                 float px = x + i * 1.1f + (i > 0 && i < n - 1 ? (rndf(k * 5 + i, 139) - 0.5f) * 0.3f : 0.0f), ph = 0.75f + 0.25f * rndf(k * 5 + i, 137);
                 float lean = (rndf(k * 5 + i, 138) - 0.5f) * 0.25f;
+                shadowAt(px + 0.1f, G, fz + 0.04f, 0.2f, 0.12f, 0.3f);
                 part(cube_, then(then(S(0.11f, ph, 0.11f), T(0, ph / 2, 0)), then(MatrixRotateZ(lean), T(px, G, fz))), hz(hexc(0x8a6a4c), fz), 0, false);
             }
             if (h % 2) part(cube_, then(S(1.1f * (n - 1) + 0.1f, 0.07f, 0.05f), T(x + 0.55f * (n - 1), G + 0.62f, fz + 0.07f)), hz(hexc(0x9a7a56), fz), 0, false);

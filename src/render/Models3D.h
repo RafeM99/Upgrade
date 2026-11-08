@@ -27,6 +27,10 @@ public:
     void drawEnemy(Game& g, const Enemy& e);
     void drawBoss(Game& g);
     void drawFragment(float x, float y, float t, float alpha);
+    // Soft contact shadow under a player, enemy or the boss (same decal as the props'; lies on the
+    // surface at floor height y, nudged along the sun's side). Call between begin() and the models.
+    void characterShadow(float x, float y, float z, float rx, float rz, float a);
+    void flushCharacterShadows();
 
 private:
     Shader sh_{};
@@ -91,7 +95,7 @@ private:
     bool dry_ = false;   // collecting shadows only: part() draws nothing
     void sceneryPass(Game& g);
     void meadowPass(Game& g);
-    void flushShadows();
+    void flushShadows(bool depthTest = false);
     void setMacro(float m);   // the world-space ground noise on or off (lit3d.fs)
     // Gran, Sam, the grandfather clock and the Forgetting (the boss) are modelled in Blender
     // (tools/blender/make_models.py), one .glb per moving part, put together and animated here.
