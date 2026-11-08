@@ -506,7 +506,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             if (ch == '.') continue;
             if (full3D) continue;   // the 3D stage models its blocks (Models3D::drawGround)
             // the 2.5D stage models earth that has ground under it from the same kit, in warm tones
-            if (era == 5 && ch == '#' && (g.level.isSolidChar(tileAt(tx, ty + 1)) || ty + 1 >= LEVEL_H) && models_.hasGroundKit()) continue;
+            if (era == 5 && ch == '#' && models_.hasGroundKit()) continue;
             int frame = T_GROUND;
             bool above = g.level.isSolidChar(tileAt(tx, ty - 1));
             bool below = g.level.isSolidChar(tileAt(tx, ty + 1));

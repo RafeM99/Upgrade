@@ -926,7 +926,7 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
             bool floating = !solid(x, ty + 1) && ty < LEVEL_H - 1;
             // the 2.5D meadow takes only the ground the kit models (earth with ground under it); hay bales,
             // cracked blocks, the wall and rocky undersides stay 2D tiles (Renderer)
-            if (meadow_ && (ch != '#' || floating || !groundKit_)) { ++x; continue; }
+            if (meadow_ && (ch != '#' || !groundKit_)) { ++x; continue; }
             if (ch != '#' || floating) {   // a single block
                 Color c = ch == '=' ? hexc(0xa08a74) : (ch == '|' ? hexc(0x8a8aa4) : hexc(0xb89a7a));
                 if (ch == '1' || ch == '2') {   // memory blocks only one of the two can stand on
@@ -936,7 +936,13 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                     continue;
                 }
                 recTex_ = ch == '#' ? 2 : 3;
-                part(cube_, then(S(0.96f, 0.96f, dz), T(x + 0.5f, Y3(ty + 0.5f), zc)), c);
+                if (ch == '#' && groundKit_) {   // a floating island is cut from the same earth tile as the ground, with no gap between neighbours
+                    int n = groundN_[1];
+                    int v = (int)(hashi(x, ty * 131 + 900 + 1) % (unsigned)n);
+                    part((meadow_ && liteKit_ ? liteMod_ : groundMod_)[1][v], T(x + 0.5f, Y3(ty + 0.5f), zc),
+                         meadow_ ? Color{226, 194, 164, 255} : WHITE, 0, false);
+                } else
+                part(cube_, then(S(1.0f, 0.98f, dz), T(x + 0.5f, Y3(ty + 0.5f), zc)), c);
                 if (ch == '=') part(cube_, then(S(0.5f, 0.06f, 0.06f), T(x + 0.45f, Y3(ty + 0.45f), zf + 0.02f)), hexc(0x4a3a30), 0, false);
                 recTex_ = 1;
                 if (!solid(x, ty - 1) && ch == '#')

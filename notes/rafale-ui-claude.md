@@ -1,5 +1,6 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 floating islands: use the ground kit earth tile (era 5 meadow and era 6), full-width so no gaps; Renderer.cpp line 509 now skips every floating "#" in era 5 (was drawn as a different 2D tile). Run: strides 2.35, half bounce.
 ## 2026-11-08 foot contact: hip height now uses 0.55*cos(lean) (body lean lowered the hips ~2.5 cm while running, so soles sank into the floor)
 ## 2026-11-08 run animation (turn reversed: running yaw now -0.05 rad, other way from the 0.38 try)
 ## 2026-11-08 run animation (earlier)
