@@ -117,6 +117,7 @@ private:
     void unloadParts(Model* parts, int n, bool& ready);
     void modelPart(Model& m, Matrix t, Color tint, bool rim = true);
     void drawPersonModel(Game& g, int p);   // Gran (0) or Sam (1)
+    float runPhase_[2] = {0, 0}, runBlend_[2] = {0, 0}, lastT_[2] = {0, 0};   // run cycle by distance, turn towards the side view
     void drawClockModel(Game& g, const Enemy& e);
     void drawForgetting(Game& g);
     void cottage(float x, float z);

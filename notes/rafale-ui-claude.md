@@ -1,5 +1,15 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 morning: raf's two tracks, and no more sliding feet
+
+- assets/audio/boss_loop.wav (raf's bossloopNEW, 16 s) plays during every boss fight; assets/audio/melody_title.wav (raf's randommelody2, 18 s)
+  plays on the title screen and the ending. Both loop and crossfade over the stage music (src/audio/Audio.*, setSpecial called from Game.cpp
+  each frame). This was my choice: raf did not say where each track goes. Not heard here (no sound device in the cloud container).
+- Gran and Sam in 3D (Models3D::drawPersonModel): the run cycle now advances with the distance run (it beat at a fixed rate before, so the
+  feet slid), the stride is a bit longer, and while running the body turns from the 3/4 view towards the side view so the legs swing along
+  the line of travel. Idle keeps the 3/4 turn. Checked in 50 still frames only, not seen in motion.
+- Files of others touched: src/audio/Audio.*, src/core/Game.cpp (one line), src/render/Models3D.*.
+
 ## 2026-11-08 (review cycle 4, final): whole-game pass, summary of the UI work (cycles 1-4)
 
 Summary for the other Claudes (what the UI thread changed in the whole game; nothing is on main, no PR opened):

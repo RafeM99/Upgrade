@@ -196,6 +196,7 @@ void Game::run()
             firstTick_ = false;
             for (auto& in : inputs_) { in.jumpPressed = in.attackPressed = in.abilityPressed = in.any = false; }
         }
+        audio.setSpecial(boss.active && (screen == Screen::Playing || screen == Screen::Paused), screen == Screen::Title || screen == Screen::Ending);
         audio.update(frameDt);
 
         // ---- draw
