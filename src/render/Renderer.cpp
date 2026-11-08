@@ -146,6 +146,18 @@ int pixelScale(int era, int screenH)
     return std::max(1, (int)std::lround(screenH / designed));
 }
 
+// Framebuffer pixels per window (logical) pixel. On a Retina Mac the window asks for a high-DPI
+// framebuffer (Game::init), so the 2.5D / 3D image is rendered at the real pixel count, not the
+// logical one. Everywhere else this stays 1, exactly as before.
+float framebufferScale()
+{
+#if defined(__APPLE__)
+    const int sh = GetScreenHeight(), rh = GetRenderHeight();
+    if (sh > 0 && rh > sh) return std::min(4.0f, (float)rh / (float)sh);
+#endif
+    return 1.0f;
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ setup
@@ -160,7 +172,6 @@ void Renderer::init()
     locTime_ = GetShaderLocation(post_, "time");
     locSize_ = GetShaderLocation(post_, "texSize");
     locFlash_ = GetShaderLocation(post_, "flash");
-    locOut_ = GetShaderLocation(post_, "outSize");
     locMosaic_ = GetShaderLocation(post_, "mosaic");
     locGlitch_ = GetShaderLocation(post_, "glitch");
     locDesat_ = GetShaderLocation(post_, "desat");
@@ -187,9 +198,18 @@ void Renderer::init()
 void Renderer::ensureTargets()
 {
     for (int e = 0; e < ERA_COUNT; ++e) {
-        int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
-        int w = (int)std::lround(h * 16.0 / 9.0);
-        if (lowRes(e)) {
+        int h, w;
+        if (!lowRes(e)) {
+            // 2.5D and 3D: the image has the window's own shape and fills it, so no stage gets
+            // bars on a screen that is not 16:9 (the camera takes its aspect from this size, so
+            // a wider window simply shows more of the street). It is rendered at framebuffer
+            // pixels (see framebufferScale) and drawn back about 1:1, with FXAA in post.fs.
+            const int sw = std::max(1, GetScreenWidth()), sh = std::max(1, GetScreenHeight());
+            h = std::max(360, (int)std::lround(sh * framebufferScale()));
+            w = std::max(1, (int)std::lround((double)h * sw / sh));
+        } else {
+            h = (int)(TILE_PX[e] * VIEW_TILES_H);
+            w = (int)std::lround(h * 16.0 / 9.0);
             // Framing: the pixel stages are scaled by a whole number (pixelScale), and the buffer
             // is made just big enough that the scaled image covers the whole window, both ways.
             // So no stage gets bars: the view shows a few rows more or fewer than the designed
@@ -207,8 +227,8 @@ void Renderer::ensureTargets()
         rt_[e] = LoadRenderTexture(w, h);
         rtW_[e] = w;
         rtH_[e] = h;
-        // Bilinear on every era: post.fs does "sharp" sampling, so pixel art stays crisp and even
-        // at any scale, and the mosaic blocks of the transition sample cleanly.
+        // Bilinear on every era: the pixel stages are read at texel centres in post.fs (so they
+        // stay hard-edged), and the smooth stages need it for FXAA and the transition's mosaic.
         SetTextureFilter(rt_[e].texture, TEXTURE_FILTER_BILINEAR);
     }
 }
@@ -233,9 +253,8 @@ Rectangle Renderer::screenRect() const
         float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
         return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
     }
-    float w = sw, h = sw * 9.0f / 16.0f;
-    if (h > sh) { h = sh; w = sh * 16.0f / 9.0f; }
-    return Rectangle{(sw - w) / 2, (sh - h) / 2, w, h};
+    // 2.5D and 3D: the image has the window's shape (ensureTargets), so it fills the window
+    return Rectangle{0, 0, sw, sh};
 }
 
 // ------------------------------------------------------------------ background
@@ -278,7 +297,7 @@ void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
     struct Layer { int l; float z, height, baseFrac, haze; };
     // baseFrac: how far up the picture its ground line sits (that part goes below the lawn)
     const Layer dusk[3] = {{1, -64.0f, 24.0f, 0.0f, 0.6f}, {2, -38.0f, 11.0f, 0.16f, 0.45f}, {3, -20.0f, 6.5f, 0.14f, 0.3f}};
-    const Layer day[1] = {{1, -100.0f, 40.0f, 0.0f, 0.35f}};
+    const Layer day[1] = {{1, -88.0f, 35.2f, 0.0f, 0.1f}};   // the rendered backdrop carries its own atmosphere
     const Layer* L = era == LAST_ERA ? day : dusk;
     int n = era == LAST_ERA ? 1 : 3;
     Vector3 horizon = era == LAST_ERA ? Vector3{0.86f, 0.92f, 0.97f} : Vector3{0.97f, 0.76f, 0.58f};
@@ -286,13 +305,16 @@ void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
     BeginShaderMode(haze_);
     SetShaderValue(haze_, locHazeCol_, &horizon, SHADER_UNIFORM_VEC3);
     const float ground = 2.0f;   // 3D y of the path top
+    const float wide = rtH_[era] > 0 ? std::max(1.0f, (float)rtW_[era] / rtH_[era] / (16.0f / 9.0f)) : 1.0f;
     for (int i = 0; i < n; ++i) {
         const Texture2D& t = g.art.era[era].bg[L[i].l];
         if (t.id == 0) continue;
         rlDrawRenderBatchActive();
         SetShaderValue(haze_, locHazeAmt_, &L[i].haze, SHADER_UNIFORM_FLOAT);
         float h = L[i].height, tw = h * t.width / t.height;
-        float half = (cam.position.z - L[i].z) * 1.1f + 12.0f;
+        // half the width to cover at this depth: 1.1 per unit of distance suits 16:9; a wider
+        // window (the image takes the window's shape) sees proportionally more
+        float half = (cam.position.z - L[i].z) * 1.1f * wide + 12.0f;
         float y0 = ground - 0.2f - L[i].baseFrac * h;   // world-down y of the picture top below
         // quad() takes the top-left in level tiles (y down)
         float top = (float)LEVEL_H - (y0 + h);
@@ -324,7 +346,10 @@ void Renderer::drawLawns25D(Game& g)
         rlTexCoord2f(1, 0); rlVertex3f(r, y3, z0);
         rlEnd();
     };
-    flat(40.0f, -1.5f, 0.0f, mix(grass, 0x203018, 0.25f));                 // the low lawn in front, and the ditch floor
+    {   // the low lawn in front: pulled towards the field's olive so it does not out-shout the golden light
+        Color c0 = mix(grass, dusk, 0.12f);
+        flat(40.0f, -1.5f, 0.0f, mix((unsigned)(c0.r << 16 | c0.g << 8 | c0.b), 0x202814, 0.3f));
+    }                 // the low lawn in front, and the ditch floor
     // the bank behind the ditches: a vertical face at the back of the path
     rlSetTexture(rlGetTextureIdDefault());
     rlBegin(RL_QUADS);
@@ -449,6 +474,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
             rlDrawRenderBatchActive();
             models_.begin(g, c3);
             models_.drawMeadow(g);
+            models_.drawGround(g, true);
             rlDrawRenderBatchActive();
             BeginShaderMode(world_);
         }
@@ -479,6 +505,8 @@ void Renderer::drawEra(Game& g, int era, float swing)
             char ch = tileAt(tx, ty);
             if (ch == '.') continue;
             if (full3D) continue;   // the 3D stage models its blocks (Models3D::drawGround)
+            // the 2.5D stage models earth that has ground under it from the same kit, in warm tones
+            if (era == 5 && ch == '#' && models_.hasGroundKit()) continue;
             int frame = T_GROUND;
             bool above = g.level.isSolidChar(tileAt(tx, ty - 1));
             bool below = g.level.isSolidChar(tileAt(tx, ty + 1));
@@ -547,8 +575,42 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 char n = tileAt(tx + dx, ty + dy);
                 return !(g.level.isSolidChar(n) || n == '1' || n == '2');
             };
+            Rectangle srcR = frameRect(A.tiles, frame, 1, 1, era);
+            // The platform tiles are one frame each, so a row of them would repeat on a beat. Vary
+            // them from a hash of the tile's position (never the camera): mirrored on about half the
+            // tiles, and in the 16- and 32-bit stages a little lighter or darker and with chips
+            // (a dark and a light speck pixel) on the surface. The 4-shade and 8-bit stages keep
+            // their colour counts: no tint, no specks.
+            const bool platform = (lowRes(era) || era == 5) && (frame == T_BLOCK || frame == T_CRACKED);
+            unsigned ph = hashXY(tx * 5 + 11, ty * 3 + 7);
+            if (platform && (ph & 1)) { srcR.x += srcR.width; srcR.width = -srcR.width; }
+            if (platform && era >= 3) {   // (2.5D too: the hay bales)
+                float k = 0.9f + 0.16f * (float)((ph >> 3) & 255) / 255.0f;
+                tint = Color{(unsigned char)std::min(255.0f, 255 * k), (unsigned char)std::min(255.0f, 255 * k),
+                             (unsigned char)std::min(255.0f, 255 * (k + 0.03f)), 255};
+            }
+            // earth in the 16- and 32-bit stages darkens and cools with every row below the surface
+            // (the grass cap row is untouched, the deep row has its own art)
+            if (era >= 3 && lowRes(era) && !platform && ch == '#' && above && ty < LEVEL_H - 1) {
+                int rows = 0;
+                while (rows < 6 && ty - rows - 1 >= 0 && g.level.isSolidChar(tileAt(tx, ty - rows - 1))) ++rows;
+                float k = 1.0f - 0.07f * std::min(rows - 1, 3);
+                if (rows >= 1) tint = Color{(unsigned char)(255 * k), (unsigned char)(255 * k), (unsigned char)(255 * std::min(1.0f, k + 0.05f)), 255};
+            }
             float d = (ch == '1' || ch == '2') ? depth * 0.6f : depth;
-            tileBlock(A.tiles, frameRect(A.tiles, frame, 1, 1, era), tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            tileBlock(A.tiles, srcR, tx, ty, d, open(0, -1), open(-1, 0), open(1, 0), tint);
+            if (platform && era >= 3) {
+                const float px = 1.0f / TILE_PX[era];
+                Color dk = era == 3 ? hexc(0x2a1810) : (era == 5 ? hexc(0x8a5a2e) : hexc(0x3c1c20));
+                Color lt = era == 3 ? hexc(0xf6d894) : (era == 5 ? hexc(0xfae6a0) : hexc(0xd88a64));
+                const int big = era == 5 ? 2 : 1;   // a speck is 2 x 2 texels of the 64 px 2.5D tile
+                for (int s = 0; s < 3; ++s) {
+                    unsigned sh = hashXY(tx * 13 + s * 31, ty * 17 + 5);
+                    int sx = 1 + (int)(sh % (unsigned)(TILE_PX[era] - 3)), sy = 2 + (int)((sh >> 8) % (unsigned)(TILE_PX[era] - 5));
+                    if (s == 2 && (sh >> 20) % 3) continue;   // the third only on some tiles
+                    solidQuad(tx + sx * px, ty + sy * px, px * big * (1 + (int)((sh >> 16) & 1) * (s != 1)), px * big, depth * 0.5f + 0.021f, s == 1 ? lt : dk);
+                }
+            }
             // overlays in the air next to a grass cap: tufts and flowers standing on it, and grass
             // hanging over a cliff edge (the flat stages: in 2.5D the edge has its own side face)
             if (groundTop) {
@@ -594,7 +656,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     // ---- the modelled street of the 3D stage
     if (full3D) {
         rlDrawRenderBatchActive();
-        models_.begin(g, c3);
+        models_.begin(g, c3, true);
         models_.drawScenery(g);
         models_.drawGround(g);
         rlDrawRenderBatchActive();
@@ -607,20 +669,26 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
             return -1.0f;
         };
+        const float sw = std::min(1.0f, swing);   // swing runs to 2 in the full 3D view: the shadows were then twice as dark (black discs)
+        // soft contact shadows, the same decal as under the props, at each figure's z (it used to be a
+        // hard dark disc a third of a metre behind them, mostly hidden by the figure itself)
         for (int p = 0; p < 2; ++p) {
             const Player& pl = g.players[p];
             if (!pl.joined) continue;
             float fy = floorBelow(pl.cx(), pl.bottom());
-            if (fy >= 0) shadow(pl.cx(), fy, 0.45f, swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6));
+            float k = sw * std::max(0.0f, 1 - (fy - pl.bottom()) / 6);
+            if (fy >= 0 && k > 0.02f) models_.characterShadow(pl.cx(), Y3(fy), 0.2f, 0.4f * (1.3f - 0.3f * k), 0.28f, 0.36f * k * (pl.faded ? 0.5f : 1.0f));
         }
         for (const auto& e : g.enemies) {
             float fy = floorBelow(e.cx(), e.y + e.h);
-            if (fy >= 0 && !e.dead) shadow(e.cx(), fy, e.w * 0.6f, swing * std::max(0.0f, 1 - (fy - e.y - e.h) / 6));
+            float k = sw * std::max(0.0f, 1 - (fy - e.y - e.h) / 6);
+            if (fy >= 0 && !e.dead && k > 0.02f) models_.characterShadow(e.cx(), Y3(fy), 0.2f, e.w * 0.62f, e.w * 0.62f * 0.7f, 0.36f * k);
         }
         if (g.boss.active) {
             float fy = floorBelow(g.boss.x, g.boss.y + g.boss.h / 2);
-            if (fy >= 0) shadow(g.boss.x, fy, 1.6f, swing * 0.8f);
+            if (fy >= 0) models_.characterShadow(g.boss.x, Y3(fy), 0.4f, 1.5f, 1.0f, 0.3f * sw * std::max(0.25f, 1 - (fy - g.boss.y) / 9));
         }
+        models_.flushCharacterShadows();
     }
 
     // ---- pickups
@@ -791,11 +859,9 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
 {
     float t = g.time;
     float size[2] = {(float)rtW_[e], (float)rtH_[e]};
-    float out[2] = {dst.width, dst.height};
     SetShaderValue(post_, locEra_, &e, SHADER_UNIFORM_INT);
     SetShaderValue(post_, locTime_, &t, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locSize_, size, SHADER_UNIFORM_VEC2);
-    SetShaderValue(post_, locOut_, out, SHADER_UNIFORM_VEC2);
     SetShaderValue(post_, locFlash_, &flash, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);

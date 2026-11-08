@@ -1,0 +1,237 @@
+# Status from Rafale's "UI changes" Claude
+
+## 2026-11-08 islands v4: removed the grass cap cube (z-fought with the tile top = glitchy); core now starts 0.22 below the tile top so only the kit tile shows on top
+## 2026-11-08 islands v3: green grass cap cube on top of every island top block (top was bare soil), core colour closer to the tile earth
+## 2026-11-08 islands v2: kit tile front (grass-top tile on top row) over a plain dirt core cube (1.03 wide) so underside and ends are filled, no streaks
+## 2026-11-08 floating islands: use the ground kit earth tile (era 5 meadow and era 6), full-width so no gaps; Renderer.cpp line 509 now skips every floating "#" in era 5 (was drawn as a different 2D tile). Run: strides 2.35, half bounce.
+## 2026-11-08 foot contact: hip height now uses 0.55*cos(lean) (body lean lowered the hips ~2.5 cm while running, so soles sank into the floor)
+## 2026-11-08 run animation (turn reversed: running yaw now -0.05 rad, other way from the 0.38 try)
+## 2026-11-08 run animation (earlier)
+- Done: running body turn 0.18→0.38 rad off side view (less 'into the wall', turned toward camera); stride phase rate 3.4→2.6 per metre (longer strides); thigh swing 0.9→1.15.
+- Notes: Models3D.cpp drawPersonModel only; not viewed in motion.
+
+## 2026-11-08 title music fix
+- Done: title melody now 44.1 kHz (was 48 kHz), silent intro trimmed, short fade-out at the loop seam; stage music is muted within 0.1 s on the title screen and the melody fades in over 0.4 s (was a 1.2 s overlap with the era music).
+- To do: raf to listen; cloud has no audio device.
+
+## 2026-11-08 morning: raf's two tracks, and no more sliding feet
+
+- assets/audio/boss_loop.wav (raf's bossloopNEW, 16 s) plays during every boss fight; assets/audio/melody_title.wav (raf's randommelody2, 18 s)
+  plays on the title screen and the ending. Both loop and crossfade over the stage music (src/audio/Audio.*, setSpecial called from Game.cpp
+  each frame). This was my choice: raf did not say where each track goes. Not heard here (no sound device in the cloud container).
+- Gran and Sam in 3D (Models3D::drawPersonModel): the run cycle now advances with the distance run (it beat at a fixed rate before, so the
+  feet slid), the stride is a bit longer, and while running the body turns from the 3/4 view towards the side view so the legs swing along
+  the line of travel. Idle keeps the 3/4 turn. Checked in 50 still frames only, not seen in motion.
+- Files of others touched: src/audio/Audio.*, src/core/Game.cpp (one line), src/render/Models3D.*.
+
+## 2026-11-08 (review cycle 4, final): whole-game pass, summary of the UI work (cycles 1-4)
+
+Summary for the other Claudes (what the UI thread changed in the whole game; nothing is on main, no PR opened):
+- Cycle 1: pixel-era ground tile wear (SpriteGen.cpp tiles, assets/art/era0-4 tiles.png), Blender ground kit (tools/blender/make_ground.py, assets/models/ground_*.glb), Models3D bakeGround.
+- Cycle 2: platform variation and sky dithering (Renderer.cpp tile loop, bg/era3.inc, bg/era4.inc), era 5 ground from the kit.
+- Cycle 3: far-plane backdrop cut fix (GameCamera.cpp), HUD scale at 1080 (Hud.cpp), soft contact shadows, lite kit (groundlite_*.glb), smaller trees, house trim, GAMEJAM_FRAMELOG / GAMEJAM_NOKIT.
+- Cycle 4 (this entry):
+  - Era 6 frame time: the +17% of cycle 3 does NOT reproduce. Bisect (200 frames, seed 3, 1280x720, software renderer): current 18.5/17.9 s, far plane back to dist+120 18.7 s,
+    character-shadow flush off 18.1 s, kit off (GAMEJAM_NOKIT) 17.0 s (so the kit costs about 1 s, 5%), and a build of the cycle-2 end commit f05f0d5 18.6/17.9 s: the same.
+    The 15.6 s of cycle 3 was a quieter machine. With the final code at a quiet moment: era 6 15.8 s (median 74 ms), era 5 10.7 s (50.8 ms). No further optimisation needed or made.
+  - Era 6 colour grade: there was no distance fog in lit3d.fs, so mid and far trees were as saturated as the lawn against a muted backdrop. Added aerial perspective:
+    lit3d.fs uniforms fogCol (0.80,0.88,0.95, the backdrop's horizon colour) and fogRange (start = camera distance + 5, end = + 80, strongest mix 0.62; z = 0 disables), 35% desaturation
+    towards luma with the mix. Models3D::begin(g, cam, fog=false) sets it; only the full 3D scenery pass passes true (era 5 and the characters at the play plane are untouched).
+    Before /tmp/c4/e6_600.png, after /tmp/c4/after_e6_600.png (seed 3, 1280x720; not in the repo). Toon style kept, no outlines. Lawn and near trees unchanged.
+  - Bug found in motion: in the full 3D view `swing` runs to 2, so the character contact shadows had double alpha and were hard black discs. Renderer.cpp now caps it at 1 (soft like era 5).
+  - Foot contact: Models3D::drawPersonModel solves the body height each frame from the two legs' angles (thigh 0.26 + shin to the shoe centre 0.27 + the rotated shoe ellipsoid), so the lower
+    sole touches the ground through the run cycle (it sank 4.5 cm when standing and hovered mid-stride; the old fake bob is gone when grounded). Checked in 12-frame crops (/tmp/c4/gran_feet.png). Sam uses his own shoe numbers, looked at only through the contact sheet.
+  - Motion over 1500 frames (era 6, --autoplay --two, sheets /tmp/c4/long/sheet0-4.png): Gran and Sam run cycles read, glide umbrella OK, clock waddles and reads at game size,
+    the Forgetting is dark and clear against the light backdrop, eye follows the players. The boss often sits half off the top edge of the screen when it hovers high (camera framing, not changed).
+    Hit flash and the faded look were not seen in these frames (not verified in motion).
+  - HUD bug (eras 0 and 1, 1280x720): "Player 2? Press any of your buttons to join" ran under the centre Memory block in the 1-bit/4-shade strip. Hud.cpp: the one-line rule now only applies to the boxed layouts, the strip wraps it to two lines.
+  - Eras 0-2 backgrounds / era 1 blob and flyer contrast / tiny flyers: NOT done (time). Looked at 200-frame shots: they hold together; the era 1 flyer is still small.
+  - Regression: build has no warnings (touched all render/ui/core sources and rebuilt everything); ./build/levelcheck 0 of 56 chunks fail; all 7 eras at 1280x720, 1280x800 and 1920x1080, 300 frames --autoplay --two: exit 0 and no shader/model
+    warnings in any of the 21 logs (only ALSA no-sound-card lines). Ground and clock .glb files moved away: eras 5 and 6 still run 120 frames, exit 0 (fallback boxes).
+  - PLAY.md: debug env vars and the Blender regeneration commands added. assets/textures/SOURCES.md already lists all 10 files (no change).
+- Shared files touched in the whole UI thread: Renderer.cpp, Models3D.cpp/.h, Hud.cpp, GameCamera.cpp, Game.cpp (debug log), lit3d.fs, haze.fs, SpriteGen.cpp, bg/era3.inc, bg/era4.inc, assets/art/era0-4 tiles.png, assets/art/era3 bg_0, PLAY.md.
+- Not on main. Merging needs raf and Camilla to agree in chat first.
+
+## 2026-11-08 (review cycle 3): era 6 in motion, window sizes, shadows, era 5 leftovers
+
+- Motion (era 6, --autoplay --fill --two, seed 3, 1500 frames, 1280x720, contact sheets /tmp/c3/long/sheet*.png): no chunk popping or seams
+  seen at 50-frame steps, no z-fighting/flicker, props and decals stay put. Frame time median 87 ms (software); non-screenshot frames never
+  exceed 1.7x the median (max 150 ms), so chunk builds cause no visible spikes. RSS 371 MB at start, 475 MB by frame 600, flat at 477 MB
+  to frame 1500 (eviction works). Not checked: sub-frame popping between 50-frame samples.
+- New debug switch: GAMEJAM_FRAMELOG=path writes "frame draw_ms rss_kb" per frame (Game::run). GAMEJAM_NOKIT=1 disables the ground kit.
+- Backdrop cut-off (diagonal at top right, 1280x720 era 6 seed 3 frame 200): cause was the far plane (dist + 120). The backdrop at z -88 on
+  the far side of the yawed view lay beyond it. GameCamera.cpp farPlane = dist + 260. Fixed (before /tmp/c3/before/e6_200.png, after /tmp/c3/after/e6_200.png).
+- Window sizes 1280x800, 1024x768, 1920x1080 for eras 5 and 6 (/tmp/c3/sz): no black bars, backdrop covers. HUD bug at 1920x1080 (centre panel
+  lines overlapped): modern-stage HUD scale rounded 1.5 to 2; Hud.cpp setup() now scales proportionally (720: 2/3/2/4, 1080: 3/5/3/6). At 1024x768
+  the two-row centre block drops its second row one text size when the lines would touch.
+- Shadows: the old character blob was a hard black disc 0.3 behind the figure (nearly invisible in era 5). Players, enemies and boss now use
+  the same soft decal as the props (Models3D::characterShadow / flushCharacterShadows, depth-tested, no depth write), at the figure's own z, offset
+  to the sun side (sun upper left).
+- Era 5: contact-shadow strips along the back and front foot of the ground block, fence post shadows, front lawn pulled towards the olive,
+  kit grass tint slightly less saturated (210,190,124). Frame time: the kit cost 8 ms of 51 ms per frame (GAMEJAM_NOKIT test). Added a lite kit
+  (python3 tools/blender/make_ground.py assets/models --lite: groundlite_*.glb, 168-322 tris vs 360-660; coarser lip/face grids, fewer pebbles and
+  blades) used by the 2.5D meadow, and ground chunks of 8 columns in era 5 (16 drew about twice the visible columns). Era 5 400 frames, seed 3:
+  22.7 s (cycle 2) -> about 19.8 s; draw median 50.8 -> 46.9 ms.
+- Era 6 art: tree scale 0.8-1.3 -> 0.62-0.98, round trees 8-10 smaller lumps (was 5-7), far field trees 1.4 -> 1.05 scale, baked sphere 4x6 -> 4x7
+  (smaller facets). Street houses: stone plinth, corner boards, eave edge, weather stain, door colour/position and window count vary per house,
+  sills, brick chimney with cap, slight green/grey weathering. Cottage untouched.
+- Era 6 timing (200 frames, seed 3): 15.6 s before this cycle, 18.3 s now. The tree/house edits cost nothing (stash test: 18.5 s without them);
+  the rise is from earlier commits of this cycle (far plane now shows more backdrop, extra decal flush). Not bisected further.
+- Regression: eras 0-4 run 120 frames with exit 0; eras 5 and 6 two-player autoplay 300 frames exit 0.
+- Files touched: Game.cpp (debug log), GameCamera.cpp, Hud.cpp, Renderer.cpp (shadow block, front lawn colour), Models3D.cpp/.h, make_ground.py,
+  assets/models/groundlite_*.glb.
+- For cycle 4: era 6 timing bisect (far plane vs decals), era 6 colour grade (greens still saturated against the muted backdrop; not changed),
+  era 5/6 boss readability and hit flash in motion (not looked at), run-cycle foot contact (not verified), eras 0-2 backgrounds, era 1 enemy contrast.
+
+## 2026-11-08 (late night): review cycle 2 - pixel eras beyond ground, and the 2.5D meadow
+
+- Platforms (T_BLOCK/T_CRACKED/hay): single frames, so Renderer.cpp tile loop now varies them from a world-position hash:
+  mirrored on about half the tiles (eras 0-5), and in eras 3, 4, 5 a brightness/cool jitter (0.90-1.06) plus 2-3 chip specks
+  (dark and light pixel; 2x2 in era 5). Eras 1/2 get no tint or specks (colour counts). Frames repainted with more wear:
+  era 0 (broken pattern, 2 colours), era 1 (scuffs, split slat), era 2 (dog-ear, scribble, stray page; same 4 colours), era 3
+  (face split, moss, rot, peeled strip), era 4 (rust streaks, bare-steel chip, weld, dent). Sheet layouts unchanged.
+- Earth depth tint, eras 3/4: tiles darken 7% and cool per row below the surface (max 3 steps), cap and deep row untouched.
+- Backgrounds: era 3 sky was 3 flat bands with hard edges, now 12-row Bayer-dithered seams; era 4 sky had 9 hard bands (21 px
+  each), now 6-row ordered-dither seams. Eras 0-2 backgrounds, props spacing and atmospheric depth NOT reworked (not reached).
+- Sprites: reviewed all era 0-4 player/enemy/boss sheets at 2-6x: frames animate, scale consistent, outlines per rules; no
+  change made. Weak spots noted: era 1 blob and flyer are low-contrast light grey on the light 4-shade scenery, era 1 and 2 flyer
+  is tiny; 1-bit Gran and Sam silhouettes are close.
+- Era 5 ground: now uses the Blender ground kit (ground_*.glb) through Models3D::drawGround(g, true): chunk kind 3, only earth
+  that has ground below it, warm tint (grass 206,188,112; earth 226,194,164; deep 206,184,166 x vertex colour). The matching 2D
+  tiles are skipped in Renderer (era 5, '#', solid below, kit present). Hay bales, cracked blocks, rocky undersides stay 2D.
+  Era 6 path unchanged (meadow_ false, same chunk hash).
+- Timings (software renderer, seed 3, 1280x720, 400 frames): era 3 7.2 s -> 7.2 s, era 4 7.2 s -> 7.2 s, era 5 19.3 s -> 22.7 s (+18%,
+  kit geometry). Era 6 not re-timed (unchanged path, glanced at a shot).
+- Shots: /tmp/c2/before and /tmp/c2/after (e<era>_<frame>.png; seed 3, 1280x720; not in the repo).
+- Files touched: Renderer.cpp (tile loop, one call in the 2.5D branch), Models3D.cpp/.h (meadow flag), SpriteGen.cpp (T_BLOCK),
+  bg/era3.inc, bg/era4.inc (sky), assets/art/era0-4 tiles.png, era3/era4 bg_0.png.
+- For cycles 3/4: era 5 contact shadow under the new ground block, fence/stooks sitting on it, the saturated front lawn; eras 0-2
+  backgrounds; era 1/2 enemy contrast; era 5 frame time (kit tiles could use a simpler LOD).
+
+## 2026-11-08 (night): review cycle 1 - pixel-era ground wear and the Blender ground kit
+
+- Correction to the earlier note: bpy 5.2 IS installed here; tools/blender/make_ground.py now exists and runs
+  (`python3 tools/blender/make_ground.py assets/models`).
+- Measured first: the visible ground in the pixel eras is only the grass-top tile plus the deep row (the plain earth tile
+  appears only under thick masses). 1-bit earth was 98% one colour, 4-shade 77%. Variant picks along the ground repeat a
+  3-tile sequence in 133 of 397 windows, a 4-tile sequence in 18, a 5-tile one in 2 (hash picks of 8, never the left neighbour),
+  so the layout repeat is fine; the tiles themselves were flat.
+- SpriteGen.cpp (tiles section): gPatch (damp/dry earth blobs, kept 2 px off the sides), gDashes (strata seams), used in the grass-top,
+  earth and deep frames. Era 0: every top/deep variant now carries seams, grains, a root or a pebble outline. Era 1/2: seams and
+  specks in the existing tones. Era 3/4: mixed-in damp/dry patches, seams, flint chips. Colour counts verified: era 0 = 2, era 1 = 4,
+  era 2 = 16. Sheet layouts unchanged; only era0-4 tiles.png changed (assetgen also rewrites era5/6 files: restore them with
+  `git checkout assets/art/era5 assets/art/era6` after every run, era6 bg_0/bg_1 come from tools/backdrop).
+- Ground kit: 15 .glb tiles (grass 6, earth 5, deep 4; 356-662 tris, 400 KB total) in assets/models/ground_*.glb. Bevelled noisy grass lip
+  (overhang 0.04-0.1, ragged lower edge), 12-14 double-sided blades with Poisson spacing, wavy strata with real ledges (0.014 push, fixed
+  line heights per kind so every variant joins every other), Poisson pebbles sunk 30%, a few roots, analytic vertex-colour AO in alpha.
+  Models3D::bakeGround uses them when all files exist (loadGroundKit), else the old box code. recordPart now loops all meshes and
+  reads vertex colours (rgb times AO folded in); the material's red byte (255/250/245) picks the CC0 earth/grass/rock texture.
+- Timing (software renderer, era 6, seed 3, 400 frames): 33.2 s before, 31.4 s after. Era 5 not re-timed (kit is era 6 only).
+- Files touched: tools/assetgen/SpriteGen.cpp, assets/art/era0-4/tiles.png, tools/blender/make_ground.py, assets/models/ground_*.glb,
+  Models3D.cpp/.h (loadGroundKit, recordPart, bakeGround).
+
+## 2026-11-08 (evening): ground upgrade round 2 (baked chunks, CC0 textures, field, flowers)
+
+- Baked static meshes (Models3D bakeBegin/recordPart/drawChunk): part() calls inside a bake are merged per texture into one
+  mesh per chunk of columns (ground 16 wide, field 24 wide, flowers 16 wide), built once from world hashes, rebuilt only when
+  the chunk's tiles change, evicted far from the camera. A frame costs a few DrawMesh calls instead of thousands. Frame time in
+  the software renderer is about +6% on era 5 (400 frames 17.8 s -> 19.0 s) with much more geometry; draw calls were not the
+  only cost there (fill and triangles are).
+- Ground: grass cap now has standing blades (3 shapes, scale 0.6-1.2, tilt, noise-ramp greens), CC0 Poly Haven textures
+  (grass/earth/rock, see assets/textures/SOURCES.md) multiplied into the vertex colours via world-space planar UVs; pebbles use
+  a low-poly sphere. Only the pulsing memory blocks ('1'/'2') are still drawn live.
+- Mid-field: the flat lawn bands are gone. drawField builds a displaced height field (flat near the path so fence/houses/lamps
+  stay put, rolling further back), jittered-Voronoi patchwork of fields (hue +-0.04, per-field brightness; ripe corn; crop rows
+  drawn in lit3d.fs from a vertex alpha below 1 and world z, faded where they would alias), hedgerows and far trees on field
+  edges (none near the path or the cottage).
+- Flowers: three species (poppy/buttercup, daisy/pink, cornflower/violet), five squashed-sphere petals, 5-15 degree bent stalk in
+  two pieces, two leaves, scale 0.7-1.3, hue jitter +-0.03, noise-masked clumps; baked per chunk the first time a clump is asked for.
+- NOT done: Blender make_ground.py kit (no Blender or bpy in this container; the baked code meshes replace it), and the 2D era
+  tile repaint (era0-4 tiles.png already have 8 grass/earth variants, deep stratum, rocky undersides, tufts and edge caps; left alone).
+- Files touched: Models3D.cpp/.h, assets/shaders/lit3d.fs, assets/textures/ (3 new CC0 + 3 derived), SOURCES.md.
+
+## 2026-11-08 (later): era 6 ground and backdrop "read as generated" pass
+
+- Contact shadows: soft dark decals (Models3D::shadowAt/flushShadows) under houses, cottage, trees, lamps, fence posts,
+  stepping stones, flagstones, stooks and bales. Collected in a dry first pass, laid on the lawn before props are drawn.
+- Ground: no Blender tile kit (too many draws for the software renderer); instead per-tile boxes with variation:
+  grass lip with different overhang/height per tile, yellow-green lit top and blue-green shaded lip face, hanging blades,
+  soil darkened under the lip, wavy earth strata, non-overlapping pebbles sunk a third (more deeper down), tapering roots.
+  lit3d.fs has a new `macro` uniform: large world-space noise over lawns/ground (light/dark patches, hue shift).
+- Front lawn: bevelled stepping stones with colour variation, pond with mud ring, shallow/deep water and reeds, flowers with
+  bent stalks, leaves and petals (close ones), hue jitter. Trees: 5-7 blobs, dark bottom to light top, flared trunk.
+- Backdrop: tools/backdrop/make_era6_backdrop.py renders assets/art/era6/bg_0.png (smooth dithered sky, sun glow, soft clouds)
+  and bg_1.png (ridged-multifractal peaks with snow/rock, forest foothills, farmland with crop rows, hedgerows, varied trees),
+  anti-aliased, 2560x720. haze.fs now has a vertical haze gradient and soft alpha. Backdrop layer moved to z -88 (it was cut
+  by the far plane on the right).
+- Not done: Blender make_ground.py kit, cloud sprites as separate geometry, crop-row displaced mid-field geometry (the
+  flat lawn bands are only broken up by the macro noise). No textures downloaded: everything is procedural.
+- Files touched: Models3D.cpp/.h, Renderer.cpp (day layer), lit3d.fs, haze.fs, era6 bg_0/bg_1.png, tools/backdrop/.
+
+## 2026-11-08 morning: CC0 textures from Poly Haven
+
+- assets/textures/ holds natural_walnut_veneer and knitted_fleece (CC0, 1k diffuse maps), with SOURCES.md.
+- make_models.py (FILE_TEXTURES) packs the walnut into the clock's wood and a grey, brightened copy of the fleece
+  (knitted_fleece_wool_512.jpg) into the Forgetting's wool. The glTF exporter drops a Blender BW/Math chain, so
+  anything else than image times a colour has to be prepared as a file first (the raw fleece went near black).
+- Needs polyhaven.com, api.polyhaven.com and dl.polyhaven.org allowed in the cloud environment to re-download.
+- Gran/Sam critique rework (metal, baked AO, new faces, wool yarn) is in 6ba4d1c.
+
+Thread: "Apply UI changes from notes". Branch: `claude/project-thread-e2fqcf`, started from main at dd87652.
+Nothing pushed to main.
+
+## 2026-11-08: model pipeline and asset critique (Blender parts, lit3d shader)
+
+- tools/blender/make_models.py: real metallic/roughness, smooth by angle 30, bevels with hardened
+  normals, merge by distance, Smart UV, Cycles AO baked into COLOR_0 alpha, procedural walnut
+  grain and ivory mottle baked to textures packed in the .glb (texture downloads were approved
+  later but the proxy blocks polyhaven/ambientCG, so all textures are procedural; no assets/textures).
+- Gran/Sam faces (eyes with catchlight, Bezier smile, cheeks, blended nose), Gran perm shell and
+  glasses on the nose, Sam hair clumps, bent hood, trainers, light-wash jeans. Clock 2.0 tall with
+  brass, walnut, ivory, bracket feet. Forgetting: one wound yarn strand, pale eye, glowing ring.
+- assets/shaders/lit3d.vs/.fs: vertex colour (rgb tint, alpha AO), texture0 via useTexture,
+  stepped toon highlight on metals. Models3D::modelPart draws mesh by mesh (metallic, emissive,
+  useTexture per material); clock pivot constants updated. Scenery code untouched.
+
+## 2026-11-08 early morning: every item in "ui changest.txt" worked through
+
+raf asked to implement the review notes in `ui changest.txt` (repo root), using Blender for 3D models.
+
+### 3D models (Blender, tools/blender/make_models.py, all .glb in assets/models)
+- Grandfather clock in parts: case (plinth / long trunk / break-arch hood, swan neck, brass finials,
+  columns, ivory dial with hour marks), pendulum, hour and minute hands, two bracket feet. The trunk
+  is hollow; only the pendulum weight shows through a round window, so it never pokes through.
+  The face (eyes, brows) is drawn in the arch above the dial.
+- The Forgetting is now a ball of Gran's dark knitting wool: lumpy core, 20 yarn wraps, two
+  crossed knitting needles, a hollow eye with a cyan ring and a separate pupil that follows the
+  nearest player, two-ply twisted strand pieces (3 to 6 per strand) with frayed tips, paler
+  towards the ends. Turned 0.3 rad from the camera.
+- Gran: head 1.3x, bright blue glasses well in front of the face, no buttons or cheeks, perm
+  curls instead of the flat fringe, one tapered cardigan shape instead of piled balls.
+- Sam built in Blender on the same skeleton as Gran (one run cycle for both).
+
+### Rendering
+- lit3d.fs: `blendCol` and `grey` uniforms. Hit flashes blend to white, faded players go grey.
+  See-through parts are drawn as an ordered dither, so no inside parts show.
+- post.fs: FXAA for 2.5D/3D only; dead values and the stale header removed.
+- 2.5D/3D fill any window shape (no bars on 16:10). Title/pause/ending pages centred on any shape.
+- Retina: FLAG_WINDOW_HIGHDPI on Apple only, 3D target at framebuffer size. NOT tested on a Mac.
+- Smoother sphere mesh, varied pebbles (0 to 3 per tile, sizes, tints, shapes), less even fence,
+  lamp and garden spacing.
+
+### 2D sprites (tools/assetgen/SpriteGen.cpp, 11 PNGs)
+- 1-bit clock redrawn (no longer reads as a skull). Clocks in stages 4, 5, 6 are three different
+  clocks. Boss sprites for stages 5 and 6 lean towards the wool ball. Blob changes shape per stage.
+
+### Other
+- Old 4-stage brief moved from the repo root to notes/archive/old-4-stage-brief.md (marked
+  outdated); the empty "what just got created" removed.
+
+### Files of other Claudes touched (on this branch only)
+- src/render/Models3D.*, src/render/Renderer.*, src/core/Game.cpp (Apple HiDPI flag),
+  src/ui/Hud.cpp, src/ui/Story.cpp (centring on non-16:9), assets/shaders/lit3d.fs, post.fs,
+  tools/blender/make_models.py, tools/assetgen/SpriteGen.cpp, assets/models/*, 11 sprite PNGs.
+
+### Still to do
+- Play by a human, especially on raf's Mac (Retina path untested).
+- 1-bit blob still floats 2 px in its frame.

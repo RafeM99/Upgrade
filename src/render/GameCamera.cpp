@@ -99,6 +99,6 @@ Camera3D GameCamera::camera3D(float& nearPlane, float& farPlane) const
     c.fovy = fov;
     c.projection = CAMERA_PERSPECTIVE;
     nearPlane = std::max(0.05f, dist - 60.0f);
-    farPlane = dist + 120.0f;
+    farPlane = dist + 260.0f;   // the backdrop (z -88) on the far side of a yawed view lies beyond dist + 120: it was cut on a diagonal
     return c;
 }

@@ -395,8 +395,21 @@ bool bgEra3(Scene& sc, int layer)
         // sky: flat bands with clean edges, no dither. The darker top band ends under the HUD,
         // the pale horizon band starts low enough that the mountains hide its edge.
         const int b1 = (int)(H * 0.09f), b2 = (int)(H * 0.50f);
+        // The two band edges are not hard lines: over 12 rows the lower colour is dithered in with a 4 x 4
+        // ordered (Bayer) matrix, the way a 16-bit artist would hide the step in a 32-colour palette.
+        static const int bayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+        const int tw = 12;
         for (int y = 0; y < H; ++y)
-            for (int x = 0; x < W; ++x) sc.put(x, y, hex(y < b1 ? E3_SKY2 : y < b2 ? E3_SKY : E3_SKYL));
+            for (int x = 0; x < W; ++x) {
+                auto edge = [&](int b, unsigned up, unsigned dn) {   // up above the edge, dn below, mixed across tw rows
+                    int d = y - (b - tw / 2);
+                    if (d < 0) return up;
+                    if (d >= tw) return dn;
+                    return (d * 16 / tw) > bayer[y & 3][x & 3] ? dn : up;
+                };
+                unsigned c = y < b1 + tw ? edge(b1, E3_SKY2, E3_SKY) : edge(b2, E3_SKY, E3_SKYL);
+                sc.put(x, y, hex(c));
+            }
         // pale sun with a soft stepped rim
         const float sx = W * 0.79f, sy = H * 0.24f;
         sc.disc(sx, sy, 15, 15, hex(E3_SKYL), hex(E3_SKYL), false);
