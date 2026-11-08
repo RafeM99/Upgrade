@@ -1670,7 +1670,7 @@ void Models3D::drawPersonModel(Game& g, int p)
     bool running = pl.onGround && std::fabs(pl.vx) > 0.6f;
     float dtp = std::max(0.0f, std::min(0.1f, g.time - lastT_[p]));
     lastT_[p] = g.time;
-    if (running) runPhase_[p] += 2.6f * std::fabs(pl.vx) * dtp;
+    if (running) runPhase_[p] += 2.35f * std::fabs(pl.vx) * dtp;
     runBlend_[p] += std::max(-1.0f, std::min(1.0f, ((running ? 1.0f : 0.0f) - runBlend_[p]) * 9.0f * dtp));
     float yawOff = 0.52f - 0.57f * runBlend_[p];
     float yaw = pl.facing > 0 ? -yawOff : PI + yawOff;
@@ -1707,7 +1707,11 @@ void Models3D::drawPersonModel(Game& g, int p)
             float h = std::sqrt(sa * sa * std::sin(ph2) * std::sin(ph2) + sb * sb * std::cos(ph2) * std::cos(ph2));
             dMax = std::max(dMax, -(yc - h));
         }
-        footLift = dMax - 0.55f * std::cos(lean) - 0.01f;   // hips 0.55 above the root; keep 1 cm of sole in the lawn
+        // halve the up-and-down of the exact contact height while running: a stiff body reads better than
+        // a bouncing one, at the cost of a few mm of sole in the lawn
+        float dRef = 0.53f + sb;
+        float dUse = running ? dMax + (dRef - dMax) * 0.5f : dMax;
+        footLift = dUse - 0.55f * std::cos(lean) - 0.01f;   // hips 0.55 above the root; keep 1 cm of sole in the lawn
         bob = 0;
     }
     Matrix root = then(MatrixRotateY(yaw), T(pl.cx(), Y3(pl.bottom()) + bob - crouch + footLift, 0.2f));
