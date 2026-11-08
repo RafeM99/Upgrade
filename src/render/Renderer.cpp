@@ -146,6 +146,18 @@ int pixelScale(int era, int screenH)
     return std::max(1, (int)std::lround(screenH / designed));
 }
 
+// Framebuffer pixels per window (logical) pixel. On a Retina Mac the window asks for a high-DPI
+// framebuffer (Game::init), so the 2.5D / 3D image is rendered at the real pixel count, not the
+// logical one. Everywhere else this stays 1, exactly as before.
+float framebufferScale()
+{
+#if defined(__APPLE__)
+    const int sh = GetScreenHeight(), rh = GetRenderHeight();
+    if (sh > 0 && rh > sh) return std::min(4.0f, (float)rh / (float)sh);
+#endif
+    return 1.0f;
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ setup
@@ -160,7 +172,6 @@ void Renderer::init()
     locTime_ = GetShaderLocation(post_, "time");
     locSize_ = GetShaderLocation(post_, "texSize");
     locFlash_ = GetShaderLocation(post_, "flash");
-    locOut_ = GetShaderLocation(post_, "outSize");
     locMosaic_ = GetShaderLocation(post_, "mosaic");
     locGlitch_ = GetShaderLocation(post_, "glitch");
     locDesat_ = GetShaderLocation(post_, "desat");
@@ -187,9 +198,18 @@ void Renderer::init()
 void Renderer::ensureTargets()
 {
     for (int e = 0; e < ERA_COUNT; ++e) {
-        int h = lowRes(e) ? (int)(TILE_PX[e] * VIEW_TILES_H) : std::max(360, GetScreenHeight());
-        int w = (int)std::lround(h * 16.0 / 9.0);
-        if (lowRes(e)) {
+        int h, w;
+        if (!lowRes(e)) {
+            // 2.5D and 3D: the image has the window's own shape and fills it, so no stage gets
+            // bars on a screen that is not 16:9 (the camera takes its aspect from this size, so
+            // a wider window simply shows more of the street). It is rendered at framebuffer
+            // pixels (see framebufferScale) and drawn back about 1:1, with FXAA in post.fs.
+            const int sw = std::max(1, GetScreenWidth()), sh = std::max(1, GetScreenHeight());
+            h = std::max(360, (int)std::lround(sh * framebufferScale()));
+            w = std::max(1, (int)std::lround((double)h * sw / sh));
+        } else {
+            h = (int)(TILE_PX[e] * VIEW_TILES_H);
+            w = (int)std::lround(h * 16.0 / 9.0);
             // Framing: the pixel stages are scaled by a whole number (pixelScale), and the buffer
             // is made just big enough that the scaled image covers the whole window, both ways.
             // So no stage gets bars: the view shows a few rows more or fewer than the designed
@@ -207,8 +227,8 @@ void Renderer::ensureTargets()
         rt_[e] = LoadRenderTexture(w, h);
         rtW_[e] = w;
         rtH_[e] = h;
-        // Bilinear on every era: post.fs does "sharp" sampling, so pixel art stays crisp and even
-        // at any scale, and the mosaic blocks of the transition sample cleanly.
+        // Bilinear on every era: the pixel stages are read at texel centres in post.fs (so they
+        // stay hard-edged), and the smooth stages need it for FXAA and the transition's mosaic.
         SetTextureFilter(rt_[e].texture, TEXTURE_FILTER_BILINEAR);
     }
 }
@@ -233,9 +253,8 @@ Rectangle Renderer::screenRect() const
         float w = (float)rtW_[e] * k, h = (float)rtH_[e] * k;
         return Rectangle{std::floor((sw - w) / 2), std::floor((sh - h) / 2), w, h};
     }
-    float w = sw, h = sw * 9.0f / 16.0f;
-    if (h > sh) { h = sh; w = sh * 16.0f / 9.0f; }
-    return Rectangle{(sw - w) / 2, (sh - h) / 2, w, h};
+    // 2.5D and 3D: the image has the window's shape (ensureTargets), so it fills the window
+    return Rectangle{0, 0, sw, sh};
 }
 
 // ------------------------------------------------------------------ background
@@ -286,13 +305,16 @@ void Renderer::drawBackdrop3D(Game& g, int era, const Camera3D& cam)
     BeginShaderMode(haze_);
     SetShaderValue(haze_, locHazeCol_, &horizon, SHADER_UNIFORM_VEC3);
     const float ground = 2.0f;   // 3D y of the path top
+    const float wide = rtH_[era] > 0 ? std::max(1.0f, (float)rtW_[era] / rtH_[era] / (16.0f / 9.0f)) : 1.0f;
     for (int i = 0; i < n; ++i) {
         const Texture2D& t = g.art.era[era].bg[L[i].l];
         if (t.id == 0) continue;
         rlDrawRenderBatchActive();
         SetShaderValue(haze_, locHazeAmt_, &L[i].haze, SHADER_UNIFORM_FLOAT);
         float h = L[i].height, tw = h * t.width / t.height;
-        float half = (cam.position.z - L[i].z) * 1.1f + 12.0f;
+        // half the width to cover at this depth: 1.1 per unit of distance suits 16:9; a wider
+        // window (the image takes the window's shape) sees proportionally more
+        float half = (cam.position.z - L[i].z) * 1.1f * wide + 12.0f;
         float y0 = ground - 0.2f - L[i].baseFrac * h;   // world-down y of the picture top below
         // quad() takes the top-left in level tiles (y down)
         float top = (float)LEVEL_H - (y0 + h);
@@ -791,11 +813,9 @@ void Renderer::blitEra(Game& g, int e, Rectangle dst, float flash, float desat, 
 {
     float t = g.time;
     float size[2] = {(float)rtW_[e], (float)rtH_[e]};
-    float out[2] = {dst.width, dst.height};
     SetShaderValue(post_, locEra_, &e, SHADER_UNIFORM_INT);
     SetShaderValue(post_, locTime_, &t, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locSize_, size, SHADER_UNIFORM_VEC2);
-    SetShaderValue(post_, locOut_, out, SHADER_UNIFORM_VEC2);
     SetShaderValue(post_, locFlash_, &flash, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locDesat_, &desat, SHADER_UNIFORM_FLOAT);
     SetShaderValue(post_, locMosaic_, &mosaic, SHADER_UNIFORM_FLOAT);
