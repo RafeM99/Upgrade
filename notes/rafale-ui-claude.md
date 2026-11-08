@@ -1,5 +1,9 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 title music fix
+- Done: title melody now 44.1 kHz (was 48 kHz), silent intro trimmed, short fade-out at the loop seam; stage music is muted within 0.1 s on the title screen and the melody fades in over 0.4 s (was a 1.2 s overlap with the era music).
+- To do: raf to listen; cloud has no audio device.
+
 ## 2026-11-08 morning: raf's two tracks, and no more sliding feet
 
 - assets/audio/boss_loop.wav (raf's bossloopNEW, 16 s) plays during every boss fight; assets/audio/melody_title.wav (raf's randommelody2, 18 s)

@@ -73,8 +73,9 @@ void Audio::update(float dt)
         UpdateMusicStream(m);
     };
     fade(boss_, hasBoss_, wantBoss_ && !wantTitle_, bossVol_, 1.0f);
-    fade(title_, hasTitle_, wantTitle_, titleVol_, 1.2f);
-    const float special = std::max(bossVol_, titleVol_);
+    fade(title_, hasTitle_, wantTitle_, titleVol_, 0.4f);
+    // stage music must be gone almost at once, or it plays over the title melody
+    const float special = std::max(bossVol_, std::min(1.0f, titleVol_ * 4.0f));
     for (int e = 0; e < 4; ++e) {
         if (!hasMusic_[e]) continue;
         float target = e == era_ ? 1.0f : 0.0f;
