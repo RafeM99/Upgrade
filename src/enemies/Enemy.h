@@ -71,9 +71,11 @@ struct Boss {
     int kind = 6;              // which memory's boss this is (the stage it appears in)
     bool landed = false;       // set for one update when a swoop ends on the ground
     bool charge = false;       // the train: this swoop drops, then charges along flat ground
+    int aimPlayer = 0;         // the player this swoop is aimed at
 
     void start(float camX, int era, int hpBase, int hpPerEra, int kind);
     void update(float dt, float camLeft, float camRight, const Level& level, const Player* players, int era, float timeScale);
+    void aimAt(float camLeft, float camRight, const Level& level, const Player* players);
     bool vulnerable() const { return state == 3 && hurt <= 0; }
     bool dangerous() const { return state == 2; }        // only the swoop hurts; a resting boss just pushes you back
     bool aiming() const { return state == 6 || state == 2; }
