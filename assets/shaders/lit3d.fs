@@ -28,6 +28,8 @@ uniform float emissive;     // 0 lit, 1 flat colour (glowing parts)
 uniform float rim;          // 0 none, 1 the lighter rim (spheres, cylinders, cones, the Blender models)
 uniform vec4 blendCol;      // rgb: colour to blend towards, a: how much (0 none)
 uniform float grey;         // 0 full colour, 1 grey
+uniform vec3 fogCol;        // aerial perspective: colour to drift towards
+uniform vec3 fogRange;      // x start distance, y end distance, z strongest mix (z 0: off)
 uniform float macro;        // >0: the ground and scenery: a large soft noise over the world position
 out vec4 finalColor;
 
@@ -90,6 +92,13 @@ void main()
     c = mix(c, base, clamp(emissive, 0.0, 1.0));
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(l * 0.85 + 0.12), clamp(grey, 0.0, 1.0));
+    if (fogRange.z > 0.0) {
+        // things far behind the play plane lose contrast and saturation and take on the horizon colour
+        float f = smoothstep(fogRange.x, fogRange.y, length(viewPos - fragPosition));
+        float lum = dot(c, vec3(0.299, 0.587, 0.114));
+        c = mix(c, vec3(lum), 0.35 * f);
+        c = mix(c, fogCol, fogRange.z * f);
+    }
     c = mix(c, blendCol.rgb, clamp(blendCol.a, 0.0, 1.0));
     finalColor = vec4(c, 1.0);
 }

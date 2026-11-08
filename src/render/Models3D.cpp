@@ -61,6 +61,8 @@ void Models3D::init()
     locMetal_ = GetShaderLocation(sh_, "metallic");
     locUseTex_ = GetShaderLocation(sh_, "useTexture");
     locMacro_ = GetShaderLocation(sh_, "macro");
+    locFogCol_ = GetShaderLocation(sh_, "fogCol");
+    locFogRange_ = GetShaderLocation(sh_, "fogRange");
     sphereLo_ = LoadModelFromMesh(GenMeshSphere(1, 4, 7));   // baked blobs (tree canopies): 5x8, was 4x6, so the facets are smaller
     sphereTiny_ = LoadModelFromMesh(GenMeshSphere(1, 3, 5));
     for (int i = 1; i <= 3; ++i) {
@@ -446,12 +448,21 @@ void Models3D::part(Model& m, Matrix t, Color c, float emissive, bool rim)
     DrawModel(m, {0, 0, 0}, 1.0f, c);
 }
 
-void Models3D::begin(Game& g, const Camera3D& cam)
+void Models3D::begin(Game& g, const Camera3D& cam, bool fog)
 {
     rlDrawRenderBatchActive();
     camPos_ = cam.position;
     setLook({0, 0, 0, 0}, 0.0f);
     SetShaderValue(sh_, locView_, &cam.position, SHADER_UNIFORM_VEC3);
+    // aerial perspective: everything behind the play plane drifts towards the horizon colour (the same one the backdrop is hazed to)
+    {
+        float dist = std::sqrt((cam.position.x - cam.target.x) * (cam.position.x - cam.target.x) + (cam.position.y - cam.target.y) * (cam.position.y - cam.target.y) +
+                               (cam.position.z - cam.target.z) * (cam.position.z - cam.target.z));
+        Vector3 fc = {0.80f, 0.88f, 0.95f};
+        Vector3 fr = fog ? Vector3{dist + 5.0f, dist + 80.0f, 0.62f} : Vector3{0, 1, 0};   // start, end, strongest mix
+        SetShaderValue(sh_, locFogCol_, &fc, SHADER_UNIFORM_VEC3);
+        SetShaderValue(sh_, locFogRange_, &fr, SHADER_UNIFORM_VEC3);
+    }
     Vector3 pos[4]{}, col[4]{};
     float rad[4] = {0, 0, 0, 0};
     for (int p = 0; p < 2; ++p) {
@@ -1674,7 +1685,23 @@ void Models3D::drawPersonModel(Game& g, int p)
     if (pl.pounding) { thighF = thighB = 1.2f; kneeF = kneeB = -1.6f; armF = armB = -0.4f; crouch = 0.18f; lean = 0.1f; }
     if (pl.dashTime > 0) lean = -0.45f;
 
-    Matrix root = then(MatrixRotateY(yaw), T(pl.cx(), Y3(pl.bottom()) + bob - crouch, 0.2f));
+    // foot contact: the leg parts are 0.26 (thigh) + about 0.27 (shin to the shoe centre) + the shoe's own half height,
+    // so the body is set at the height where the lower sole just touches the ground (no sliding or floating through the
+    // cycle, no sinking when the leg is straight). The sole is the lowest point of the rotated shoe ellipsoid.
+    float footLift = 0.0f;
+    if (pl.onGround && !pl.pounding) {
+        const float sa = p == 0 ? 0.11f : 0.12f, sb = p == 0 ? 0.065f : 0.07f, sx = p == 0 ? 0.05f : 0.04f;
+        float dMax = 0.0f;
+        for (int side = 0; side < 2; ++side) {
+            float th = side ? thighF : thighB, ph2 = th + (side ? kneeF : kneeB);
+            float yc = -0.26f * std::cos(th) + (-0.27f * std::cos(ph2) + sx * std::sin(ph2));   // shoe centre below the hip
+            float h = std::sqrt(sa * sa * std::sin(ph2) * std::sin(ph2) + sb * sb * std::cos(ph2) * std::cos(ph2));
+            dMax = std::max(dMax, -(yc - h));
+        }
+        footLift = dMax - 0.55f - 0.01f;   // hips 0.55 above the root; keep 1 cm of sole in the lawn
+        bob = 0;
+    }
+    Matrix root = then(MatrixRotateY(yaw), T(pl.cx(), Y3(pl.bottom()) + bob - crouch + footLift, 0.2f));
     const float hipY = 0.55f;
     Matrix hips = then(then(MatrixRotateZ(lean), T(0, hipY, 0)), root);
     auto R = MatrixRotateZ;

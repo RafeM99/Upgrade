@@ -656,7 +656,7 @@ void Renderer::drawEra(Game& g, int era, float swing)
     // ---- the modelled street of the 3D stage
     if (full3D) {
         rlDrawRenderBatchActive();
-        models_.begin(g, c3);
+        models_.begin(g, c3, true);
         models_.drawScenery(g);
         models_.drawGround(g);
         rlDrawRenderBatchActive();
@@ -669,23 +669,24 @@ void Renderer::drawEra(Game& g, int era, float swing)
                 if (g.level.isSolidChar(g.level.tile((int)std::floor(x), ty))) return (float)ty;
             return -1.0f;
         };
+        const float sw = std::min(1.0f, swing);   // swing runs to 2 in the full 3D view: the shadows were then twice as dark (black discs)
         // soft contact shadows, the same decal as under the props, at each figure's z (it used to be a
         // hard dark disc a third of a metre behind them, mostly hidden by the figure itself)
         for (int p = 0; p < 2; ++p) {
             const Player& pl = g.players[p];
             if (!pl.joined) continue;
             float fy = floorBelow(pl.cx(), pl.bottom());
-            float k = swing * std::max(0.0f, 1 - (fy - pl.bottom()) / 6);
+            float k = sw * std::max(0.0f, 1 - (fy - pl.bottom()) / 6);
             if (fy >= 0 && k > 0.02f) models_.characterShadow(pl.cx(), Y3(fy), 0.2f, 0.4f * (1.3f - 0.3f * k), 0.28f, 0.36f * k * (pl.faded ? 0.5f : 1.0f));
         }
         for (const auto& e : g.enemies) {
             float fy = floorBelow(e.cx(), e.y + e.h);
-            float k = swing * std::max(0.0f, 1 - (fy - e.y - e.h) / 6);
+            float k = sw * std::max(0.0f, 1 - (fy - e.y - e.h) / 6);
             if (fy >= 0 && !e.dead && k > 0.02f) models_.characterShadow(e.cx(), Y3(fy), 0.2f, e.w * 0.62f, e.w * 0.62f * 0.7f, 0.36f * k);
         }
         if (g.boss.active) {
             float fy = floorBelow(g.boss.x, g.boss.y + g.boss.h / 2);
-            if (fy >= 0) models_.characterShadow(g.boss.x, Y3(fy), 0.4f, 1.5f, 1.0f, 0.3f * swing * std::max(0.25f, 1 - (fy - g.boss.y) / 9));
+            if (fy >= 0) models_.characterShadow(g.boss.x, Y3(fy), 0.4f, 1.5f, 1.0f, 0.3f * sw * std::max(0.25f, 1 - (fy - g.boss.y) / 9));
         }
         models_.flushCharacterShadows();
     }

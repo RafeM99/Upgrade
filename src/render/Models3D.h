@@ -17,7 +17,7 @@ public:
     void init();
     void shutdown();
     // Sets the lighting for this frame. Call inside BeginMode3D.
-    void begin(Game& g, const Camera3D& cam);
+    void begin(Game& g, const Camera3D& cam, bool fog = false);   // fog: era 6 aerial perspective (lit3d.fs fogCol/fogRange)
     void drawScenery(Game& g);                      // lawns, fence, trees, houses, lamps, Gran's cottage
     bool hasGroundKit() const { return groundKit_; }
     void drawGround(Game& g, bool meadow = false);                       // the solid tiles as grass-topped blocks
@@ -38,7 +38,7 @@ private:
     int locView_ = -1, locEmissive_ = -1, locRim_ = -1;
     int locLightPos_ = -1, locLightCol_ = -1, locLightRad_ = -1;
     int locSunDir_ = -1, locSunCol_ = -1, locSkyCol_ = -1, locGroundCol_ = -1;
-    int locMacro_ = -1;
+    int locMacro_ = -1, locFogCol_ = -1, locFogRange_ = -1;
     int locBlend_ = -1, locGrey_ = -1, locMetal_ = -1, locUseTex_ = -1;
     // Applied to every part drawn until changed: blend the lit colour towards blend_.xyz by
     // blend_.w (hit flash, the wool's pale tips) and take out grey_ of the colour (faded).
