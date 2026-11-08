@@ -203,6 +203,9 @@ void outlined(const std::function<void()>& f)
 // the whole view, in screen space of the canvas (after the camera)
 void screenFill(Color c, int blend = -1)
 {
+    // raylib's multiply blend is dst * src + dst * (1 - src alpha): give it an opaque colour
+    // faded toward white instead, or a translucent tint would brighten the scene
+    if (blend == BLEND_MULTIPLIED) { Color o = c; o.a = 255; c = mixc(WHITE, o, c.a / 255.0f); c.a = 255; }
     if (blend >= 0) BeginBlendMode(blend);
     DrawRectangle(0, 0, C.cw, C.ch, c);
     if (blend >= 0) EndBlendMode();
@@ -1012,14 +1015,15 @@ void sHay()
     beginCam(camX, 50, zoom);
     float par = camX - 88.9f;
     // sky: gold to rose, a low sun
-    GradVf(-200, -40, 900, 130, H(0xf8b860), H(0xfbe0a0));
-    GradVf(-200, -40, 900, 40, H(0xd88070), H(0xf8b860));
+    GradVf(-200, -40, 900, 60, H(0x4a3a6e), H(0xd8705a));
+    GradVf(-200, 20, 900, 50, H(0xd8705a), H(0xf4b45a));
+    GradVf(-200, 70, 900, 40, H(0xf4b45a), H(0xf8cc70));
     float sunX = 120 + par * 0.95f;
-    glow(sunX, 52, 60, alpha(H(0xfff0b0), 0.55f));
-    Cir(sunX, 52, 9, H(0xfff6d8));
+    glow(sunX, 56, 34, alpha(H(0xffd890), 0.38f));
+    Cir(sunX, 56, 7, H(0xfff2c8));
     for (int i = 0; i < 5; ++i) {
         float x = par * 0.9f + std::fmod(hf(i) * 400 + C.t * 1.5f, 400.0f) - 100;
-        E(x, 20 + hf(i + 3) * 18, 26, 3.5f, alpha(H(0xffd8b0), 0.7f));
+        E(x, 20 + hf(i + 3) * 18, 26, 2.6f, alpha(H(0xf09878), 0.75f));
     }
     // far hills, misty; a village with a church spire on the far hill
     auto layer = [&](float depth, float base, float amp, float freq, Color c) {
@@ -1032,27 +1036,28 @@ void sHay()
         }
         return off;
     };
-    layer(0.9f, 62, 5, 0.03f, H(0xd8a890));
+    layer(0.9f, 62, 5, 0.03f, H(0x9a6a86));
     float off2 = par * (1 - 0.75f);
-    R(130 + off2, 52, 4, 10, H(0xb88a7a)); Tri({129 + off2, 52}, {135 + off2, 52}, {132 + off2, 42}, H(0xb88a7a));
-    for (int i = 0; i < 5; ++i) R(110 + off2 + i * 6, 56, 5, 6, H(0xc09080));
-    layer(0.75f, 68, 4, 0.045f, H(0xc89a70));
-    float off3 = layer(0.55f, 74, 3, 0.06f, H(0xb08a50));
+    R(130 + off2, 52, 4, 10, H(0x7a5a72)); Tri({129 + off2, 52}, {135 + off2, 52}, {132 + off2, 42}, H(0x7a5a72));
+    for (int i = 0; i < 5; ++i) { R(110 + off2 + i * 6, 56, 5, 6, H(0x86607a)); Tri({109.5f + off2 + i * 6, 56}, {115.5f + off2 + i * 6, 56}, {112.5f + off2 + i * 6, 53}, H(0x6a4a62)); }
+    layer(0.75f, 68, 4, 0.045f, H(0xa8705e));
+    float off3 = layer(0.55f, 74, 3, 0.06f, H(0xa47a3c));
     // hedgerow trees on the middle distance
-    for (int i = 0; i < 10; ++i) { float x = off3 + i * 52 + hf(i) * 20; E(x, 70, 7, 6, H(0x7a6a3a)); E(x + 4, 67, 5, 5, H(0x8a7a40)); }
+    for (int i = 0; i < 10; ++i) { float x = off3 + i * 52 + hf(i) * 20; E(x, 70, 7, 6, H(0x4e5428)); E(x + 4, 67, 5, 5, H(0x6a6a30)); E(x - 2, 66, 3, 3, H(0x8a7a3a)); }
     // the field: gold stripes of cut hay running into the distance
-    GradVf(-200, 74, 900, 40, H(0xe0b058), H(0xc89038));
+    GradVf(-200, 74, 900, 40, H(0xe6a640), H(0xb87224));
     for (int i = 0; i < 9; ++i) {
         float y = 76 + i * i * 0.35f;
         float off = par * (1 - (0.4f - i * 0.04f));
-        for (float x = -120 + std::fmod(off, 12.0f); x < 520; x += 12) E(x, y, 4 + i * 0.6f, 0.35f + i * 0.08f, H(0xf0c870));
+        for (float x = -120 + std::fmod(off, 12.0f); x < 520; x += 12) E(x, y, 4 + i * 0.6f, 0.35f + i * 0.08f, H(0xf6c860));
     }
     // haycocks and a cart with villagers pitching hay up onto it
     auto haycock = [&](float x, float y, float s) {
         fan(x, y, s * 1.1f, s * 0.2f, Color{90, 50, 20, 70}, Color{90, 50, 20, 0});
-        E(x, y - s * 0.45f, s * 0.8f, s * 0.6f, H(0xe8b850));
-        E(x - s * 0.2f, y - s * 0.6f, s * 0.45f, s * 0.35f, H(0xf8d878));
-        E(x + s * 0.3f, y - s * 0.3f, s * 0.4f, s * 0.3f, H(0xc8902e));
+        E(x, y - s * 0.45f, s * 0.8f, s * 0.6f, H(0xc8862a));
+        E(x - s * 0.2f, y - s * 0.6f, s * 0.5f, s * 0.38f, H(0xf0c050));
+        E(x - s * 0.35f, y - s * 0.75f, s * 0.22f, s * 0.15f, H(0xffe08a));
+        E(x + s * 0.35f, y - s * 0.3f, s * 0.42f, s * 0.3f, H(0x9a6220));
     };
     for (int i = 0; i < 8; ++i) haycock(20 + i * 48 + hf(i) * 10, 79 + (i % 2) * 2, 5 + (i % 3));
     const float cartX = 40;
@@ -1098,15 +1103,13 @@ void sHay()
     for (int i = 0; i < 60; ++i) {
         float x = par * 0.8f + std::fmod(hf(i) * 260 + C.t * (2 + hf(i + 1) * 4), 260.0f) - 40;
         float y = 40 + hf(i + 7) * 45 + std::sin(C.t + i) * 2;
-        float a = 0.3f + 0.3f * std::sin(C.t * 2 + i);
+        float a = 0.15f + 0.15f * std::sin(C.t * 2 + i);
         fan(x, y, 0.5f, 0.5f, alpha(H(0xfff0c0), a), alpha(H(0xfff0c0), 0));
     }
     EndBlendMode();
     endCam();
     // warm grade and a soft vignette
-    screenFill(alpha(H(0xffe0b0), 0.10f), BLEND_MULTIPLIED);
     BeginBlendMode(BLEND_ALPHA);
-    DrawRectangleGradientV(0, 0, C.cw, C.ch / 5, Color{60, 20, 20, 70}, Color{60, 20, 20, 0});
     DrawRectangleGradientV(0, C.ch * 4 / 5, C.cw, C.ch / 5, Color{60, 20, 20, 0}, Color{60, 20, 20, 90});
     EndBlendMode();
 }
@@ -1246,7 +1249,9 @@ void rod(Vector3 a, Vector3 b, float d, Color c, Mesh* mesh = nullptr, bool ol =
     if (len < 1e-4f) return;
     Vector3 dir = Vector3Scale(v, 1 / len);
     Quaternion q = QuaternionFromVector3ToVector3({0, 1, 0}, dir);
-    Matrix M = MatrixMultiply(MatrixMultiply(MatrixScale(d, len, d), QuaternionToMatrix(q)), MatrixTranslate(a.x, a.y, a.z));
+    // straight down has no unique shortest rotation: turn it over about x instead
+    Matrix rot = dir.y < -0.9999f ? MatrixRotateX(PI_F) : QuaternionToMatrix(q);
+    Matrix M = MatrixMultiply(MatrixMultiply(MatrixScale(d, len, d), rot), MatrixTranslate(a.x, a.y, a.z));
     part(mesh ? *mesh : g_cyl, M, c, 0, ol);
 }
 
@@ -1394,8 +1399,8 @@ void lane3(float gateOpen)
     box({0, -0.02f, 8}, {1.8f, 0.06f, 20}, H(0xc8a878), {0, 0, 0}, 0, false);
     box({0, -0.02f, -1.6f}, {1.1f, 0.06f, 3.4f}, H(0xb89868), {0, 0, 0}, 0, false);
     for (int s = -1; s <= 1; s += 2) {
-        box({s * 2.4f, 0.55f, 9}, {1.2f, 1.1f, 18}, H(0x4a8a3a));
-        for (int i = 0; i < 9; ++i) ball({s * 2.4f, 1.1f, 1.2f + i * 2}, 1.25f, H(i % 2 ? 0x55963f : 0x4a8a3a), 0, false);
+        box({s * 3.4f, 0.4f, 10}, {1.2f, 0.8f, 18}, H(0x4a8a3a));
+        for (int i = 0; i < 9; ++i) ball({s * 3.4f, 0.85f, 2.2f + i * 2}, 1.1f, H(i % 2 ? 0x55963f : 0x4a8a3a), 0, false);
         for (int i = 0; i < 7; ++i) {
             float x = s * (0.75f + i * 0.5f);
             box({x, 0.45f, 0}, {0.12f, 0.9f, 0.08f}, H(0xf8f4ea));
@@ -1416,7 +1421,7 @@ void lane3(float gateOpen)
     }
     tree3(-6.5f, -6, 1.3f, 1);
     tree3(6.0f, -8, 1.5f, 2);
-    tree3(-5.0f, 6, 1.0f, 3);
+    tree3(-6.8f, 9, 1.0f, 3);
     tree3(5.5f, 12, 1.2f, 4);
     // the far hills
     for (int i = 0; i < 5; ++i) ballS({-24 + i * 12.0f, -2, -30.0f - (i % 2) * 6.0f}, {22, 8.0f + (i % 3) * 2, 12}, H(i % 2 ? 0x8ab860 : 0x7aa858), 0, false);
@@ -1460,7 +1465,7 @@ void sCottage()
     float gateOpen = sm(lerp(a, b, 0.7f), lerp(a, b, 0.9f));
     float lamps = sm(b + 4.6f, b + 6.5f);
     // camera: down the lane, closer while she runs, then back up to see the cottage whole
-    Vector3 p0{3.2f, 1.5f, 15}, p1{2.4f, 1.6f, 7.5f}, p2{-3.2f, 3.6f, 13.5f};
+    Vector3 p0{0.3f, 1.3f, 16}, p1{1.1f, 1.45f, 7.5f}, p2{-1.4f, 3.4f, 14.5f};
     float k1 = sm(0, a + 2), k2 = sm(b, C.end + 1.5f);
     Vector3 cp = lerp3(lerp3(p0, p1, k1), p2, k2);
     Vector3 ct = lerp3(lerp3({0, 1.2f, 2}, {0, 1.1f, -1}, k1), {0, 1.8f, -4}, k2);
@@ -1524,8 +1529,8 @@ void sEnding()
     float walk = sm(C.L(1) - 0.2f, C.L(2) + 0.2f);
     float give = sm(C.L(2) + 0.3f, C.L(2) + 1.3f);
     float sitK = sm(C.L(4) + 0.6f, C.L(4) + 1.8f);
-    Vector3 cp = lerp3({3.6f, 1.7f, 6.2f}, {1.4f, 1.35f, 4.2f}, sm(0, C.end + 2));
-    Camera3D cam = cam3(cp, {-0.4f, 1.0f, -0.6f}, 40);
+    Vector3 cp = lerp3({3.4f, 1.7f, 5.8f}, {1.0f, 1.3f, 3.0f}, sm(0, C.end + 2));
+    Camera3D cam = cam3(cp, lerp3({-0.4f, 1.0f, -0.6f}, {-0.9f, 0.9f, -0.8f}, sm(0, C.end + 2)), 40);
     sky2D(H(0x2a2026), H(0x3a2c30), {C.cw * 0.2f, C.ch * 0.3f}, Color{0, 0, 0, 0});
     Light3 L{{0.8f, -0.55f, 0.45f}, H(0xfff0d8), H(0xd8c8b8), H(0x8a6a50), H(0x3a2c30), 30, 60};
     begin3D(cam, L);
@@ -1571,7 +1576,7 @@ void sEnding()
     box({ch.x + 0.55f, 0.6f, ch.z}, {0.18f, 0.55f, 0.9f}, H(0x6a4a90));
     for (int s = -1; s <= 1; s += 2) for (int f = -1; f <= 1; f += 2) box({ch.x + s * 0.42f, 0.15f, ch.z + f * 0.35f}, {0.08f, 0.3f, 0.08f}, H(0x4a3020));
     // the footstool Sam sits on
-    const Vector3 st{-0.6f, 0, 0.1f};
+    const Vector3 st{-0.45f, 0, -0.2f};
     box({st.x, 0.18f, st.z}, {0.6f, 0.3f, 0.5f}, H(0xb07a4a));
     // Gran in her chair
     Look gran = granLook();
@@ -1586,13 +1591,13 @@ void sEnding()
     Look sam;
     sam.skin = H(0xe9b58c); sam.hair = H(0x6b3e22); sam.top = H(0x3c8cf0); sam.bottom = H(0x2b3f6b); sam.legs = sam.bottom; sam.shoes = H(0xf4f4f4);
     sam.hair_ = HAIR_CAP; sam.extra = H(0x4a9a3a);
-    Vector3 samP = lerp3({2.8f, 0, -0.8f}, {-0.4f, 0, 0.5f}, walk);
-    float yaw = walk > 0 && walk < 1 ? -110 : (walk >= 1 ? -125 : 180);
+    Vector3 samP = lerp3({2.8f, 0, -0.8f}, {-0.25f, 0, -0.6f}, walk);
+    float yaw = walk > 0 && walk < 1 ? -95 : (walk >= 1 ? -105 : 180);
     Pose3 p;
     if (walk > 0 && walk < 1) { p.walk = C.t * 8; p.move = 1; }
     p.armF = 1.1f;
     if (give > 0.5f) p.armF = 0.4f;
-    if (sitK > 0) { samP = lerp3(samP, {st.x, 0.0f, st.z + 0.05f}, sitK); p.sit = sitK; yaw = lerp(-125, -90, sitK); p.headYaw = -25 * sitK; }
+    if (sitK > 0) { samP = lerp3(samP, {st.x, 0.0f, st.z + 0.05f}, sitK); p.sit = sitK; yaw = lerp(-105, -100, sitK); p.headYaw = 10 * sitK; }
     if (C.t < C.L(1) - 0.2f) { p.armF = 1.3f + std::sin(C.t * 3) * 0.1f; }
     person3(samP, yaw, 1.8f, sam, p);
     // the cup of tea: in Sam's hand, then in hers

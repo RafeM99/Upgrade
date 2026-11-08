@@ -35,7 +35,7 @@ const Color WHO_COL[2] = {{242, 138, 30, 255}, {60, 156, 240, 255}};   // Gran, 
 
 constexpr float CPS = 42.0f;        // subtitle characters typed per second
 constexpr float FIRST_LINE = 2.8f;  // the opening caption shows before the first line
-constexpr float BAR_TOP = 62, BAR_BOT = 104;   // letterbox bars, page units
+constexpr float BAR_TOP = 64, BAR_BOT = 118;   // letterbox bars, page units
 constexpr int MEMORIES = art::ERA_COUNT;
 
 Color fade(Color c, float a) { c.a = (unsigned char)(c.a * std::max(0.0f, std::min(1.0f, a))); return c; }
@@ -276,7 +276,7 @@ void Story::drawPolaroid(Game& g, int era, float cx, float cy, float w, float an
     DrawRectanglePro({0, y0 + 2 * S, Wp * 0.26f, 18 * S}, {Wp * 0.13f, 9 * S}, 3.5f, fade(Color{232, 220, 190, 255}, 0.75f * alpha));
     if (!caption.empty()) {
         float fsz = 0;
-        const Font& f = ui::fontAt(w * 0.042f, ui::BODY, &fsz);
+        const Font& f = ui::fontAt(w * 0.07f, ui::HAND, &fsz);   // written on the photo by hand
         float tw = MeasureTextEx(f, caption.c_str(), fsz, 0).x;
         DrawTextEx(f, caption.c_str(), {std::round(-tw / 2), std::round(y0 + Bp + PHp + (bottom * S - fsz) / 2)}, fsz, 0,
                    fade(PHOTO_INK, alpha));
@@ -354,12 +354,12 @@ const Color NAME_COL[2] = {{255, 168, 72, 255}, {104, 178, 255, 255}};   // Gran
 // restoredUpTo: memories 0..restoredUpTo-1 are back. current: the memory being shown (-1: none).
 void Story::drawTimelineStrip(int current, int restoredUpTo, float alpha)
 {
-    const float y = 24, x0 = 380, x1 = 1000;
+    const float y = 22, x0 = 360, x1 = 1020;
     auto xOf = [&](int era) { return x0 + (x1 - x0) * (MEMORIES - 1 - era) / (float)MEMORIES; };
     ui::rect({x0, y - 0.5f, x1 - x0, 1.5f}, fade(DIM, alpha));
     float reach = current >= 0 ? xOf(current) : (restoredUpTo > 0 ? xOf(restoredUpTo - 1) : x1);
     ui::rect({reach, y - 1, x1 - reach, 2.5f}, fade(CREAM, alpha * 0.8f));
-    fText("further back", x0 - 22, y - 15, 24, fade(NARR_W, alpha * 0.8f), F_HAND, 2, 0);
+    fText("further back", x0 - 22, y - 16, 26, fade(NARR_W, alpha * 0.8f), F_HAND, 2, 0);
     for (int e = 0; e < MEMORIES; ++e) {
         float x = xOf(e);
         Color c = fade(NARR_W, 0.55f);
@@ -374,11 +374,11 @@ void Story::drawTimelineStrip(int current, int restoredUpTo, float alpha)
         } else {
             DrawCircleV({X(x), Y(y)}, 3.5f * S, fade(DIM, alpha));
         }
-        fText(T("memory_year_" + std::to_string(e)), x, y + 6, 22, fade(c, alpha), F_HAND, 1, 0);
+        fText(T("memory_year_" + std::to_string(e)), x, y + 6, 26, fade(c, alpha), F_HAND, 1, 0);
     }
     Color nc = current < 0 ? AMBER : CREAM;
     ui::rect({x1 - 5, y - 5, 10, 10}, fade(nc, alpha));
-    fText("now", x1, y + 6, 22, fade(nc, alpha), F_HAND, 1, 0);
+    fText("now", x1, y + 6, 26, fade(nc, alpha), F_HAND, 1, 0);
 }
 
 // The opening caption, like the note on the back of a photograph: a handwritten label,
@@ -387,8 +387,8 @@ void Story::drawCaption(float a)
 {
     if (a <= 0) return;
     const float x = 92, w = 820;
-    auto rows = fWrap(card_.title, 60, w, F_SERIF);
-    float y = 720 - BAR_BOT - 40 - rows.size() * 70 - 96;
+    auto rows = fWrap(card_.title, 68, w, F_SERIF);
+    float y = 720 - BAR_BOT - 44 - rows.size() * 78 - 100;
     // a soft shade behind the words so they read on any scene
     float top = y - 60, h = 720 - BAR_BOT - top;
     ui::gradV({0, top, 1280, h * 0.45f}, fade(BLACK, 0), fade(BLACK, 0.45f * a));
@@ -396,9 +396,9 @@ void Story::drawCaption(float a)
     std::string label = card_.label;
     for (auto& ch : label) ch = (char)std::tolower((unsigned char)ch);
     if (!label.empty()) label[0] = (char)std::toupper((unsigned char)label[0]);
-    fText(label, x, y, 32, fade(AMBER, a), F_HAND);
-    y += 44;
-    for (auto& r : rows) { fText(r, x, y, 60, fade(CREAM, a), F_SERIF); y += 70; }
+    fText(label, x, y, 36, fade(AMBER, a), F_HAND);
+    y += 46;
+    for (auto& r : rows) { fText(r, x, y, 68, fade(CREAM, a), F_SERIF); y += 78; }
     std::string when = card_.when;
     for (size_t i = 0; (i = when.find(" . ", i)) != std::string::npos;) when.replace(i, 3, "  \xC2\xB7  ");
     // "1979 . EDIE IS 33" -> "1979 · Edie is 33": sentence case, as if written by hand
@@ -410,7 +410,7 @@ void Story::drawCaption(float a)
         else { w2 += ch; if (u == 0xB7) cap = true; }
     }
     for (size_t i = 0; (i = w2.find("edie", i)) != std::string::npos; ++i) w2[i] = 'E';
-    fText(w2, x + 2, y + 4, 38, fade(AMBER, a), F_HAND);
+    fText(w2, x + 2, y + 4, 42, fade(AMBER, a), F_HAND);
 }
 
 // The line being spoken, typed out in the bottom letterbox bar: the speaker's name in their
@@ -428,12 +428,12 @@ void Story::drawSubtitle(float a)
     const int f = l.who >= 0 ? F_SERIF : F_ITALIC;
     std::string name = l.who >= 0 ? T(l.who == 0 ? "p1_name" : "p2_name") : "";
     if (!name.empty()) { for (auto& ch : name) ch = (char)std::tolower((unsigned char)ch); name[0] = (char)std::toupper((unsigned char)name[0]); }
-    float size = 30;
-    const float nameSize = 38;
+    float size = 32;
+    const float nameSize = 36;
     float nameW = name.empty() ? 0 : fW(name, nameSize, F_HAND) + 18;
-    auto rows = fWrap(l.text, size, 1080 - nameW, f);
-    if (rows.size() > 2) { size = 27; rows = fWrap(l.text, size, 1120 - nameW, f); }
-    float lh = size * 1.25f;
+    auto rows = fWrap(l.text, size, 1120 - nameW, f);
+    if (rows.size() > 2) { size = 29; rows = fWrap(l.text, size, 1180 - nameW, f); }
+    float lh = size * 1.22f;
     float blockW = 0;
     for (auto& r : rows) blockW = std::max(blockW, fW(r, size, f));
     float x = 640 - (blockW + nameW) / 2;
@@ -496,10 +496,11 @@ void Story::drawBars(Game& g)
     DrawRectangleRec({OX, OY - bh * (1 - k), WW, bh}, fade(BLACK, 0.92f));
     DrawRectangleRec({OX, OY + WH - bh * k, WW, bh}, fade(BLACK, 0.92f));
     float ta = std::max(0.0f, std::min(1.0f, (into - 0.25f) / 0.3f)) * std::min(1.0f, barsT_ / 0.3f);
-    ptext(barsLabel_, 640, -84 * (1 - k) + 32, 16, fade(AMBER, ta), 1);
+    // akshat (UI pass): a handwritten label above, the title in Lora, the line in Lora Italic
+    text(barsLabel_, 640, -84 * (1 - k) + 22, 34, fade(AMBER, ta), 1, (int)ui::HAND);
     float by = 720 - 84 * k;
-    ptext(barsTitle_, 640, by + 12, 30, fade(LILAC, ta), 1);
-    if (!barsLine_.empty()) text(barsLine_, 640, by + 50, 18, fade(PAPER, ta), 1);
+    text(barsTitle_, 640, by + 6, 34, fade(PAPER, ta), 1, (int)ui::SERIF, true);
+    if (!barsLine_.empty()) text(barsLine_, 640, by + 46, 25, fade(NARR, ta), 1, (int)ui::SERIF_ITALIC);
 }
 
 // ------------------------------------------------------------------ the ending

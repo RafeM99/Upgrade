@@ -113,7 +113,7 @@ void tri(Vector2 a, Vector2 b, Vector2 c, Color col);   // any winding
 // ---- stage skins: the HUD and dialogue of each graphics stage
 struct Skin {
     int era = 0;
-    bool pixel = true;                 // square corners, crisp borders, Pixelify text
+    bool pixel = true;                 // square corners, crisp borders
     int font = PIXEL;
     float radius = 0;
     Color bg, bg2;                     // panel fill (top / bottom when a gradient)

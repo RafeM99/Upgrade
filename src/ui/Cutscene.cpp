@@ -16,7 +16,7 @@ namespace {
 
 // ---- layout (UI units, 1280 x 720)
 constexpr float BOX_X = 60, BOX_Y = 516, BOX_W = 1160, BOX_H = 162;
-constexpr float TEXT_SIZE = 28, LINE_H = 40, TEXT_PAD_X = 44, TEXT_PAD_Y = 26;
+constexpr float TEXT_SIZE = 31, LINE_H = 42, TEXT_PAD_X = 44, TEXT_PAD_Y = 26;
 constexpr int LINES_PER_PAGE = 3;
 constexpr float PORTRAIT_H = 300, PORTRAIT_BOTTOM = BOX_Y + 14;
 constexpr float LEFT_X = 210, RIGHT_X = 1070;
@@ -34,7 +34,7 @@ void setup(Game& g)
     OY = r.y;
     ui::setFrame(r);
 }
-int g_font = ui::PIXEL;   // akshat (UI pass): Pixelify Sans in the pixel stages, Inter in the smooth ones
+int g_font = ui::PIXEL;   // akshat (UI pass): Silkscreen in the pixel stages, Lora in the smooth ones
 int fontFor(int era) { return art::lowRes(era) ? ui::PIXEL : ui::BODY; }
 Color hexc(unsigned h, unsigned char a = 255) { return Color{(unsigned char)(h >> 16), (unsigned char)(h >> 8), (unsigned char)h, a}; }
 Color fade(Color c, float a) { c.a = (unsigned char)(c.a * std::max(0.0f, std::min(1.0f, a))); return c; }
@@ -181,8 +181,9 @@ BoxStyle drawBox(int stage, float x, float y, float w, float h)
         return {hexc(0xfdf8ff), true};
     }
     // 2.5D / 3D: the menus' dark glass, with a warm accent
-    ui::panel({x, y, w, h}, ui::menuSkin());
-    return {hexc(0xfff8ee), false};
+    ui::paper({x, y, w, h});   // a sheet from the album, ink on cream
+    ui::tape(x + 60, y + 4, 90, -6);
+    return {ui::col::paperInk, false};
 }
 
 void nameTab(int stage, const std::string& name, unsigned colHex, float x, float y)
@@ -203,8 +204,10 @@ void nameTab(int stage, const std::string& name, unsigned colHex, float x, float
         DrawRectangleRounded(R(x + 4, y + 4, w - 8, h - 8), 0.4f, 6, col);
         text(name, x + w / 2, y + h / 2, 24, WHITE, true, true);
     } else {
-        DrawRectangleRounded(R(x, y, w, h), 1.0f, 12, fade(col, 0.92f));
-        text(name, x + w / 2, y + h / 2, 24, WHITE, true, true);
+        ui::rect({x + 3, y + 4, w, h}, fade(BLACK, 0.3f));
+        ui::rect({x, y, w, h}, ColorBrightness(col, -0.25f));
+        ui::rect({x, y + h - 3, w, 3}, ColorBrightness(col, -0.5f));
+        text(name, x + w / 2, y + h / 2, 26, WHITE, false, true, 1, BLANK, ui::SERIF_ITALIC);
     }
 }
 
@@ -369,7 +372,7 @@ void Cutscene::startLine(Game& g)
     std::string word, cur;
     while (ss >> word) {
         std::string tryS = cur.empty() ? word : cur + " " + word;
-        if (!cur.empty() && textW(tryS, TEXT_SIZE) > maxW) { lines.push_back(cur); cur = word; }
+        if (!cur.empty() && ui::textW(tryS, TEXT_SIZE, ui::SERIF) > maxW) { lines.push_back(cur); cur = word; }
         else cur = tryS;
     }
     if (!cur.empty()) lines.push_back(cur);
@@ -605,7 +608,8 @@ void Cutscene::draw(Game& g)
     for (size_t i = 0; i < pages_[page_].size() && left > 0; ++i) {
         const std::string& l = pages_[page_][i];
         int n = std::min(left, (int)l.size());
-        text(l.substr(0, n), BOX_X + TEXT_PAD_X, by + TEXT_PAD_Y + 6 + i * LINE_H, TEXT_SIZE, tc, st.shadow);
+        // what people say is always set in Lora, in every stage's box (akshat, UI pass)
+        text(l.substr(0, n), BOX_X + TEXT_PAD_X, by + TEXT_PAD_Y + 4 + i * LINE_H, TEXT_SIZE, tc, st.shadow, false, 1, BLANK, ui::SERIF);
         left -= n;
     }
     // blinking down arrow when the page is done
@@ -617,11 +621,12 @@ void Cutscene::draw(Game& g)
     {
         std::vector<ui::Prompt> ps = {{{"Space"}, {ui::PAD_A}, T("cutscene_hold_skip")}, {{"Esc"}, {ui::PAD_START}, T("cutscene_skip_all")}};
         // under the box, on the right
-        const float ph = 20, right = BOX_X + BOX_W - 8, py = by + BOX_H + 6;
+        const float ph = 24, right = BOX_X + BOX_W - 8, py = by + BOX_H + 6;
         float tw = 0;
         for (auto& p : ps) tw += ui::promptW(p, ph) + ph * 1.1f;
         tw -= ph * 1.1f;
-        ui::promptRow(ps, right, py, ph, fade(WHITE, 0.75f), ui::RIGHT, boxIn);
+        ui::rect({right - tw - 14, py - 4, tw + 22, ph + 8}, fade(BLACK, 0.7f * boxIn));
+        ui::promptRow(ps, right, py, ph, fade(WHITE, 0.92f), ui::RIGHT, boxIn);
         if (holdT_ > 0) ui::rrect({right - tw, py + ph + 2, tw * std::min(1.0f, holdT_ / HOLD_SKIP), 2}, 1, ui::col::amber);
     }
 }

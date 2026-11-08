@@ -21,7 +21,7 @@
 // Memory Bar between them, the boss bar under it, power-ups in the bottom corners - and each
 // graphics stage skins it its own way (ui::skin): an ink-and-cream 1-bit box, the handheld's
 // four greys, a white-bordered 8-bit box, the blue 16-bit RPG window, a glossy 32-bit bevel,
-// dark glass in 2.5D and warm paper cards in full 3D. Pixel stages use Pixelify Sans.
+// a solid warm plate in 2.5D and paper cards in full 3D. The HUD is set in Silkscreen.
 //
 // The title, pause, settings and credits screens share one look (ui::menuSkin) on every stage.
 
@@ -39,12 +39,12 @@ void menuFrame() { setFrame(menuRect()); }
 TextStyle ts(float size, Color c, int align = LEFT, bool bold = false, float track = 0)
 {
     TextStyle st;
-    st.size = K && K->pixel ? std::round(size * 1.1f) : size;   // Pixelify reads smaller than Inter
+    st.size = size;
     st.color = c;
     st.align = align;
-    st.bold = bold && K && !K->pixel;   // Pixelify is already heavy
+    st.bold = bold;   // Silkscreen Bold
+    (void)track;      // Silkscreen is already spaced for reading
     st.font = K ? K->font : BODY;
-    st.track = track;
     return st;
 }
 TextStyle body(float size, Color c, int align = LEFT, bool bold = false, float track = 0)
@@ -55,6 +55,15 @@ TextStyle body(float size, Color c, int align = LEFT, bool bold = false, float t
     st.align = align;
     st.bold = bold;
     st.track = track;
+    return st;
+}
+TextStyle serif(float size, Color c, int align = LEFT, bool italic = false)
+{
+    TextStyle st;
+    st.size = size;
+    st.color = c;
+    st.align = align;
+    st.font = italic ? SERIF_ITALIC : SERIF;
     return st;
 }
 TextStyle pix(float size, Color c, int align = LEFT, float track = 0.04f)
@@ -121,8 +130,10 @@ void abilityIcon(int a, float x, float y, float s, Color c)
 
 // ------------------------------------------------------------------ player cards
 constexpr float M = 16;           // screen margin
-constexpr float CARD_H = 60;
-constexpr float CHIP_H = 22;
+constexpr float CARD_H = 70;
+constexpr float CHIP_H = 26;
+constexpr float PX = type::pixel;       // Silkscreen, one step: every HUD label
+constexpr float PX2 = 2 * type::pixel;  // two steps: banners
 
 struct Ab { int id; std::string label; float k; };   // k: recharge 0..1 (1 = ready)
 
@@ -140,7 +151,7 @@ std::vector<Ab> abilitiesOf(Game& g, int p)
     return v;
 }
 
-float chipLabelSize() { return K->pixel ? 14 : 12; }
+float chipLabelSize() { return PX; }
 float abilityChipW(const Ab& a, bool iconOnly) { return iconOnly ? CHIP_H + 2 : CHIP_H - 6 + 6 + textW(a.label, ts(chipLabelSize(), WHITE, LEFT, true)) + 10; }
 
 void abilityChip(const Ab& a, float x, float y, bool iconOnly, Color pc)
@@ -166,11 +177,11 @@ float playerCard(Game& g, int p, float alphaBase)
     const float pad = 10;
     Color pc = K->p[p];
     std::string name = T(p == 0 ? "p1_name" : "p2_name");
-    TextStyle nameSt = ts(K->pixel ? 20 : 17, pc, LEFT, true, 0.06f);
+    TextStyle nameSt = ts(PX, pc, LEFT, true, 0.06f);
     if (!pl.joined) {
         // a quiet invitation instead of a card
         std::string a = name, b = T("p2_join_2");
-        TextStyle sa = ts(K->pixel ? 16 : 14, fade(K->text, 0.9f), LEFT, true, 0.06f), sb = ts(K->pixel ? 14 : 13, K->dim);
+        TextStyle sa = ts(PX, fade(K->text, 0.9f), LEFT, true, 0.06f), sb = ts(PX, K->dim);
         float w = pad * 2 + textW(a, sa) + 10 + textW(b, sb) + 4;
         float h = 34, x = W - M - w, y = M;
         float al = alphaBase * (0.75f + 0.25f * pulse(2.2f, 0));
@@ -187,7 +198,7 @@ float playerCard(Game& g, int p, float alphaBase)
     std::string sub;
     if (pl.faded) sub = g.solo() ? T("faded_hint_solo") : T("faded_hint");
     else if (abs.empty()) sub = T("no_abilities");
-    TextStyle subSt = ts(K->pixel ? 14 : 13, K->dim);
+    TextStyle subSt = ts(PX, K->dim);
     float contentW = std::max(textW(name, nameSt) + 34, pl.faded ? 64 + textW(sub, subSt) : (abs.empty() ? textW(sub, subSt) : rowW));
     float w = std::max(150.0f, contentW + 2 * pad + (K->era >= 5 ? 6 : 0));
     float x = right ? W - M - w : M, y = M;
@@ -196,12 +207,12 @@ float playerCard(Game& g, int p, float alphaBase)
     if (K->era == 5) { rrect({x + 7, y + 12, 3, CARD_H - 24}, 1.5f, fade(pc, alphaBase)); ix += 6; }
     if (K->era == 6) { rrect({x + 7, y + 12, 3, CARD_H - 24}, 1.5f, fade(pc, alphaBase)); ix += 6; }
     // row 1: the name, and P1 / P2 in the far corner
-    textMid(name, ix, y + 18, nameSt);
+    textMid(name, ix, y + 21, nameSt);
     std::string tag = p == 0 ? "P1" : "P2";
-    TextStyle tagSt = ts(K->pixel ? 12 : 11, fade(K->dim, 0.8f), RIGHT, true, 0.08f);
-    textMid(tag, x + w - pad, y + 18, tagSt);
+    TextStyle tagSt = ts(PX, fade(K->dim, 0.8f), RIGHT, true, 0.08f);
+    textMid(tag, x + w - pad, y + 21, tagSt);
     // row 2: abilities, or what is going on
-    float ry = y + CARD_H - CHIP_H - 8;
+    float ry = y + CARD_H - CHIP_H - 10;
     if (pl.faded) {
         float a = 0.6f + 0.4f * pulse(7, 0);
         Ab f{-1, T("faded"), 1};
@@ -297,23 +308,23 @@ void memoryPanel(Game& g)
     // row 1: the stage name, the score
     std::string stage = upper(T("era_name_" + std::to_string(g.era)));
     for (size_t i = 0; (i = stage.find(" . ", i)) != std::string::npos;) stage.replace(i, 3, "  \xC2\xB7  ");
-    textMid(stage, x + pad, y + 17, ts(K->pixel ? 14 : 12, K->dim, LEFT, true, 0.08f));
+    textMid(stage, x + pad, y + 21, ts(PX, K->dim, LEFT, true, 0.08f));
     std::string sc = std::to_string((int)std::lround(shownScore));
-    TextStyle scSt = ts(K->pixel ? 18 : 16, K->text, RIGHT, true, 0.02f);
-    textMid(sc, x + w - pad, y + 17, scSt);
-    textMid(T("score"), x + w - pad - textW(sc, scSt) - 8, y + 17, ts(K->pixel ? 12 : 11, K->dim, RIGHT, true, 0.1f));
+    TextStyle scSt = ts(PX, K->text, RIGHT, true, 0.02f);
+    textMid(sc, x + w - pad, y + 21, scSt);
+    textMid(T("score"), x + w - pad - textW(sc, scSt) - 8, y + 21, ts(PX, K->dim, RIGHT, true, 0.1f));
     // row 2: MEMORY [=====     ] 42%
-    float rowY = y + h - 20;
-    TextStyle lab = ts(K->pixel ? 14 : 12, K->text, LEFT, true, 0.1f);
+    float rowY = y + h - 22;
+    TextStyle lab = ts(PX, K->text, LEFT, true, 0.1f);
     std::string label = T("bar_label");
     float labW = textW(label, lab);
     textMid(label, x + pad, rowY, lab);
     std::string pct = std::to_string((int)std::floor(g.bar)) + "%";
-    TextStyle pctSt = ts(K->pixel ? 16 : 15, K->era >= 2 && K->era != 6 ? K->accent : K->text, RIGHT, true);
+    TextStyle pctSt = ts(PX, K->era >= 2 && K->era != 6 ? K->accent : K->text, RIGHT, true);
     float pctW = textW("100%", pctSt);
     textMid(pct, x + w - pad, rowY, pctSt);
     float bx = x + pad + labW + 10, bw = w - 2 * pad - labW - pctW - 20;
-    float bh = K->pixel ? 12 : 10;
+    float bh = 12;
     meter(bx, rowY - bh / 2, bw, bh, shownBar / 100.0f, barFlash);
 }
 
@@ -334,36 +345,36 @@ float bossBar(Game& g, float top)
     if (bossHitFlash <= 0.3f) bossGhost = approach(bossGhost, k, 4, dt);
     bossHitFlash = std::max(0.0f, bossHitFlash - dt * 2.5f);
 
-    const float w = 560, x = (W - w) / 2, y = top + 8, h = 50, pad = 12;
+    const float w = 600, x = (W - w) / 2, y = top + 8, h = 62, pad = 12;
     panel({x, y, w, h}, *K);
     std::string name = upper(T("boss_name_" + std::to_string(b.kind)));
     Color bc = K->era <= 1 ? K->text : K->boss;
-    TextStyle nameSt = ts(K->pixel ? 16 : 14, K->era == 6 ? bc : (K->era <= 1 ? K->text : mix(bc, WHITE, 0.45f)), LEFT, true, 0.1f);
-    textMid(name, x + pad, y + 15, nameSt);
+    TextStyle nameSt = ts(PX, K->era == 6 ? bc : (K->era <= 1 ? K->text : mix(bc, WHITE, 0.45f)), LEFT, true, 0.1f);
+    textMid(name, x + pad, y + 19, nameSt);
     if (b.phase >= 2) {   // down to half its health: it gets angrier
         std::string ph = upper(T("ui_phase2"));
-        TextStyle pst = ts(K->pixel ? 12 : 10, K->era <= 1 ? (K->era == 0 ? hex(0x0e0f13) : hex(art::SHADES4[3])) : (K->era == 6 ? bc : WHITE), CENTER, true, 0.1f);
+        TextStyle pst = ts(PX, K->era <= 1 ? (K->era == 0 ? hex(0x0e0f13) : hex(art::SHADES4[3])) : (K->era == 6 ? bc : WHITE), CENTER, true, 0.1f);
         float pw = textW(ph, pst) + 12, px = x + pad + textW(name, nameSt) + 10;
-        chip({px, y + 7, pw, 16}, *K, K->era <= 1 ? K->text : bc);
-        textMid(ph, px + pw / 2, y + 15, pst);
+        chip({px, y + 7, pw, 24}, *K, K->era <= 1 ? K->text : bc);
+        textMid(ph, px + pw / 2, y + 19, pst);
     }
     // what it is doing: open to a stomp, or just its hit count
     bool open = b.vulnerable() || b.state == 3;
     if (open) {
-        std::string hint = upper(T("boss_hint"));
-        TextStyle hs = ts(K->pixel ? 14 : 12, K->era <= 1 ? K->bg : WHITE, RIGHT, true, 0.06f);
+        std::string hint = upper(T("ui_stunned"));   // the full hint goes under the bar
+        TextStyle hs = ts(PX, K->era <= 1 ? K->bg : WHITE, RIGHT, true, 0.06f);
         if (K->era <= 1) hs.color = K->era == 0 ? hex(0x0e0f13) : hex(art::SHADES4[3]);
         if (K->era == 6) hs.color = K->accent2;
         float hw = textW(hint, hs) + 16;
         float a = 0.65f + 0.35f * pulse(9, 0);
-        chip({x + w - pad - hw, y + 5, hw, 20}, *K, K->era <= 1 ? K->text : hex(0x3ec46d), a);
-        textMid(hint, x + w - pad - 8, y + 15, hs);
+        chip({x + w - pad - hw, y + 6, hw, 26}, *K, K->era <= 1 ? K->text : hex(0x3ec46d), a);
+        textMid(hint, x + w - pad - 8, y + 19, hs);
     } else {
         std::string hp = std::to_string(std::max(0, b.hp)) + " / " + std::to_string(maxHp);
-        textMid(hp, x + w - pad, y + 15, ts(K->pixel ? 14 : 12, K->dim, RIGHT, true));
+        textMid(hp, x + w - pad, y + 19, ts(PX, K->dim, RIGHT, true));
     }
     // the HP track: one segment per hit
-    float tx = x + pad, tw = w - 2 * pad, ty = y + h - 18, th = K->pixel ? 10 : 8;
+    float tx = x + pad, tw = w - 2 * pad, ty = y + h - 20, th = 10;
     const float gap = 3;
     float segW = (tw - gap * (maxHp - 1)) / maxHp;
     for (int i = 0; i < maxHp; ++i) {
@@ -389,16 +400,26 @@ float bossBar(Game& g, float top)
         rrect({tx, y + h - 6, tw * sk, 2}, K->radius > 0 ? 1 : 0, sc);
     }
     float bottom = y + h;
+    if (open) {   // what to do now, in a strip under the bar
+        std::string hint = upper(T("boss_hint"));
+        TextStyle hs = ts(PX, K->era <= 1 ? K->text : (K->era == 6 ? K->text : hex(0xd8ffd8)), CENTER, true);
+        float hw = std::min(W - 80, textW(hint, hs) + 36), hy = bottom + 8;
+        float a = 0.75f + 0.25f * pulse(9, 0);
+        panel({(W - hw) / 2, hy, hw, 36}, *K);
+        hs.color = fade(hs.color, a);
+        textMid(hint, W / 2, hy + 18, hs);
+        bottom = hy + 36;
+    }
     // the boss's time power: its warning, then its name
     if (g.powers.labelT > 0 && !g.powers.label.empty()) {
         float a = std::min(1.0f, g.powers.labelT * 4);
-        TextStyle ps = ts(K->pixel ? 16 : 15, K->era <= 1 ? K->text : (K->era == 6 ? K->boss : hex(0xffe2ec)), CENTER, true, 0.02f);
+        TextStyle ps = ts(PX, K->era <= 1 ? K->text : (K->era == 6 ? K->boss : hex(0xffe2ec)), CENTER, true, 0.02f);
         float pw = textW(g.powers.label, ps) + 32;
         float py = bottom + 8;
-        panel({(W - pw) / 2, py, pw, 30}, *K, a);
-        if (K->era >= 2) rect({(W - pw) / 2 + (K->radius > 0 ? 12 : 4), py + 28 - (K->radius > 0 ? 2 : 4), pw - (K->radius > 0 ? 24 : 8), 2}, fade(K->boss, a));
-        textMid(g.powers.label, W / 2, py + 15, [&] { TextStyle t = ps; t.color = fade(ps.color, a); return t; }());
-        bottom = py + 30;
+        panel({(W - pw) / 2, py, pw, 38}, *K, a);
+        if (K->era >= 2) rect({(W - pw) / 2 + 4, py + 32, pw - 8, 2}, fade(K->boss, a));
+        textMid(g.powers.label, W / 2, py + 18, [&] { TextStyle t = ps; t.color = fade(ps.color, a); return t; }());
+        bottom = py + 38;
     }
     return bottom;
 }
@@ -412,8 +433,8 @@ void banner(Game& g, float top)
     std::string sub = g.bannerSub, title = g.banner;
     for (char& c : sub) if (c == '\n') c = ' ';
     for (size_t i = 0; (i = title.find(" . ", i)) != std::string::npos;) title.replace(i, 3, "  \xC2\xB7  ");
-    TextStyle tSt = ts(K->pixel ? 22 : 20, K->era <= 1 ? K->text : (K->era == 6 ? K->text : hex(0xfff4d8)), CENTER, true, 0.04f);
-    TextStyle sSt = ts(K->pixel ? 15 : 15, K->dim, CENTER);
+    TextStyle tSt = ts(PX2, K->era <= 1 ? K->text : (K->era == 6 ? K->text : hex(0xfff4d8)), CENTER, true, 0.04f);
+    TextStyle sSt = serif(26, K->text, CENTER);
     auto lines = sub.empty() ? std::vector<std::string>{} : wrap(sub, sSt.size, W * 0.5f, sSt.font);
     float w = textW(title, tSt);
     for (auto& l : lines) w = std::max(w, textW(l, sSt));
@@ -487,8 +508,8 @@ void powerUpCorners(Game& g)
             float rise = (1 - a) * 10;
             int type = g.puPopType[p];
             std::string name = upper(T("powerup_" + std::to_string(type))), desc = T("powerup_desc_" + std::to_string(type));
-            TextStyle nSt = ts(K->pixel ? 16 : 15, K->era <= 1 ? K->text : K->p[p], LEFT, true, 0.06f);
-            TextStyle dSt = ts(K->pixel ? 14 : 13, K->era == 6 ? K->text : K->dim);
+            TextStyle nSt = ts(PX, K->era <= 1 ? K->text : K->p[p], LEFT, true, 0.06f);
+            TextStyle dSt = serif(24, K->text);
             auto dl = wrap(desc, dSt.size, 300, dSt.font);
             float tw = textW(name, nSt);
             for (auto& l : dl) tw = std::max(tw, textW(l, dSt));
@@ -510,10 +531,12 @@ void powerUpCorners(Game& g)
 }
 
 // ------------------------------------------------------------------ menus: shared pieces
+// The menus look like Edie's scrapbook: cream sheets with grain, tape and a shadow, ink-dark
+// Lora type, handwritten Caveat notes in brick red, a yellow highlighter on the chosen row.
 void dimBackdrop(float a)
 {
     // the whole window, letterbox included
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), fade(col::ink, a));
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), fade(hex(0x120d0a), a));
 }
 
 std::vector<Prompt> navPrompts(bool change, bool back)
@@ -526,14 +549,36 @@ std::vector<Prompt> navPrompts(bool change, bool back)
     return ps;
 }
 
-// A centred heading in the pixel font with a short accent rule under it.
-void heading(const std::string& s, float cx, float y, float size, float a = 1)
+TextStyle hand(float size, Color c, int align = LEFT)
 {
-    TextStyle st = pix(size, fade(col::cream, a), CENTER, 0.08f);
-    st.shadow = fade(BLACK, 0.5f * a);
-    st.shadowOff = size * 0.06f;
-    text(s, cx, y, st);
-    rrect({cx - 22, y + size * 1.05f, 44, 3}, 1.5f, fade(col::amber, a));
+    TextStyle st;
+    st.size = size;
+    st.color = c;
+    st.align = align;
+    st.font = HAND;
+    return st;
+}
+
+// A dark strip along the bottom of the screen for the button prompts, so they read over anything.
+void promptStrip(const std::vector<Prompt>& ps, float a, bool left = false, Game* g = nullptr);
+
+// The chosen row: a hand-drawn arrow in the margin.
+void pointer(float x, float midY, float a, Color c)
+{
+    float k = std::sin(now() * 5) * 2.5f;
+    inkLine(x - 30 + k, midY + 1, x - 8 + k, midY, 3, fade(c, a));
+    inkLine(x - 17 + k, midY - 7, x - 8 + k, midY, 3, fade(c, a));
+    inkLine(x - 17 + k, midY + 7, x - 8 + k, midY, 3, fade(c, a));
+}
+
+// < value >, as two small ink chevrons
+void handArrows(float cx, float midY, float halfW, float a, Color c)
+{
+    float k = std::sin(now() * 6) * 2;
+    inkLine(cx - halfW - k, midY, cx - halfW + 8 - k, midY - 8, 2.5f, fade(c, a));
+    inkLine(cx - halfW - k, midY, cx - halfW + 8 - k, midY + 8, 2.5f, fade(c, a));
+    inkLine(cx + halfW + k, midY, cx + halfW - 8 + k, midY - 8, 2.5f, fade(c, a));
+    inkLine(cx + halfW + k, midY, cx + halfW - 8 + k, midY + 8, 2.5f, fade(c, a));
 }
 
 // ------------------------------------------------------------------ the logo
@@ -642,85 +687,82 @@ void logo(int e, float cx, float y, float size, float a, float t)
     }
 }
 
-// ------------------------------------------------------------------ title: controls card
-struct CtlRow { std::vector<std::string> keys; std::vector<int> pads; const char* label; };
-
-void controlsCard(Game& g, float x, float y, float w, float a)
+// ------------------------------------------------------------------ title: the controls card
+// An index card taped to the page: who plays with which keys (or pad buttons).
+void controlsCard(Game& g, float x, float y, float w, float h, float a)
 {
-    const Skin& k = menuSkin();
-    const float h = 292;
-    panel({x, y, w, h}, k, a);
-    const float pad = 22;
-    text(upper(T("ui_controls")), x + pad, y + 18, pix(16, fade(col::creamDim, a), LEFT, 0.12f));
-    float cy = y + 52;
-    auto who = [&](int p, float yy) {
-        Color pc = p == 0 ? col::gran : col::sam;
-        DrawCircleV({X(x + pad + 5), Y(yy + 9)}, L(5), fade(pc, a));
-        text(T(p == 0 ? "p1_name" : "p2_name"), x + pad + 18, yy, body(16, fade(pc, a), LEFT, true, 0.06f));
-        float nameW = textW(T(p == 0 ? "p1_name" : "p2_name"), body(16, WHITE, LEFT, true, 0.06f));
-        std::string tag = p == 0 ? T("ui_player1") : T("ui_player2");
-        text(tag, x + pad + 18 + nameW + 10, yy + 1, body(14, fade(col::mute, a)));
-        if (p == 1) {   // joined or not
-            bool in = g.players[1].joined;
-            std::string st = in ? T("ui_ready") : T("ui_press_to_join");
-            TextStyle ss = body(12, in ? col::good : col::creamDim, RIGHT, true, 0.08f);
-            float sw = textW(upper(st), ss) + 18;
-            float al = in ? a : a * pulse(3, 0.55f);
-            rrect({x + w - pad - sw, yy - 2, sw, 22}, 11, fade(in ? col::good : col::cream, al * 0.14f));
-            ss.color = fade(ss.color, al);
-            textMid(upper(st), x + w - pad - 9, yy + 9, ss);
-        }
-    };
-    const float kh = 24;
-    auto row = [&](const std::vector<Prompt>& ps, float yy) {
-        float px = x + pad + 18;
-        for (auto& p : ps) px += prompt(p, px, yy, kh, fade(col::creamDim, a), a) + 18;
+    const float pad = 26;
+    paper({x, y, w, h}, col::paper, a);
+    tape(x + w / 2, y + 2, 110, -3, a);
+    text(T("ui_controls"), x + pad, y + 16, hand(42, fade(col::brick, a)));
+    float cy = y + 70;
+    const float kh = 32;
+    auto row = [&](const std::vector<Prompt>& ps, float yy, float al) {
+        float px = x + pad;
+        for (auto& p : ps) px += prompt(p, px, yy, kh, fade(col::paperInk, al), al) + 22;
     };
     const bool pads = anyPad();
-    // Gran
-    who(0, cy);
-    if (pads) row({{{}, {PAD_STICK}, T("ctl_move")}, {{}, {PAD_A}, T("ctl_jump")}, {{}, {PAD_X}, T("ctl_attack")}, {{}, {PAD_B}, T("ctl_ability")}}, cy + 28);
-    else {
-        row({{{"A", "D"}, {}, T("ctl_move")}, {{"Space"}, {}, T("ctl_jump")}}, cy + 28);
-        row({{{"F"}, {}, T("ctl_attack")}, {{"G"}, {}, T("ctl_ability")}, {{"S", "G"}, {}, T("ctl_ability2")}}, cy + 60);
-    }
-    cy += pads ? 74 : 104;
-    // Sam
-    float sa = g.players[1].joined ? 1.0f : 0.6f;
-    who(1, cy);
-    {
-        float a0 = a;
-        a *= sa;
-        if (pads) row({{{}, {PAD_STICK}, T("ctl_move")}, {{}, {PAD_A}, T("ctl_jump")}, {{}, {PAD_X}, T("ctl_attack")}, {{}, {PAD_B}, T("ctl_ability")}}, cy + 28);
-        else {
-            row({{{"\xE2\x86\x90", "\xE2\x86\x92"}, {}, T("ctl_move")}, {{"R-Ctrl"}, {}, T("ctl_jump")}}, cy + 28);
-            row({{{"R-Shift"}, {}, T("ctl_attack")}, {{"/"}, {}, T("ctl_ability")}, {{"\xE2\x86\x93", "/"}, {}, T("ctl_ability2")}}, cy + 60);
+    for (int p = 0; p < 2; ++p) {
+        bool joined = p == 0 || g.players[1].joined;
+        float al = joined ? a : a * 0.8f;
+        Color pc = p == 0 ? col::granInk : col::samInk;
+        std::string nm = T(p == 0 ? "p1_name" : "p2_name");
+        TextStyle ns = serif(28, fade(pc, a));
+        ns.bold = true;
+        text(nm, x + pad, cy, ns);
+        float nx = x + pad + textW(nm, ns) + 12;
+        text(T(p == 0 ? "ui_player1" : "ui_player2"), nx, cy + 3, serif(24, fade(col::paperInk2, a), LEFT, true));
+        if (p == 1) {   // joined, or how to join
+            std::string st = joined ? T("ui_ready") : T("ui_press_to_join");
+            TextStyle hs = hand(34, fade(joined ? hex(0x2e7d3a) : col::brick, joined ? a : a * pulse(3, 0.6f)), RIGHT);
+            text(st, x + w - pad, cy - 4, hs);
         }
-        a = a0;
+        cy += 40;
+        if (pads) {
+            row({{{}, {PAD_STICK}, T("ctl_move")}, {{}, {PAD_A}, T("ctl_jump")}, {{}, {PAD_X}, T("ctl_attack")}, {{}, {PAD_B}, T("ctl_ability")}}, cy, al);
+            cy += 54;
+        } else if (p == 0) {
+            row({{{"A", "D"}, {}, T("ctl_move")}, {{"Space"}, {}, T("ctl_jump")}, {{"F"}, {}, T("ctl_attack")}}, cy, al);
+            row({{{"G"}, {}, T("ctl_ability")}, {{"S", "G"}, {}, T("ctl_ability2")}}, cy + 40, al);
+            cy += 88;
+        } else {
+            row({{{"\xE2\x86\x90", "\xE2\x86\x92"}, {}, T("ctl_move")}, {{"R-Ctrl"}, {}, T("ctl_jump")}}, cy, al);
+            row({{{"R-Shift"}, {}, T("ctl_attack")}, {{"/"}, {}, T("ctl_ability")}}, cy + 40, al);
+            cy += 88;
+        }
     }
-    cy += pads ? 74 : 104;
-    // the line under: how to join, or which pads the game can see
-    std::string foot = pads ? T("ctl_pads_note") : T("ctl_join_note");
-    for (auto& l : wrap(foot, 13, w - 2 * pad)) { text(l, x + pad, cy - 4, body(13, fade(col::mute, a))); cy += 17; }
 }
 
 // Which controllers the game can see, so a player can tell at once if theirs works.
-void padStatus(Game& g, float x, float midY, float a)
+std::string padLine(Game& g, Color* c)
 {
     auto pads = g.input.pads();
     std::string line;
-    Color c = col::mute;
+    *c = col::cream;
     if (pads.empty()) line = T("pads_none");
     for (auto& pd : pads) {
         std::string one = pd.name + ": ";
-        if (!pd.usable) { one += T("pads_unknown"); c = hex(0xffb070); }
-        else if (pd.player >= 0) { one += T(pd.player == 0 ? "p1_name" : "p2_name"); c = col::good; }
+        if (!pd.usable) { one += T("pads_unknown"); *c = hex(0xffc890); }
+        else if (pd.player >= 0) { one += T(pd.player == 0 ? "p1_name" : "p2_name"); *c = hex(0xb8f0c0); }
         else one += T("pads_spare");
         line += (line.empty() ? "" : "   ") + one;
     }
-    float s = 16;
-    padButton(PAD_DPAD, x, midY - s / 2, s, a * 0.8f);
-    textMid(line, x + s + 8, midY, body(12, fade(c, a)));
+    return line;
+}
+
+void promptStrip(const std::vector<Prompt>& ps, float a, bool left, Game* g)
+{
+    const float h = 58, y = H - h;
+    rect({-400, y, W + 800, h}, fade(hex(0x14100d), 0.9f * a));
+    rect({-400, y, W + 800, 2}, fade(col::paperDark, 0.5f * a));
+    promptRow(ps, W - 36, y + (h - 32) / 2, 32, fade(col::cream, a), RIGHT, a);
+    if (left && g) {
+        Color c;
+        std::string line = padLine(*g, &c);
+        padButton(PAD_DPAD, 36, y + (h - 24) / 2, 24, a);
+        auto lines = wrap(line, 21, 720);
+        if (!lines.empty()) textMid(lines[0], 70, y + h / 2, serif(21, fade(c, a)));
+    }
 }
 
 enum TitleRow { TR_START, TR_PLAYERS, TR_DIFFICULTY, TR_SETTINGS, TR_CREDITS, TR_QUIT };
@@ -733,7 +775,7 @@ std::string rowLabel(int i)
 std::string rowValue(Game& g, int i)
 {
     if (i == TR_PLAYERS) return g.players[1].joined ? T("menu_players_2") : T("menu_players_1");
-    if (i == TR_DIFFICULTY) return T("difficulty_" + std::to_string(g.difficulty));
+    if (i == TR_DIFFICULTY) return T("menu_diff_" + std::to_string(g.difficulty));
     return "";
 }
 std::string rowDesc(Game& g, int i)
@@ -748,24 +790,29 @@ std::string rowDesc(Game& g, int i)
     }
 }
 
-void credits(Game& g, float a)
+// The credits: one sheet, names in Edie's hand.
+void credits(float a)
 {
-    (void)g;
-    const float cx = W / 2;
-    const float w = 640, x = cx - w / 2, y = 222, h = 392;
-    panel({x, y, w, h}, menuSkin(), a);
-    heading(upper(T("menu_credits")), cx, y + 26, 26, a);
-    float yy = y + 84;
-    auto section = [&](const char* head, const std::string& val, float valSize = 20) {
-        text(upper(T(head)), cx, yy, body(12, fade(col::amber, a), CENTER, true, 0.16f));
-        yy += 20;
-        for (auto& l : wrap(val, valSize, w - 80)) { text(l, cx, yy, body(valSize, fade(col::cream, a), CENTER)); yy += valSize * 1.3f; }
-        yy += 16;
+    const float w = 720, x = (W - w) / 2, y = 186, h = 420;
+    beginRotate(W / 2, y + h / 2, -0.6f);
+    paper({x, y, w, h}, col::paper, a);
+    tape(x + 40, y + 6, 100, -32, a);
+    tape(x + w - 40, y + 6, 100, 32, a);
+    TextStyle tt = serif(50, fade(col::paperInk, a), CENTER);
+    tt.bold = true;
+    text(T("menu_credits"), W / 2, y + 26, tt);
+    text(T("credits_team"), W / 2, y + 96, hand(52, fade(col::brick, a), CENTER));
+    float yy = y + 176;
+    auto line = [&](const char* head, const char* body) {
+        text(T(head), x + 60, yy, serif(24, fade(col::paperInk2, a), LEFT, true));
+        auto ls = wrap(T(body), 26, w - 260);
+        for (auto& l : ls) { text(l, x + 220, yy - 2, serif(26, fade(col::paperInk, a))); yy += 34; }
+        yy += 14;
     };
-    section("credits_team_head", T("credits_team"), 24);
-    section("credits_jam_head", T("credits_jam"), 17);
-    section("credits_tech_head", T("credits_tech"), 17);
-    section("credits_fonts_head", T("credits_fonts"), 15);
+    line("credits_jam_head", "credits_jam");
+    line("credits_tech_head", "credits_tech");
+    line("credits_fonts_head", "credits_fonts");
+    endRotate();
 }
 
 }  // namespace
@@ -794,84 +841,101 @@ void Hud::drawTitle(Game& g)
     const float t = g.time;
     const int e = ((int)(t / 3.0f)) % art::ERA_COUNT;
     const float intro = easeOutCubic(t / 0.9f);
-    // keep the backdrop but make the words readable: a soft dark wash and a vignette
-    Rectangle full{-2000, -2000, 5280, 4720};
-    (void)full;
-    gradV({0, 0, W, 300}, fade(col::ink, 0.55f), fade(col::ink, 0.15f));
-    gradV({0, 300, W, 420}, fade(col::ink, 0.15f), fade(col::ink, 0.82f));
-    vignette({0, 0, W, H}, 0.45f);
-    if (g.titleMode == 0) gradH({0, 0, 640, H}, fade(col::ink, 0.6f * intro), fade(col::ink, 0));   // behind the menu
+    // the backdrop stays, but quieter: a dark band behind the logo, a warm wash over the rest
+    gradV({0, 0, W, 300}, fade(hex(0x120d0a), 0.7f), fade(hex(0x120d0a), 0.15f));
+    rect({0, 300, W, H - 300}, fade(hex(0x120d0a), 0.25f));
+    vignette({0, 0, W, H}, 0.4f);
 
     const bool creditsMode = g.titleMode == 1;
-    const float logoY = creditsMode ? 40 : 54;
-    const float logoSize = creditsMode ? 84 : 112;
-    logo(e, W / 2, logoY + (1 - intro) * -20 + std::round(std::sin(t * 1.6f) * 3), logoSize, intro, t);
-    // the seven stages as dots: the logo and backdrop are on this one
+    const float logoX = creditsMode ? W / 2 : 860;
+    const float logoY = creditsMode ? 30 : 28;
+    const float logoSize = creditsMode ? 84 : 96;
+    logo(e, logoX, logoY + (1 - intro) * -20 + std::round(std::sin(t * 1.6f) * 3), logoSize, intro, t);
+    // which stage the logo and backdrop are on: dots and the name on a dark tag
     {
-        float dy = logoY + logoSize * 1.08f + 14;
-        const float step = 20;
-        float x0 = W / 2 - step * 3;
-        for (int i = 0; i < art::ERA_COUNT; ++i) {
-            bool on = i == e;
-            float r = on ? 4.5f : 3;
-            Color c = on ? col::amber : fade(col::cream, 0.35f);
-            DrawCircleV({X(x0 + i * step), Y(dy)}, L(r), fade(c, intro));
-        }
+        float dy = logoY + logoSize * 1.12f + 10;
         std::string era = upper(T("era_name_" + std::to_string(e)));
         for (size_t i = 0; (i = era.find(" . ", i)) != std::string::npos;) era.replace(i, 3, "  \xC2\xB7  ");
-        text(era, W / 2, dy + 12, pix(14, fade(col::creamDim, 0.9f * intro), CENTER, 0.12f));
+        TextStyle es = pix(PX, fade(col::cream, intro), LEFT, 0);
+        float ew = textW(era, es), step = 16, dotsW = step * art::ERA_COUNT;
+        float tw = dotsW + 14 + ew + 28, tx = logoX - tw / 2;
+        rect({tx, dy, tw, 34}, fade(hex(0x14100d), 0.85f * intro));
+        for (int i = 0; i < art::ERA_COUNT; ++i) {
+            bool on = i == e;
+            float s = on ? 8 : 6;
+            rect({tx + 14 + i * step + (8 - s) / 2, dy + 17 - s / 2, s, s}, fade(on ? col::highlight : fade(col::cream, 0.45f), intro));
+        }
+        textMid(era, tx + 14 + dotsW + 6, dy + 17, es);
     }
     if (creditsMode) {
-        credits(g, intro);
-        promptRow({{{"Esc"}, {PAD_B}, T("ui_back")}}, W - 40, H - 44, 24, col::creamDim, RIGHT);
+        credits(intro);
+        promptStrip({{{"Esc"}, {PAD_B}, T("ui_back")}}, intro);
         return;
     }
-    // tagline
-    text(T("title_sub"), W / 2, 232, body(18, fade(col::cream, 0.85f * intro), CENTER));
+    // the tagline, in cream italic on a dark band under the logo
+    {
+        float a = clamp01((t - 0.3f) / 0.5f);
+        auto ls = wrap(T("title_sub"), 26, 680, SERIF_ITALIC);
+        float sy = 186, sh = 16 + ls.size() * 32, bw = 0;
+        for (auto& l : ls) bw = std::max(bw, textW(l, serif(26, WHITE, LEFT, true)));
+        rect({logoX - bw / 2 - 24, sy, bw + 48, sh}, fade(hex(0x14100d), 0.72f * a));
+        float ly = sy + 8;
+        for (auto& l : ls) { text(l, logoX, ly, serif(26, fade(col::cream, a), CENTER, true)); ly += 32; }
+    }
 
-    // ---- the menu, on the left
-    const float mx = 104, my = 300, rowH = 46, mw = 400;
+    // ---- the menu: a page from the album, taped on the left
+    const float cx = 64, cy = 112, cw = 440, ch = 512;
+    float ma = clamp01((t - 0.1f) / 0.4f);
+    beginRotate(cx + cw / 2, cy + ch / 2, -0.8f);
+    paper({cx, cy, cw, ch}, col::paper, ma);
+    tape(cx + cw / 2, cy + 4, 120, 2, ma);
+    text(T("menu_note"), cx + 44, cy + 26, hand(44, fade(col::brick, ma)));
+    inkLine(cx + 44, cy + 84, cx + cw - 44, cy + 86, 1.5f, fade(col::paperInk2, 0.5f * ma));
+    const float mx = cx + 70, my = cy + 104, rowH = 54;
     for (int i = 0; i < TITLE_ITEMS; ++i) {
-        float ry = my + i * rowH;
-        float ia = clamp01((t - 0.15f - i * 0.05f) / 0.35f);
-        float slide = (1 - easeOutCubic(ia)) * -24;
+        float ry = my + i * rowH, mid = ry + rowH / 2;
+        float ia = clamp01((t - 0.2f - i * 0.05f) / 0.35f) * ma;
         bool sel = g.titleItem == i;
-        if (sel) selectionBar(1001, mx - 18, ry, mw + 36, rowH - 6, col::amber, ia);
-        float off = anim(1100 + i, sel ? 10.0f : 0.0f, 18);
-        Color c = sel ? col::cream : fade(col::cream, 0.72f);
-        TextStyle st = body(22, fade(c, ia), LEFT, sel, 0.02f);
-        textMid(rowLabel(i), mx + off + slide, ry + (rowH - 6) / 2, st);
+        TextStyle st = serif(36, fade(sel ? col::paperInk : col::paperInk2, ia));
+        st.bold = sel;
+        float lw = textW(rowLabel(i), st);
+        if (sel) {
+            selectionBar(1001, mx - 8, ry + 8, lw + 16, rowH - 16, col::highlight, ia);
+            pointer(mx - 8, mid, ia, col::brick);
+        }
+        textMid(rowLabel(i), mx, mid, st);
         std::string v = rowValue(g, i);
         if (!v.empty()) {
-            TextStyle vs = body(18, fade(sel ? col::amber : col::creamDim, ia), CENTER, true, 0.06f);
-            float vcx = mx + mw - 80 + slide;
-            textMid(v, vcx, ry + (rowH - 6) / 2, vs);
-            if (sel) arrows(vcx, ry + (rowH - 6) / 2, 74, 10, fade(col::amber, ia), pulse(6, 0));
+            TextStyle vs = hand(38, fade(col::brick, ia), CENTER);
+            float vcx = cx + cw - 100;
+            textMid(v, vcx, mid, vs);
+            if (sel) handArrows(vcx, mid, textW(v, vs) / 2 + 18, ia, col::brick);
         }
     }
-    // what the selected row does
+    // what the chosen row does, in small italic under the list
     {
         float dy = my + TITLE_ITEMS * rowH + 6;
-        float da = clamp01((t - 0.5f) / 0.4f);
-        for (auto& l : wrap(rowDesc(g, g.titleItem), 15, mw)) { text(l, mx, dy, body(15, fade(col::creamDim, da))); dy += 20; }
+        for (auto& l : wrap(rowDesc(g, g.titleItem), 23, cw - 100, SERIF_ITALIC)) {
+            text(l, mx, dy, serif(23, fade(col::paperInk2, ma), LEFT, true));
+            dy += 29;
+        }
     }
-    // ---- controls, on the right
-    controlsCard(g, 744, 300, 432, clamp01((t - 0.35f) / 0.5f));
+    endRotate();
 
-    // ---- footer: controllers on the left, prompts on the right
-    float fa = clamp01((t - 0.6f) / 0.5f);
-    rect({0, H - 64, W, 1}, fade(col::cream, 0.08f * fa));
-    padStatus(g, 40, H - 32, fa);
-    promptRow(navPrompts(g.titleItem == TR_PLAYERS || g.titleItem == TR_DIFFICULTY, false), W - 40, H - 44, 24, fade(col::creamDim, fa), RIGHT, fa);
+    // ---- how to play, on an index card
+    float ca = clamp01((t - 0.35f) / 0.5f);
+    beginRotate(870, 450, 1.0f);
+    controlsCard(g, 580, 286, 580, 330, ca);
+    endRotate();
+
+    promptStrip(navPrompts(g.titleItem == TR_PLAYERS || g.titleItem == TR_DIFFICULTY, false), clamp01((t - 0.5f) / 0.5f), true, &g);
 }
 
 void Hud::drawPause(Game& g)
 {
     gameFrame(g);
-    // the game image dims; the panel is laid out on the whole window
-    dimBackdrop(0.62f);
+    dimBackdrop(0.66f);
     menuFrame();
-    vignette({0, 0, W, H}, 0.5f);
     K = &menuSkin();
     static double openedAt = 0;
     static int lastFrameSeen = -1;
@@ -880,103 +944,111 @@ void Hud::drawPause(Game& g)
     lastFrameSeen = fr;
     float in = easeOutCubic((float)(GetTime() - openedAt) / 0.25f);
 
-    const float w = 440, h = 404, x = (W - w) / 2, y = (H - h) / 2 - 10 + (1 - in) * 16;
-    panel({x, y, w, h}, *K, in);
-    heading(T("pause"), W / 2, y + 30, 34, in);
-    // where you are
-    std::string where = upper(T("era_name_" + std::to_string(g.era)));
-    for (size_t i = 0; (i = where.find(" . ", i)) != std::string::npos;) where.replace(i, 3, "  \xC2\xB7  ");
-    text(where + "   \xC2\xB7   " + T("bar_label") + " " + std::to_string((int)g.bar) + "%", W / 2, y + 92,
-         body(13, fade(col::creamDim, in), CENTER, true, 0.08f));
-
+    const float w = 470, h = 430, x = (W - w) / 2, y = 112 + (1 - in) * 16;
+    beginRotate(W / 2, y + h / 2, -0.7f);
+    paper({x, y, w, h}, col::paper, in);
+    tape(x + 50, y + 4, 96, -28, in);
+    tape(x + w - 50, y + 4, 96, 28, in);
+    TextStyle hs = serif(54, fade(col::paperInk, in), CENTER);
+    hs.bold = true;
+    text(T("pause"), W / 2, y + 30, hs);
+    // where you are, as a pencilled note
+    std::string where = T("era_name_" + std::to_string(g.era));
+    size_t dot = where.find(" . ");
+    if (dot != std::string::npos) where = where.substr(dot + 3);
+    std::string note = where + "  \xC2\xB7  " + T("pause_memory") + " " + std::to_string((int)g.bar) + "%";
+    text(note, W / 2, y + 100, hand(36, fade(col::brick, in), CENTER));
     const char* items[4] = {"resume", "settings_item", "restart", "quit"};
-    const float rowH = 50, rx = x + 28, rw = w - 56, ry0 = y + 130;
+    const float rowH = 56, rx = x + 110, ry0 = y + 160;
     for (int i = 0; i < 4; ++i) {
-        float ry = ry0 + i * rowH;
+        float ry = ry0 + i * rowH, mid = ry + rowH / 2;
         bool sel = g.pauseItem == i;
-        if (sel) selectionBar(2001, rx, ry, rw, rowH - 8, col::amber, in);
-        float off = anim(2100 + i, sel ? 8.0f : 0.0f, 18);
-        textMid(T(items[i]), rx + 22 + off, ry + (rowH - 8) / 2, body(21, fade(sel ? col::cream : fade(col::cream, 0.7f), in), LEFT, sel));
+        TextStyle st = serif(36, fade(sel ? col::paperInk : col::paperInk2, in));
+        st.bold = sel;
+        if (sel) {
+            selectionBar(2001, rx - 8, ry + 9, textW(T(items[i]), st) + 16, rowH - 18, col::highlight, in);
+            pointer(rx - 8, mid, in, col::brick);
+        }
+        textMid(T(items[i]), rx, mid, st);
     }
-    promptRow(navPrompts(false, true), W / 2, y + h - 46, 22, fade(col::creamDim, in), CENTER, in);
+    endRotate();
+    promptStrip(navPrompts(false, true), in);
 }
 
-// Settings: one panel over the dimmed game (or title), sections with headers, the chosen row
-// highlighted, toggles drawn as switches, the many-step values as a segment bar, and what the
-// option does along the bottom.
+// Settings: a page of a notebook - blue rules, a red margin, the values pencilled in by hand,
+// on / off as ticked boxes, the many-step values as a row of boxes.
 void Hud::drawSettings(Game& g)
 {
     bool overGame = g.settingsFrom != Screen::Title;
-    dimBackdrop(overGame ? 0.62f : 0.55f);
+    dimBackdrop(overGame ? 0.66f : 0.6f);
     menuFrame();
-    vignette({0, 0, W, H}, 0.45f);
     K = &menuSkin();
-    const float w = 760, x = (W - w) / 2, y = 22, h = 676;
-    panel({x, y, w, h}, *K);
-    heading(T("settings"), W / 2, y + 22, 30);
+    const float w = 860, x = (W - w) / 2, y = 14, h = 628;
+    paper({x, y, w, h}, col::paper);
+    tape(x + w / 2, y + 2, 130, -2);
+    const float margin = x + 92;
+    // the notebook: blue rules, a red margin line
+    for (float ry = y + 96; ry < y + h - 10; ry += 31) rect({x + 2, ry, w - 4, 1.2f}, fade(col::paperRule, 0.35f));
+    rect({margin - 18, y + 2, 1.6f, h - 4}, fade(col::brick, 0.45f));
+    TextStyle hs = serif(46, col::paperInk);
+    hs.bold = true;
+    text(T("settings"), margin, y + 26, hs);
+    text(T("settings_note"), x + w - 48, y + 38, hand(34, col::brick, RIGHT));
 
     const char* headers[3] = {"settings_display", "settings_graphics", "settings_audio"};
-    const float lx = x + 48, rx = x + w - 48, rowH = 31;
-    float yy = y + 84;
+    const float lx = margin, rx = x + w - 48, rowH = 31;
+    float yy = y + 96;
     int lastSection = -1;
-    float selY = 0;
+    float selY = 0, selW = 0;
     std::vector<std::pair<int, float>> rows;
     for (int i = 0; i <= SET_COUNT; ++i) {
         bool back = i == SET_COUNT;
         int section = back ? 3 : Settings::sectionOf(i);
         if (section != lastSection) {
             lastSection = section;
-            if (back) yy += 10;
-            else {
-                yy += 6;
-                text(upper(T(headers[section])), lx, yy, body(12, col::amber, LEFT, true, 0.16f));
-                rect({lx + textW(upper(T(headers[section])), body(12, WHITE, LEFT, true, 0.16f)) + 12, yy + 7, rx - lx - textW(upper(T(headers[section])), body(12, WHITE, LEFT, true, 0.16f)) - 12, 1}, fade(col::cream, 0.12f));
-                yy += 24;
+            if (!back) {
+                textMid(T(headers[section]), lx - 4, yy + rowH / 2 + 2, serif(26, col::brick, LEFT, true));
+                yy += rowH;
             }
         }
         rows.push_back({i, yy});
-        if (g.settingsItem == i) selY = yy;
+        std::string lab = back ? T("settings_back") : T("set_" + std::string(Settings::info(i).key));
+        if (g.settingsItem == i) { selY = yy; selW = textW(lab, serif(25, WHITE, LEFT)) + 16; }
         yy += rowH;
     }
-    selectionBar(3001, lx - 20, selY, rx - lx + 40, rowH - 3, col::amber);
+    selectionBar(3001, lx + 18 - 8, selY + 4, selW, rowH - 7, col::highlight);
     for (auto& [i, ry] : rows) {
         bool sel = g.settingsItem == i;
-        float mid = ry + (rowH - 3) / 2;
-        Color c = sel ? col::cream : fade(col::cream, 0.75f);
-        if (i == SET_COUNT) {
-            textMid(T("settings_back"), lx + 6, mid, body(18, c, LEFT, sel));
-            continue;
-        }
-        textMid(T("set_" + std::string(Settings::info(i).key)), lx + 6, mid, body(18, c, LEFT, sel));
+        float mid = ry + rowH / 2 + 1;
+        TextStyle ls = serif(25, sel ? col::paperInk : col::paperInk2);
+        ls.bold = sel;
+        if (sel) pointer(lx + 10, mid, 1, col::brick);
+        if (i == SET_COUNT) { textMid(T("settings_back"), lx + 18, mid, ls); continue; }
+        textMid(T("set_" + std::string(Settings::info(i).key)), lx + 18, mid, ls);
         const int n = Settings::info(i).count, v = settings().get(i);
         const bool isToggle = i == SET_FULLSCREEN || i == SET_VSYNC || i == SET_SHOW_FPS || i == SET_BLOOM;
+        TextStyle vs = hand(32, col::brick, RIGHT);
         if (isToggle) {
-            textMid(settings().valueText(i), rx - 56, mid, body(15, fade(v ? col::cream : col::mute, sel ? 1 : 0.85f), RIGHT, true));
-            toggle(rx - 44, mid, v != 0, col::amber, fade(col::cream, 0.18f));
-        } else {
-            const float vw = 120, vcx = rx - vw / 2;
-            if (n >= 5) {   // a segment bar with the value beside it
-                float sw = 132, sx = rx - sw, segW = (sw - (n - 1) * 2) / n;
-                for (int s = 0; s < n; ++s)
-                    rrect({sx + s * (segW + 2), mid - 4, segW, 8}, 1.5f, s <= v ? (sel ? col::amber : fade(col::amber, 0.75f)) : fade(col::cream, 0.14f));
-                textMid(settings().valueText(i), sx - 12, mid, body(15, c, RIGHT, true));
-            } else {
-                textMid(settings().valueText(i), vcx, mid, body(16, sel ? col::amber : c, CENTER, true));
-                if (sel) arrows(vcx, mid, vw / 2 - 4, 9, col::amber, pulse(6, 0));
-                // which of the n choices: small dots under the value
-                for (int s = 0; s < n; ++s) {
-                    float dx = vcx + (s - (n - 1) / 2.0f) * 10;
-                    DrawCircleV({X(dx), Y(mid + 14)}, L(s == v ? 2.2f : 1.6f), s == v ? fade(col::amber, sel ? 1 : 0.6f) : fade(col::cream, 0.25f));
-                }
+            checkbox(rx - 22, mid, 20, v != 0, col::paperInk);
+            textMid(settings().valueText(i), rx - 34, mid, vs);
+        } else if (n >= 5) {   // a row of boxes, filled up to the value
+            const float bs = 13, gap = 4, bw = n * (bs + gap) - gap, bx = rx - bw;
+            for (int s = 0; s < n; ++s) {
+                Rectangle b{bx + s * (bs + gap), mid - bs / 2, bs, bs};
+                if (s <= v) rect(b, fade(col::brick, sel ? 1 : 0.85f));
+                else roundLines(b, 0, 1.5f, fade(col::paperInk2, 0.6f));
             }
+            textMid(settings().valueText(i), bx - 14, mid, vs);
+        } else {
+            float vw = textW(settings().valueText(i), vs), vcx = rx - 20 - vw / 2;
+            textMid(settings().valueText(i), rx - 20, mid, vs);
+            if (sel) handArrows(vcx, mid, vw / 2 + 16, 1, col::brick);
         }
     }
     // what the chosen option does
     std::string desc = g.settingsItem < SET_COUNT ? std::string("set_") + Settings::info(g.settingsItem).key + "_desc" : "settings_back_desc";
-    float dy = y + h - 92;
-    rect({lx, dy - 10, rx - lx, 1}, fade(col::cream, 0.1f));
-    text(T(desc), W / 2, dy, body(15, col::creamDim, CENTER));
-    promptRow(navPrompts(true, true), W / 2, y + h - 48, 22, col::creamDim, CENTER);
+    text(T(desc), lx - 4, y + h - 44, serif(24, col::paperInk2, LEFT, true));
+    promptStrip(navPrompts(true, true), 1);
 }
 
 void Hud::drawEnding(Game& g)
@@ -984,6 +1056,6 @@ void Hud::drawEnding(Game& g)
     // The ending is told by ui/Story (Story::drawEnding); this older slideshow is kept for reference.
     menuFrame();
     ClearBackground(BLACK);
-    text(T("thanks"), W / 2, H / 2 - 12, body(24, col::cream, CENTER));
+    text(T("thanks"), W / 2, H / 2 - 16, serif(32, col::cream, CENTER));
     (void)g;
 }

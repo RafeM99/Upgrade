@@ -83,6 +83,8 @@ Rectangle R(float x, float y, float w, float h)
 float hair() { return 1.0f / (gS * dpi()); }
 float now() { return (float)GetTime(); }
 
+void unloadGrain();
+
 // ------------------------------------------------------------------ fonts
 namespace {
 struct FontFile { unsigned char* data = nullptr; int size = 0; bool tried = false; };
@@ -184,6 +186,7 @@ void unload()
         if (e.f.texture.id != GetFontDefault().texture.id) UnloadFont(e.f);
     cache.clear();
     for (auto& ff : files) { if (ff.data) UnloadFileData(ff.data); ff = FontFile{}; }
+    unloadGrain();
 }
 
 std::string upper(std::string s)
@@ -646,9 +649,10 @@ float prompt(const Prompt& p, float x, float y, float h, Color lc, float a)
     if (pads) for (int g : p.pads) x += padButton(g, x, y, h, a) + gap;
     else for (auto& k : p.keys) x += keycap(k, x, y, h, a) + gap;
     if (!p.label.empty()) {
-        x += h * 0.18f;
+        x += h * 0.3f;
         TextStyle st;
-        st.size = h * 0.68f;
+        st.size = h * 0.82f;
+        st.font = SERIF;
         st.color = fade(lc, a * lc.a / 255.0f);
         textMid(p.label, x, y + h * 0.46f, st);
         x += textW(p.label, st);
@@ -669,9 +673,9 @@ void promptRow(const std::vector<Prompt>& ps, float x, float y, float h, Color l
 // ------------------------------------------------------------------ menu pieces
 void selectionBar(int key, float x, float targetY, float w, float h, Color c, float a)
 {
+    // a highlighter stroke that slides between rows
     float y = anim(key, targetY, 22);
-    rrect({x, y, w, h}, h * 0.5f, fade(c, a * 0.16f));
-    rrect({x, y + h * 0.18f, 4, h * 0.64f}, 2, fade(c, a));
+    highlighter({x, y, w, h}, c, a);
 }
 
 void arrows(float cx, float midY, float halfW, float s, Color c, float pulse)
@@ -688,6 +692,132 @@ void toggle(float x, float midY, bool on, Color onCol, Color offCol, float a)
     float k = on ? 1.0f : 0.0f;
     float kx = x + 3 + k * (w - h);
     DrawCircleV({X(kx + (h - 6) / 2), Y(midY)}, L((h - 6) / 2), fade(WHITE, a));
+}
+
+// ------------------------------------------------------------------ the scrapbook look
+namespace {
+Texture2D grainTex{};
+const Texture2D& grainTexture()
+{
+    if (grainTex.id) return grainTex;
+    const int n = 256;
+    std::vector<Color> px((size_t)n * n);
+    unsigned seed = 0x9e3779b9u;
+    auto rnd = [&]() { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; return (seed & 0xffff) / 65535.0f; };
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x) {
+            float v = rnd();
+            // mostly faint dark specks, a few light ones, and the odd fibre
+            unsigned char al = (unsigned char)(v < 0.55f ? v * 70 : (v > 0.985f ? 0 : 18));
+            Color c = v > 0.97f ? Color{255, 255, 255, 70} : Color{60, 40, 20, al};
+            px[(size_t)y * n + x] = c;
+        }
+    for (int f = 0; f < 70; ++f) {   // fibres
+        float fx = rnd() * n, fy = rnd() * n, ang = rnd() * 6.283f, len = 6 + rnd() * 18;
+        for (int i = 0; i < (int)len; ++i) {
+            int x = ((int)(fx + std::cos(ang) * i) % n + n) % n, y = ((int)(fy + std::sin(ang) * i) % n + n) % n;
+            px[(size_t)y * n + x] = Color{90, 60, 30, 60};
+        }
+    }
+    Image img{px.data(), n, n, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+    grainTex = LoadTextureFromImage(img);
+    SetTextureWrap(grainTex, TEXTURE_WRAP_REPEAT);
+    SetTextureFilter(grainTex, TEXTURE_FILTER_BILINEAR);
+    return grainTex;
+}
+}  // namespace
+
+void unloadGrain() { if (grainTex.id) UnloadTexture(grainTex); grainTex = Texture2D{}; }
+
+void grain(Rectangle r, float alpha)
+{
+    const Texture2D& t = grainTexture();
+    Rectangle d = R(r.x, r.y, r.width, r.height);
+    float k = std::max(1.0f, gS);   // grain stays the same size relative to the page
+    DrawTexturePro(t, {d.x / k, d.y / k, d.width / k, d.height / k}, d, {0, 0}, 0, fade(WHITE, alpha));
+}
+
+void paper(Rectangle r, Color base, float a, float shadow)
+{
+    if (base.a == 0) base = col::paper;
+    if (shadow > 0) {
+        rect({r.x + 3, r.y + 5, r.width, r.height}, fade(BLACK, 0.28f * a * shadow));
+        rect({r.x + 1, r.y + 2, r.width + 1, r.height + 1}, fade(BLACK, 0.2f * a * shadow));
+    }
+    rect(r, fade(base, a));
+    grain(r, a);
+    // the edge of the sheet is a little darker, like old paper
+    Color e = fade(col::paperDark, 0.9f * a);
+    rect({r.x, r.y, r.width, 1.5f}, e);
+    rect({r.x, r.y + r.height - 1.5f, r.width, 1.5f}, e);
+    rect({r.x, r.y, 1.5f, r.height}, e);
+    rect({r.x + r.width - 1.5f, r.y, 1.5f, r.height}, e);
+    gradV({r.x, r.y + r.height - 18, r.width, 18}, fade(col::paperDark, 0), fade(col::paperDark, 0.35f * a));
+}
+
+void tape(float cx, float cy, float w, float deg, float a)
+{
+    const float h = std::max(18.0f, w * 0.3f);
+    beginRotate(cx, cy, deg);
+    rect({cx - w / 2, cy - h / 2, w, h}, fade(col::tape, 0.78f * a));
+    grain({cx - w / 2, cy - h / 2, w, h}, 0.5f * a);
+    for (int i = 0; i < 5; ++i) {   // torn ends
+        float yy = cy - h / 2 + i * h / 5;
+        rect({cx - w / 2 - (i % 2 ? 2 : 0), yy, 2, h / 5}, fade(col::tape, 0.78f * a));
+        rect({cx + w / 2 - (i % 2 ? 0 : 2), yy, 2, h / 5}, fade(col::tape, 0.78f * a));
+    }
+    endRotate();
+}
+
+void highlighter(Rectangle r, Color c, float a)
+{
+    Color f = fade(c, 0.55f * a);
+    // a marker stroke: a little slanted, ends not quite square
+    Vector2 p0{r.x - 6, r.y + 4}, p1{r.x + r.width + 2, r.y}, p2{r.x + r.width + 6, r.y + r.height - 3}, p3{r.x - 2, r.y + r.height + 1};
+    tri(p0, p1, p2, f);
+    tri(p0, p2, p3, f);
+    rect({r.x - 4, r.y + r.height * 0.2f, 3, r.height * 0.6f}, fade(c, 0.35f * a));
+}
+
+void inkLine(float x0, float y0, float x1, float y1, float th, Color c)
+{
+    float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    float dx = x1 - x0, dy = y1 - y0, len = std::sqrt(dx * dx + dy * dy);
+    float wob = std::min(2.0f, len * 0.01f);
+    mx += -dy / std::max(1.0f, len) * wob;
+    my += dx / std::max(1.0f, len) * wob;
+    DrawLineEx({X(x0), Y(y0)}, {X(mx), Y(my)}, std::max(1.0f, L(th)), c);
+    DrawLineEx({X(mx), Y(my)}, {X(x1), Y(y1)}, std::max(1.0f, L(th)), c);
+}
+
+void checkbox(float x, float midY, float s, bool on, Color ink, float a)
+{
+    Color c = fade(ink, a);
+    float y = midY - s / 2;
+    inkLine(x, y, x + s, y + 0.5f, 2, c);
+    inkLine(x + s, y + 0.5f, x + s - 0.5f, y + s, 2, c);
+    inkLine(x + s - 0.5f, y + s, x, y + s - 0.5f, 2, c);
+    inkLine(x, y + s - 0.5f, x, y, 2, c);
+    if (on) {
+        Color tick = fade(col::brick, a);
+        inkLine(x + s * 0.15f, midY, x + s * 0.42f, y + s * 0.9f, 3.2f, tick);
+        inkLine(x + s * 0.42f, y + s * 0.9f, x + s * 1.15f, y - s * 0.25f, 3.2f, tick);
+    }
+}
+
+void beginRotate(float cx, float cy, float deg)
+{
+    rlDrawRenderBatchActive();
+    rlPushMatrix();
+    float px = gOX + cx * gS, py = gOY + cy * gS;
+    rlTranslatef(px, py, 0);
+    rlRotatef(deg, 0, 0, 1);
+    rlTranslatef(-px, -py, 0);
+}
+void endRotate()
+{
+    rlDrawRenderBatchActive();
+    rlPopMatrix();
 }
 
 }  // namespace ui
