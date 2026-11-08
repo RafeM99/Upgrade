@@ -370,6 +370,11 @@ FILE_TEXTURES = {
     "walnut": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
     "walnutEdge": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
     "walnutFoot": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
+    # knitted_fleece: the Forgetting's wool (core, strand pieces, fraying tips and the yarn)
+    "wool": os.path.join(TEX_DIR, "knitted_fleece_wool_512.jpg"),
+    "woolDark": os.path.join(TEX_DIR, "knitted_fleece_wool_512.jpg"),
+    "woolLight": os.path.join(TEX_DIR, "knitted_fleece_wool_512.jpg"),
+    "woolYarn": os.path.join(TEX_DIR, "knitted_fleece_wool_512.jpg"),
 }
 
 
@@ -438,7 +443,18 @@ def bake_textures(o):
         mix.blend_type = "MULTIPLY"
         mix.inputs["Factor"].default_value = 1.0
         mix.inputs["B"].default_value = (m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0)
-        nt.links.new(node.outputs["Color"], mix.inputs["A"])
+        if m.name.startswith("wool"):
+            # the fleece photo is dark and brown: keep only its light/dark pattern (grey, scaled
+            # up so its average is about 1) and let the wool's own tone colour it
+            bw = nt.nodes.new("ShaderNodeRGBToBW")
+            gain = nt.nodes.new("ShaderNodeMath")
+            gain.operation = "MULTIPLY"
+            gain.inputs[1].default_value = 3.6
+            nt.links.new(node.outputs["Color"], bw.inputs["Color"])
+            nt.links.new(bw.outputs["Val"], gain.inputs[0])
+            nt.links.new(gain.outputs["Value"], mix.inputs["A"])
+        else:
+            nt.links.new(node.outputs["Color"], mix.inputs["A"])
         nt.links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
         for nd in list(nt.nodes):   # drop the procedural nodes
             if nd not in (node, bsdf) and nd.type != "OUTPUT_MATERIAL":

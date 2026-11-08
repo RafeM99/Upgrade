@@ -1,5 +1,14 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 morning: CC0 textures from Poly Haven
+
+- assets/textures/ holds natural_walnut_veneer and knitted_fleece (CC0, 1k diffuse maps), with SOURCES.md.
+- make_models.py (FILE_TEXTURES) packs the walnut into the clock's wood and a grey, brightened copy of the fleece
+  (knitted_fleece_wool_512.jpg) into the Forgetting's wool. The glTF exporter drops a Blender BW/Math chain, so
+  anything else than image times a colour has to be prepared as a file first (the raw fleece went near black).
+- Needs polyhaven.com, api.polyhaven.com and dl.polyhaven.org allowed in the cloud environment to re-download.
+- Gran/Sam critique rework (metal, baked AO, new faces, wool yarn) is in 6ba4d1c.
+
 Thread: "Apply UI changes from notes". Branch: `claude/project-thread-e2fqcf`, started from main at dd87652.
 Nothing pushed to main.
 
