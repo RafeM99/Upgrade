@@ -2686,15 +2686,28 @@ void groundOneBit(GroundPx& g, int fam, int v)
             if (r.p(0.45f)) g.set(x + (r.p(0.5f) ? 1 : 0), 2, L);
         }
         if (v == 3 || v == 6) gRows(g, {"##", ".#"}, r.i(2, 5), r.i(4, 5));   // a pebble
+        // grains, a seam and a root further down, different on every variant, never on the sides
+        if (v == 0 || v == 4) { int y = r.i(4, 6), x = r.i(1, 3); g.set(x, y, L); g.set(x + 1, y, L); g.set(x + 3, y + (r.p(0.5f) ? 0 : -1), L); }
+        if (v == 1 || v == 5) { int x = r.i(2, 5); g.set(x, 3, L); g.set(x + (r.p(0.5f) ? 1 : -1), 4, L); g.set(x, 5, L); }
+        if (v == 2 || v == 7) { g.set(r.i(1, 3), r.i(4, 6), L); g.set(r.i(4, 6), r.i(3, 5), L); g.set(r.i(2, 5), 6, L); }
         break;
     }
     case G_EARTH:
         if (v == 2) gRows(g, {"##"}, r.i(1, 5), r.i(2, 5));
         if (v == 5) gRows(g, {"###"}, r.i(1, 4), r.i(3, 6));
         if (v == 7) g.set(r.i(1, 6), r.i(1, 6), L);
+        // more life in the black: a seam, a pebble outline, a root, a few grains (one pixel off the sides)
+        if (v == 0) { int y = r.i(2, 5), x = r.i(1, 3); g.set(x, y, L); g.set(x + 1, y, L); g.set(x + 3, y, L); g.set(x + 4, y, L); }
+        if (v == 1) { int x = r.i(2, 5), y = r.i(1, 3); g.set(x, y, L); g.set(x - (r.p(0.5f) ? 1 : -1), y + 1, L); g.set(x, y + 2, L); }
+        if (v == 3) { g.set(r.i(1, 3), r.i(1, 6), L); g.set(r.i(4, 6), r.i(1, 6), L); }
+        if (v == 4) gRows(g, {".#.", "#.#"}, r.i(2, 4), r.i(3, 5));
+        if (v == 6) { int x = r.i(1, 5); g.set(x, 5, L); g.set(x + 1, 6, L); g.set(x + 1, 4, L); }
         break;
-    case G_DEEP:   // the deep: darkest, nearly bare
+    case G_DEEP:   // the deep: darkest, nearly bare, but with seams and the odd stone outline
         if (v == 1) g.set(r.i(1, 6), r.i(3, 6), L);
+        if (v == 0) { int y = r.i(2, 5), x = r.i(1, 3); g.set(x, y, L); g.set(x + 1, y, L); g.set(x + 2, y, L); }
+        if (v == 2) gRows(g, {".#.", "#.#"}, r.i(1, 4), r.i(2, 5));
+        if (v == 3) { g.set(r.i(1, 3), r.i(1, 5), L); g.set(r.i(4, 6), r.i(2, 6), L); g.set(r.i(3, 5), r.i(5, 6), L); }
         break;
     case G_ROCK:   // stony: outlined pebbles
         gRows(g, {".##.", "#..#", ".##."}, r.i(1, 3), r.i(1, 2));
@@ -2732,6 +2745,35 @@ void groundOneBit(GroundPx& g, int fam, int v)
     }
 }
 
+// A soft irregular patch of other earth (damp and dark, or dry and pale): a wobbly ellipse kept
+// two pixels off every side so neighbours join, with a dithered rim where the colours allow it.
+void gPatch(GroundPx& g, GRng& r, int cx, int cy, float rw, float rh, Col c, Col onlyOn)
+{
+    float ph1 = r.f() * 6.28f, ph2 = r.f() * 6.28f;
+    for (int y = 2; y < g.N - 2; ++y)
+        for (int x = 2; x < g.W - 2; ++x) {
+            float dx = (x + 0.5f - cx) / rw, dy = (y + 0.5f - cy) / rh;
+            float a = std::atan2(dy, dx);
+            float lim = 1.0f + 0.10f * std::sin(2 * a + ph1) + 0.06f * std::sin(3 * a + ph2);
+            float d = std::sqrt(dx * dx + dy * dy) / lim;
+            if (d < 0.78f || (d < 1.0f && g_era >= 3 && ((x + y) & 1) == 0)) g.over(x, y, c, onlyOn);
+        }
+}
+
+// Strata dashes for the stages with few colours: short horizontal seams of the other tone, never
+// near the sides, at rows that differ from variant to variant.
+void gDashes(GroundPx& g, GRng& r, int n, Col c, Col onlyOn)
+{
+    for (int i = 0; i < n; ++i) {
+        int len = r.i(std::max(2, g.N / 5), std::max(3, g.N / 2)), x0 = r.i(2, std::max(2, g.W - 3 - len)), y = r.i(2, g.N - 3);
+        for (int x = x0; x < x0 + len && x < g.W - 2; ++x) {
+            if (r.p(0.12f)) continue;
+            g.over(x, y, c, onlyOn);
+            if (len > 6 && g.N >= 32 && x > x0 + 1 && x < x0 + len - 2 && r.p(0.5f)) g.over(x, y + 1, c, onlyOn);
+        }
+    }
+}
+
 // The grass cap: topsoil under a grass lip, the earth below a ragged strata line.
 void groundTop(GroundPx& g, const EarthCols& k, int v)
 {
@@ -2747,6 +2789,11 @@ void groundTop(GroundPx& g, const EarthCols& k, int v)
     if (v % 2 == 0) gSpecks(g, r, r.i(3, W - 4), r.i(T + 2, bMin - 1), std::max(2, N / 6), 3 + N / 16, k.soilL, k.soil);
     gClods(g, r, 1 + v % 3, k.earthL, k.earthD, k.earth, bMin + 1, N - 3);
     if (v == 1 || v == 4) gCluster(g, k, r, (float)r.i(3, W - 4), (float)r.i(bMin + 1, N - 3), std::max(3.0f, N * 0.16f), bMin, N - 2);
+    if (g_era == 1 || g_era == 2) gDashes(g, r, 1 + v % 2, sameCol(k.earthD, k.earth) ? k.earthL : k.earthD, k.earth);
+    else if (g_era == 3 || g_era == 4) {
+        if (v % 3 != 1) gPatch(g, r, r.i(6, W - 7), r.i(bMin + 3, std::max(bMin + 3, N - 4)), N * (0.16f + 0.06f * (v % 3)), N * 0.09f, mixc(k.earth, (v % 2) ? k.earthD : k.earthL, 0.55f), k.earth);
+        if (v == 2 || v == 5) gSpecks(g, r, r.i(4, W - 5), r.i(bMin + 2, N - 3), N / 3, 3 + N / 10, k.stoneL, k.earth);   // flint chips
+    }
     if (v == 6) gStone(g, k, (float)r.i(3, W - 5) + 0.5f, (float)T + 3.5f, std::max(3.0f, std::round(N * 0.14f)), std::max(2.0f, std::round(N * 0.08f)));
     if ((v == 3 || v == 7) && N >= 32) gLens(g, r, r.i(4, W - 5), bMin + 2, N / 3, 2, k.earthL, k.earth);
     // roots from the grass into the soil: sparse, never on every tile
@@ -2838,6 +2885,18 @@ void groundEarth(GroundPx& g, const EarthCols& k, int v)
         gCluster(g, k, r, (float)r.i(2, W - 3), (float)r.i(2, N / 2), mid, 1, N - 2);
         break;
     }
+    // wear: every variant gets something the others lack, so the plain brown is broken up
+    if (g_era == 1 || g_era == 2) {
+        Col dc = sameCol(k.earthD, k.earth) ? k.earthL : k.earthD;
+        if (g_era == 1 && sameCol(dc, k.earth)) dc = k.soilL;
+        gDashes(g, r, 1 + (v % 3 == 0 ? 1 : 0), dc, k.earth);
+        if (v % 2) gSpecks(g, r, r.i(3, W - 4), r.i(3, N - 4), N / 4, 3, k.earthL, k.earth);
+    } else if (g_era == 3 || g_era == 4) {
+        bool damp = (v % 2) == 0;
+        gPatch(g, r, r.i(6, W - 7), r.i(4, N - 5), N * (0.16f + 0.06f * (v % 3)), N * (0.10f + 0.04f * (v % 2)), mixc(k.earth, damp ? k.earthD : k.earthL, 0.55f), k.earth);
+        if (v == 0 || v == 3 || v == 5) gDashes(g, r, 2, k.earthD, k.earth);   // seams
+        if (v == 4 || v == 7) gSpecks(g, r, r.i(4, W - 5), r.i(4, N - 5), N / 3, 3 + N / 10, k.stoneL, k.earth);   // flint chips
+    }
 }
 
 // The deep stratum along the bottom row: the earth turns darker under a ragged line.
@@ -2854,6 +2913,12 @@ void groundDeep(GroundPx& g, const EarthCols& k, int v, bool features = true)
     // clods in both layers: the deep ones lit with the earth colour
     gClods(g, r, 1 + v % 2, k.earthL, k.earthD, k.earth, 1, std::max(1, bMin - 3));
     gClods(g, r, 2 + (v * 3) % 3, k.earth, k.deepD, k.deep, bMax + 1, N - 3);
+    if (g_era == 1) gSpecks(g, r, r.i(3, W - 4), r.i(bMax + 2, N - 3), N / 4, 2 + v % 2, k.earthL, k.deep);
+    else if (g_era == 2) gDashes(g, r, 1 + v % 2, k.deepD, k.deep);
+    else if (g_era == 3 || g_era == 4) {
+        if (v % 3 != 0) gPatch(g, r, r.i(6, W - 7), r.i(bMax + 3, std::max(bMax + 3, N - 4)), N * (0.16f + 0.07f * (v % 2)), N * 0.08f, mixc(k.deep, (v % 2) ? k.earth : k.deepD, 0.5f), k.deep);
+        gDashes(g, r, 1, k.deepD, k.deep);
+    }
     if (!features) return;
     switch (v) {
     case 0:   // sediment: a lens of earth lying in the deep, or a few specks of it
