@@ -10,7 +10,7 @@ title_join = Player 2: press any of your buttons to join
 title_p2_ready = Player 2 is here!
 title_controls_p1 = P1 (Gran): A/D move   SPACE jump   F attack   G ability   S+G second ability
 title_controls_p2 = P2 (Sam): ARROWS move   R-CTRL/ENTER jump   R-SHIFT attack   / ability   DOWN+/ second ability
-title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B ability   Y second ability   Start pause\nThe first pad plays Gran, the second plays Sam.
+title_controls_pad = Gamepads: stick or d-pad move   A jump   X attack   B ability   Y second ability   Start pause
 
 p1_name = GRAN
 p2_name = SAM
@@ -18,8 +18,9 @@ p2_join_1 = Player 2?
 p2_join_2 = Press any button to join
 p2_joined = SAM IS HERE
 pad_connected = GAMEPAD CONNECTED
-pads_none = No controller found (keyboard works). 8BitDo on a Mac: hold B while plugging it in.
-pads_unknown = plugged in, but its buttons are unknown. 8BitDo: replug holding B
+pads_none = No controller connected (keyboard works)
+pads_unknown = connected, but its buttons are unknown
+pads_connected = connected
 pads_spare = spare (two players already have one)
 pad_word = pad
 pad_disconnected = GAMEPAD DISCONNECTED
@@ -123,7 +124,7 @@ quit = Quit to title
 pause_hint = Up/Down (or stick / d-pad) to choose, Enter or A to pick, B to go back
 
 credits_title = UPGRADE
-credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
+credits = Made in 24 hours for GameJam 2026\n\nRafe\nRafael\nSai\nSai\nAkki\nSohan\n\nTheme: Time\n\nAll art and sound made in code
 thanks = Thank you for remembering with her.
 ending_continue = Press any button
 
