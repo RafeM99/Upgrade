@@ -152,9 +152,20 @@ void Game::showBanner(const std::string& title, const std::string& sub, float se
 }
 
 // ------------------------------------------------------------------ main loop
+// Debug: GAMEJAM_FRAMELOG=path writes "frame draw_ms rss_kb" per frame (no output otherwise).
+static long rssKb()
+{
+    long pages = 0, r = 0;
+    if (FILE* f = std::fopen("/proc/self/statm", "r")) { if (std::fscanf(f, "%ld %ld", &pages, &r) != 2) r = 0; std::fclose(f); }
+    return r * 4;
+}
+
 void Game::run()
 {
+    FILE* flog = nullptr;
+    if (const char* lp = std::getenv("GAMEJAM_FRAMELOG")) flog = std::fopen(lp, "w");
     while (!WindowShouldClose()) {
+        const double tFrame0 = GetTime();
         float frameDt = std::min(GetFrameTime(), 0.1f);
         if (opt.maxFrames > 0 || opt.autoplay) frameDt = DT;   // tests run at a fixed rate
         // input is sampled once per frame; presses go to the first tick only
@@ -250,8 +261,10 @@ void Game::run()
             UnloadImage(shot);
         }
         EndDrawing();
+        if (flog) std::fprintf(flog, "%d %.2f %ld\n", frameNo_, (GetTime() - tFrame0) * 1000.0, rssKb());
         if (last) break;
     }
+    if (flog) std::fclose(flog);
 }
 
 void Game::update(float dt)
