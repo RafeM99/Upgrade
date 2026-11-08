@@ -940,12 +940,18 @@ void Models3D::bakeGround(Game& g, int x0, int x1, int mode)
                     bool top = !solid(x, ty - 1);
                     int kind = top ? 0 : 1, n = groundN_[kind];
                     int v = (int)(hashi(x, ty * 131 + 900 + kind) % (unsigned)n);
-                    Color core = meadow_ ? hexc(0x6a4630) : hexc(0x5e3a26);
+                    Color core = meadow_ ? hexc(0x7a5236) : hexc(0x6e4630);
                     recTex_ = 1;   // plain colour: the textured cube streaked on the ends
                     part(cube_, then(S(1.03f, 1.02f, dz - 0.06f), T(x + 0.5f, Y3(ty + 0.5f), zc - 0.03f)), core, 0, false);
                     part((meadow_ && liteKit_ ? liteMod_ : groundMod_)[kind][v], T(x + 0.5f, Y3(ty + 0.5f), zc),
                          meadow_ ? (top ? Color{210, 190, 124, 255} : Color{226, 194, 164, 255}) : WHITE, 0, false);
                     recTex_ = 1;
+                    if (top) {   // the walkable top and the upper edge of both ends in grass, not bare soil
+                        float j = (hashi(x, ty * 17 + 5) & 255) / 255.0f;
+                        Color gc = mixc(hexc(0x5aa84a), hexc(0x86c24a), j);
+                        if (meadow_) gc = mixc(gc, hexc(0xb6a85a), 0.25f);
+                        part(cube_, then(S(1.03f, 0.3f, dz - 0.02f), T(x + 0.5f, Y3(ty + 0.14f), zc - 0.01f)), gc, 0, false);
+                    }
                     ++x;
                     continue;
                 } else
