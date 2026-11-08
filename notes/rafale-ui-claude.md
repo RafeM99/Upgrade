@@ -3,6 +3,19 @@
 Thread: "Apply UI changes from notes". Branch: `claude/project-thread-e2fqcf`, started from main at dd87652.
 Nothing pushed to main.
 
+## 2026-11-08: model pipeline and asset critique (Blender parts, lit3d shader)
+
+- tools/blender/make_models.py: real metallic/roughness, smooth by angle 30, bevels with hardened
+  normals, merge by distance, Smart UV, Cycles AO baked into COLOR_0 alpha, procedural walnut
+  grain and ivory mottle baked to textures packed in the .glb (texture downloads were approved
+  later but the proxy blocks polyhaven/ambientCG, so all textures are procedural; no assets/textures).
+- Gran/Sam faces (eyes with catchlight, Bezier smile, cheeks, blended nose), Gran perm shell and
+  glasses on the nose, Sam hair clumps, bent hood, trainers, light-wash jeans. Clock 2.0 tall with
+  brass, walnut, ivory, bracket feet. Forgetting: one wound yarn strand, pale eye, glowing ring.
+- assets/shaders/lit3d.vs/.fs: vertex colour (rgb tint, alpha AO), texture0 via useTexture,
+  stepped toon highlight on metals. Models3D::modelPart draws mesh by mesh (metallic, emissive,
+  useTexture per material); clock pivot constants updated. Scenery code untouched.
+
 ## 2026-11-08 early morning: every item in "ui changest.txt" worked through
 
 raf asked to implement the review notes in `ui changest.txt` (repo root), using Blender for 3D models.
