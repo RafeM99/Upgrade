@@ -55,9 +55,12 @@ Theme th;
 void setup(Game& g)
 {
     Rectangle r = g.renderer.screenRect();
-    S = r.height / 720.0f;
-    OX = r.x;
-    OY = r.y;
+    // the legacy screens are a 1280 x 720 page: as tall as the game image, unless that would make
+    // it wider than the image (a window narrower than 16:9), then as wide; centred either way.
+    // (On a 16:9 window this is exactly the image.)
+    S = std::min(r.height / 720.0f, r.width / 1280.0f);
+    OX = r.x + std::floor((r.width - 1280.0f * S) / 2);
+    OY = r.y + std::floor((r.height - 720.0f * S) / 2);
     X0 = (int)std::lround(r.x);
     Y0 = (int)std::lround(r.y);
     W = (int)std::lround(r.width);
@@ -879,7 +882,9 @@ void Hud::drawEnding(Game& g)
         float zoom = 1.0f + lt / slide * 0.08f;
         Texture2D tex = g.art.ending[i];
         Rectangle scr = g.renderer.screenRect();
-        float w = scr.width * zoom, h = scr.height * zoom;
+        // cover the game image without stretching the 16:9 picture (a 16:9 window: exactly the image)
+        float fit = std::max(scr.width / tex.width, scr.height / tex.height);
+        float w = tex.width * fit * zoom, h = tex.height * fit * zoom;
         DrawTexturePro(tex, Rectangle{0, 0, (float)tex.width, (float)tex.height},
                        Rectangle{scr.x - (w - scr.width) / 2, scr.y - (h - scr.height) / 2, w, h}, {0, 0}, 0, fade(WHITE, a));
         DrawRectangleRec(R(0, 600, 1280, 120), fade(BLACK, 0.5f * a));

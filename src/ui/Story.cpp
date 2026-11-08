@@ -338,10 +338,12 @@ void Story::drawBars(Game& g)
     DrawRectangleRec({OX, OY - bh * (1 - k), WW, bh}, fade(BLACK, 0.92f));
     DrawRectangleRec({OX, OY + WH - bh * k, WW, bh}, fade(BLACK, 0.92f));
     float ta = std::max(0.0f, std::min(1.0f, (into - 0.25f) / 0.3f)) * std::min(1.0f, barsT_ / 0.3f);
-    text(barsLabel_, 640, -84 * (1 - k) + 34, 20, fade(AMBER, ta), 1);
+    // centred on the game image, whatever its shape (on a 16:9 image this is x = 640)
+    const float cx = 640 + std::floor((WW - 1280 * S) / 2) / S;
+    text(barsLabel_, cx, -84 * (1 - k) + 34, 20, fade(AMBER, ta), 1);
     float by = 720 - 84 * k;
-    text(barsTitle_, 640, by + 14, 30, fade(LILAC, ta), 1);
-    if (!barsLine_.empty()) text(barsLine_, 640, by + 52, 20, fade(PAPER, ta), 1);
+    text(barsTitle_, cx, by + 14, 30, fade(LILAC, ta), 1);
+    if (!barsLine_.empty()) text(barsLine_, cx, by + 52, 20, fade(PAPER, ta), 1);
 }
 
 // ------------------------------------------------------------------ the ending

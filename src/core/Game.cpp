@@ -24,7 +24,13 @@ bool overlap(float ax, float ay, float aw, float ah, float bx, float by, float b
 void Game::init(const Options& o)
 {
     opt = o;
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
+    unsigned flags = FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT;
+#if defined(__APPLE__)
+    // Retina: ask for a full-resolution framebuffer. Layout stays in logical window pixels (raylib
+    // scales them); the 2.5D / 3D image is sized in framebuffer pixels (Renderer::ensureTargets).
+    flags |= FLAG_WINDOW_HIGHDPI;
+#endif
+    SetConfigFlags(flags);
     InitWindow(opt.width, opt.height, "Upgrade");
     SetExitKey(KEY_NULL);   // Esc opens the pause menu instead of quitting
     SetTargetFPS(60);
@@ -206,6 +212,13 @@ void Game::run()
             float sx = rw / (float)std::max(1, GetScreenWidth()), sy = rh / (float)std::max(1, GetScreenHeight());
             int x0 = std::clamp((int)std::floor(r.x * sx), 0, rw), y0 = std::clamp((int)std::floor(r.y * sy), 0, rh);
             int x1 = std::clamp((int)std::floor((r.x + r.width) * sx), x0, rw), y1 = std::clamp((int)std::floor((r.y + r.height) * sy), y0, rh);
+            // the card shows a 16:9 photo: on a window of another shape keep the middle 16:9
+            // (a 16:9 window is left exactly as it was)
+            if (x1 - x0 > 0 && y1 - y0 > 0) {
+                const int cw = x1 - x0, ch = y1 - y0;
+                if (cw * 9 > ch * 16 + 16) { int nw = ch * 16 / 9; x0 += (cw - nw) / 2; x1 = x0 + nw; }
+                else if (ch * 16 > cw * 9 + 9) { int nh = cw * 9 / 16; y0 += (ch - nh) / 2; y1 = y0 + nh; }
+            }
             if (photo.data && x1 - x0 > 0 && y1 - y0 > 0) {
                 ImageCrop(&photo, Rectangle{(float)x0, (float)y0, (float)(x1 - x0), (float)(y1 - y0)});
                 story.setPhoto(era, photo);
