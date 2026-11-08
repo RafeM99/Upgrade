@@ -207,14 +207,15 @@ void Game::updateBossPowers(float dt)
         powers.sinceHit = -1;
     }
 
-    // ---- the Last Train: record each charge, then send its echoes down the same line
+    // ---- the Last Train: record each charge, then send its echoes down the same line once it
+    // rises again, so they never cut into the rest, the window to stomp it
     if (k == 4) {
         if (boss.state == 2) powers.curPath.push_back({boss.x, boss.y});
-        if (boss.landed && !powers.curPath.empty()) {
+        if (boss.state == 4 && !powers.curPath.empty()) {
             for (int i = 0; i < tu.echoes; ++i) {
                 TrainEcho e;
                 e.path = powers.curPath;
-                e.delay = 0.6f * (i + 1);
+                e.delay = 0.3f + 0.6f * i;
                 powers.echoes.push_back(e);
             }
             if (opt.autoplay) TraceLog(LOG_INFO, "EVENT t=%.1f boss power 4 echoes x%d", time, tu.echoes);
@@ -222,7 +223,7 @@ void Game::updateBossPowers(float dt)
             powers.label = T("power_name_4");
             powers.labelT = 1.6f;
         }
-        if (boss.state != 2 && !boss.landed) powers.curPath.clear();
+        if (boss.state != 2 && boss.state != 3) powers.curPath.clear();   // kept through the rest
     }
     const float slowK = slowTime > 0 ? config().f("abilities.time_slow_factor", 0.3f) : 1.0f;
     for (auto& e : powers.echoes) {

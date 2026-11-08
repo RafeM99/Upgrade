@@ -1175,17 +1175,27 @@ PlayerInput Game::botInput(int p)
     if (pl.has[AB_GROUND_POUND] && !pl.onGround && level.tile((int)std::floor(pl.cx()), feet + 1) == '=') { in.abilityPressed = true; in.down = true; }
     if (pl.has[AB_TIME_SLOW] && pl.slowCooldown <= 0 && boss.active) { in.abilityPressed = true; in.down = true; }
     // dodge the swoop marker, then jump on the boss when it rests
-    if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
+    const bool trainCharge = boss.active && boss.kind == 4 && boss.charge && boss.aiming();
+    if (trainCharge) {
+        // the train drops beside us and charges through: stand still, out of the drop, and
+        // jump it when it is about 0.2 s away
+        in.right = in.left = false;
+        in.jumpPressed = false;
+        float dropDist = pl.cx() - boss.fromX;
+        if (std::fabs(dropDist) < boss.w / 2 + 1.5f) { in.right = dropDist > 0; in.left = !in.right; }
+        float dir = boss.toX > boss.fromX ? 1.0f : -1.0f;
+        float gap = (pl.cx() - boss.x) * dir - (boss.w + pl.w) / 2;
+        bool rolling = boss.dangerous() && std::fabs(boss.x - boss.fromX) > 0.05f;
+        if (rolling && pl.onGround && gap > 2.2f && gap < 3.6f) { in.jumpPressed = true; hold[p] = 20; }
+    } else if (boss.active && boss.aiming() && std::fabs(boss.toX - pl.cx()) < 3.0f) {
         in.right = pl.cx() > boss.toX;
         in.left = !in.right;
     }
-    // jump over the train as it charges along the line
-    if (boss.active && boss.dangerous() && boss.charge && pl.onGround && std::fabs(boss.x - pl.cx()) < 3.5f) { in.jumpPressed = true; hold[p] = 20; }
     if (boss.active && boss.state == 3) {
         in.right = boss.x > pl.cx();
         in.left = !in.right;
         if (pl.onGround && std::fabs(boss.x - pl.cx()) < 3.5f) { in.jumpPressed = true; hold[p] = 25; }
     }
-    if (std::rand() % 90 == 0 && pl.onGround) { in.jumpPressed = true; hold[p] = 10; }
+    if (!trainCharge && std::rand() % 90 == 0 && pl.onGround) { in.jumpPressed = true; hold[p] = 10; }
     return in;
 }
