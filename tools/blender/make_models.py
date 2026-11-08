@@ -363,8 +363,42 @@ def bake_ao(o):
     me.color_attributes.render_color_index = me.color_attributes.active_color_index
 
 
+# CC0 textures from Poly Haven (natural_walnut_veneer, 1k jpg), packed into the .glb. Their
+# files sit in assets/textures/ with the source note in assets/textures/SOURCES.md.
+TEX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "textures")
+FILE_TEXTURES = {
+    "walnut": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
+    "walnutEdge": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
+    "walnutFoot": os.path.join(TEX_DIR, "natural_walnut_veneer_diff_1k.jpg"),
+}
+
+
+def attach_file_textures(o):
+    """Uses a CC0 image file as the base colour of the materials in FILE_TEXTURES (no bake)."""
+    for m in o.data.materials:
+        if not m or m.name not in FILE_TEXTURES or not os.path.exists(FILE_TEXTURES[m.name]):
+            continue
+        img = bpy.data.images.load(os.path.abspath(FILE_TEXTURES[m.name]))
+        img.pack()
+        nt = m.node_tree
+        node = nt.nodes.new("ShaderNodeTexImage")
+        node.image = img
+        bsdf = nt.nodes.get("Principled BSDF")
+        for l in list(bsdf.inputs["Base Color"].links):
+            nt.links.remove(l)
+        # multiply by the material's own colour, so the veneer takes the walnut tone picked for it
+        mix = nt.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.blend_type = "MULTIPLY"
+        mix.inputs["Factor"].default_value = 1.0
+        mix.inputs["B"].default_value = (m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0)
+        nt.links.new(node.outputs["Color"], mix.inputs["A"])
+        nt.links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
+
+
 def bake_textures(o):
     """Bakes each material that has a procedural recipe into an image packed with the model."""
+    attach_file_textures(o)
     mats = [m for m in o.data.materials if m and m.name in RECIPES]
     if not mats:
         return
@@ -398,7 +432,14 @@ def bake_textures(o):
         for l in list(bsdf.inputs["Base Color"].links):
             nt.links.remove(l)
         bsdf.inputs["Base Color"].default_value = (1, 1, 1, 1)
-        nt.links.new(node.outputs["Color"], bsdf.inputs["Base Color"])
+        # multiply by the material's own colour, so the veneer takes the walnut tone picked for it
+        mix = nt.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.blend_type = "MULTIPLY"
+        mix.inputs["Factor"].default_value = 1.0
+        mix.inputs["B"].default_value = (m.diffuse_color[0], m.diffuse_color[1], m.diffuse_color[2], 1.0)
+        nt.links.new(node.outputs["Color"], mix.inputs["A"])
+        nt.links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
         for nd in list(nt.nodes):   # drop the procedural nodes
             if nd not in (node, bsdf) and nd.type != "OUTPUT_MATERIAL":
                 nt.nodes.remove(nd)
@@ -799,9 +840,6 @@ def clock():
     ivory = mat("ivory", 0xefe6cf, rough=0.6)
     ink = mat("clockInk", 0x1c1420, rough=0.5)
     inside = mat("clockInside", 0x1a100a, rough=0.9)
-    RECIPES["walnut"] = (walnut_recipe(rgb(0x48281a), rgb(0x6c4026)), 1024)
-    RECIPES["walnutEdge"] = (walnut_recipe(rgb(0x74482a), rgb(0x9e6a40)), 512)
-    RECIPES["walnutFoot"] = (walnut_recipe(rgb(0x301a10), rgb(0x4c2e1c)), 256)
     RECIPES["ivory"] = (ivory_recipe, 256)
 
     case = []
