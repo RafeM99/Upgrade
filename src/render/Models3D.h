@@ -3,6 +3,8 @@
 // cylinders, a torus) instead of drawn as flat sprites. Everything is made in code.
 #pragma once
 #include "raylib.h"
+#include <map>
+#include <set>
 #include <vector>
 
 class Game;
@@ -44,7 +46,35 @@ private:
     void grassTuft(float x, float y, float z, float h, int seed, Color c);
     void flowerClump(float x, float y, float z, int seed, float size, bool stems);
     bool clearAbove(Game& g, float x0, float x1);   // nothing solid stands above the path in columns x0..x1
-    void drawGardenFront(Game& g, float l, float r);   // 3D stage: beds, low hedge, path, puddle
+    void drawGardenFront(Game& g, float l, float r);
+    void bakeGround(Game& g, int x0, int x1, int mode);   // ground tiles x0..x1: mode 0 static (baked), 1 pulsing memory blocks (live)
+    void drawField(Game& g, float l, float r);        // the displaced mid-field behind the path (baked per chunk)
+    // Baked static meshes: part() calls made between bakeBegin/bakeEnd are merged (per texture) into
+    // one mesh per chunk of the world, built once and drawn with a few calls per frame.
+    struct BakeBatch { std::vector<float> p, n, uv; std::vector<unsigned char> c; };
+    struct BakedMesh { Mesh mesh{}; int tex = 0; float rim = 0, emis = 0; };
+    struct Chunk {
+        unsigned hash = 0; bool built = false, dirty = false;
+        std::vector<BakedMesh> meshes;
+        std::map<int, BakeBatch> batches;   // key: tex * 4 + rim + 2 * emissive
+        std::set<unsigned> seeds;           // flower clumps already in the chunk
+    };
+    std::map<long long, Chunk> chunks_;
+    bool rec_ = false;
+    int recTex_ = 0;                // 0 none, 1 grass, 2 earth, 3 rock (world-space planar UVs)
+    Chunk* recChunk_ = nullptr;
+    Model sphereLo_{}, sphereTiny_{};
+    Texture2D gtex_[4]{};
+    static long long chunkKey(int kind, int idx) { return kind * 1000000LL + idx + 500000; }
+    void bakeBegin(Chunk& c);
+    void bakeEnd();
+    void recordPart(Model& m, Matrix t, Color c, float emissive, bool rim);
+    void recordTri(Chunk& ch, int tex, int flags, const Vector3* p, const Vector3* n, Color c, float scale);
+    void uploadChunk(Chunk& c);
+    void drawChunk(Chunk& c);
+    void freeChunk(Chunk& c);
+    void trimChunks(int kind, int lo, int hi);
+    void drawFlowers();             // baked flower chunks near the camera   // 3D stage: beds, low hedge, path, puddle
     bool ready_ = false;
     Vector3 camPos_{0, 0, 50};   // this frame's camera, set by begin()
     bool rims_ = true;   // the 2.5D meadow draws its props without the rim light

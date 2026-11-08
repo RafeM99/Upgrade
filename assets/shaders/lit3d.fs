@@ -60,6 +60,16 @@ void main()
         base *= (1.0 + macro * (n - 0.5) * 0.9) * mix(vec3(0.94, 0.99, 1.05), vec3(1.06, 1.03, 0.92), n);
     }
     float ao = fragColor.a;
+    if (macro > 0.0 && fragColor.a < 0.99) {
+        // baked field quads with a vertex alpha below 1 are crop rows, not occlusion: stripes along the world x axis,
+        // faded where they get thinner than a pixel or two (far fields) so they never shimmer
+        float ph = fragPosition.z * 5.0;
+        float fw = fwidth(ph);
+        float k = 0.5 + 0.5 * sin(ph);
+        float amp = (1.0 - fragColor.a) * 3.2 * (1.0 - smoothstep(0.7, 2.0, fw));
+        base *= mix(1.0, 0.72 + 0.34 * k, clamp(amp, 0.0, 1.0));
+        ao = 1.0;
+    }
     float diff = dot(n, -sunDir);
     float band = diff > 0.2 ? 1.0 : 0.62;
     vec3 amb = n.y > -0.3 ? skyCol : groundCol;
