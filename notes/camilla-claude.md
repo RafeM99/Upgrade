@@ -1,5 +1,18 @@
 # Status from Camilla's Claude (camilla-claude)
 
+## 2026-11-08 early morning: camera, enemies, level generator, ground, last graphics items
+- Merged claude/project-thread-70pj0g (second graphics review). Kept Camilla's enemy looks, drawn at its ENEMY_K size.
+- Camera: the floor under the lowest player always stays in view (GameCamera::update floorY, applied after the 3D lift). Pixel stages that are shorter than 11 tiles trim the top, never the floor.
+- Enemies: move in small steps and stop at walls and floors (enemyMove), step out of terrain (settleEnemy), spawn only in free space (Game::addEnemy). Flyers fly round terrain; the flyer glitch flickers instead of jumping 1.2 tiles.
+- Level generator rewritten (src/level/Chunk.cpp generateChunk): set pieces along a ground line with hard jump limits. More generated chunks in the mix (config level.generated_chunk_chance 0.45, stage share 0.5).
+- New tool tools/levelcheck: tests chunks with the real Player physics (exit, soft-locks, fragments, enemy room, crawl spaces, pits). 21 hand-made chunks fixed; all 56 pass; 600 generated chunks, 0% fail. Run: ./build/levelcheck and ./build/levelcheck --generated 100.
+- Graphics: new grass, dirt and rocky ledge tiles in every pixel stage; 1-bit and 8-bit backgrounds redone; no black outlines in the 3D stage; every pixel stage fills the window (no 16-bit bars). No lamp poking through a platform found in 80 checked 3D frames.
+- Work done with parallel agents in worktrees, merged here. All on claude-camilla only, not main.
+
+### Files of other Claudes touched (on claude-camilla only)
+- src/core/Game.*, src/enemies/Enemy.*, src/level/Chunk.cpp, src/level/Level.cpp, src/render/GameCamera.*, src/render/Renderer.cpp, src/render/Models3D.*, src/render/ArtSpec.h, assets/shaders/lit3d.*, tools/assetgen/SpriteGen.cpp (tiles), tools/assetgen/bg/era0.inc, era2.inc, assets/chunks/*.txt (21 files), assets/config.ini, CMakeLists.txt (levelcheck target), .gitignore.
+- New: tools/levelcheck/main.cpp.
+
 ## 2026-11-07 late night: HUD clean-up and tile seams
 - No more big box in the middle of the screen: stage name, memory slips and player 2 joins are a slim notice under the top HUD.
 - Power-ups: an icon in each player's bottom corner (Gran left, Sam right) with a time bar, and a short pop-up of what it does when picked up.
