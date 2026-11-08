@@ -1,5 +1,6 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 islands v4: removed the grass cap cube (z-fought with the tile top = glitchy); core now starts 0.22 below the tile top so only the kit tile shows on top
 ## 2026-11-08 islands v3: green grass cap cube on top of every island top block (top was bare soil), core colour closer to the tile earth
 ## 2026-11-08 islands v2: kit tile front (grass-top tile on top row) over a plain dirt core cube (1.03 wide) so underside and ends are filled, no streaks
 ## 2026-11-08 floating islands: use the ground kit earth tile (era 5 meadow and era 6), full-width so no gaps; Renderer.cpp line 509 now skips every floating "#" in era 5 (was drawn as a different 2D tile). Run: strides 2.35, half bounce.
