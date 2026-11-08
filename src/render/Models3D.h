@@ -30,7 +30,7 @@ private:
     int locView_ = -1, locEmissive_ = -1, locRim_ = -1;
     int locLightPos_ = -1, locLightCol_ = -1, locLightRad_ = -1;
     int locSunDir_ = -1, locSunCol_ = -1, locSkyCol_ = -1, locGroundCol_ = -1;
-    int locBlend_ = -1, locGrey_ = -1;
+    int locBlend_ = -1, locGrey_ = -1, locMetal_ = -1, locUseTex_ = -1;
     // Applied to every part drawn until changed: blend the lit colour towards blend_.xyz by
     // blend_.w (hit flash, the wool's pale tips) and take out grey_ of the colour (faded).
     Vector4 blend_{0, 0, 0, 0};

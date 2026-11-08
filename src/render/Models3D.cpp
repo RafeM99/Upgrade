@@ -57,6 +57,8 @@ void Models3D::init()
     locGroundCol_ = GetShaderLocation(sh_, "groundCol");
     locBlend_ = GetShaderLocation(sh_, "blendCol");
     locGrey_ = GetShaderLocation(sh_, "grey");
+    locMetal_ = GetShaderLocation(sh_, "metallic");
+    locUseTex_ = GetShaderLocation(sh_, "useTexture");
     setLight(false);
 
     cube_ = LoadModelFromMesh(GenMeshCube(1, 1, 1));
@@ -103,7 +105,14 @@ void Models3D::loadParts(Model* out, const char* const* names, int n, bool& read
         if (!FileExists(path.c_str())) { unloadParts(out, i, ready); return; }
         out[i] = LoadModel(path.c_str());
         if (out[i].meshCount == 0) { UnloadModel(out[i]); unloadParts(out, i, ready); return; }
-        for (int k = 0; k < out[i].materialCount; ++k) out[i].materials[k].shader = sh_;
+        for (int k = 0; k < out[i].materialCount; ++k) {
+            out[i].materials[k].shader = sh_;
+            Texture2D& tex = out[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture;
+            if (tex.id > 0 && tex.id != rlGetTextureIdDefault()) {   // a baked texture: mipmapped
+                GenTextureMipmaps(&tex);
+                SetTextureFilter(tex, TEXTURE_FILTER_TRILINEAR);
+            }
+        }
     }
     ready = true;
 }
@@ -120,15 +129,33 @@ void Models3D::unloadParts(Model* parts, int n, bool& ready)
 }
 
 // A Blender part: its own material colours, times the tint (for fading and hit flashes), with
-// the lighter rim along its silhouette.
+// the lighter rim along its silhouette. Drawn mesh by mesh (one per material) so each material
+// sets its own metallic (the toon highlight), emissive (a glTF emissive colour draws unlit) and
+// whether it has a baked texture. Afterwards the uniforms are put back for the primitives.
 void Models3D::modelPart(Model& m, Matrix t, Color tint, bool rim)
 {
     float zero = 0.0f, r = rim && rims_ ? 1.0f : 0.0f;
-    SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
     SetShaderValue(sh_, locRim_, &r, SHADER_UNIFORM_FLOAT);
     pushLook();
-    m.transform = t;
-    DrawModel(m, {0, 0, 0}, 1.0f, tint);
+    for (int i = 0; i < m.meshCount; ++i) {
+        Material mt = m.materials[m.meshMaterial[i]];
+        const Color e = mt.maps[MATERIAL_MAP_EMISSION].color;
+        float metal = mt.maps[MATERIAL_MAP_METALNESS].value;
+        float emis = (e.r | e.g | e.b) ? 1.0f : 0.0f;
+        float useTex = mt.maps[MATERIAL_MAP_DIFFUSE].texture.id != rlGetTextureIdDefault() ? 1.0f : 0.0f;
+        SetShaderValue(sh_, locMetal_, &metal, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(sh_, locEmissive_, &emis, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(sh_, locUseTex_, &useTex, SHADER_UNIFORM_FLOAT);
+        Color& c = mt.maps[MATERIAL_MAP_DIFFUSE].color;   // maps are shared: tint, draw, put back
+        const Color keep = c;
+        c = Color{(unsigned char)(c.r * tint.r / 255), (unsigned char)(c.g * tint.g / 255),
+                  (unsigned char)(c.b * tint.b / 255), (unsigned char)(c.a * tint.a / 255)};
+        DrawMesh(m.meshes[i], mt, t);
+        c = keep;
+    }
+    SetShaderValue(sh_, locMetal_, &zero, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locEmissive_, &zero, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(sh_, locUseTex_, &zero, SHADER_UNIFORM_FLOAT);
 }
 
 void Models3D::pushLook()
@@ -1053,8 +1080,8 @@ void Models3D::drawClockModel(Game& g, const Enemy& e)
 {
     (void)g;
     // pivots of the Blender parts (printed by make_models.py)
-    const float FOOT_H = 0.0837f, PEND_X = 0.044f, PEND_Y = 0.8808f, DIAL_X = 0.1568f, DIAL_Y = 1.3124f;
-    const float FACE_X = 0.1515f, FACE_Y = 1.503f;
+    const float FOOT_H = 0.0984f, PEND_X = 0.0518f, PEND_Y = 1.0363f, DIAL_X = 0.1845f, DIAL_Y = 1.5440f;
+    const float FACE_X = 0.1782f, FACE_Y = 1.772f;
     float a = e.dead ? std::max(0.0f, 1 - e.deadTime / 0.45f) : 1.0f;
     Color tint = withA(WHITE, a);
     Vector4 look{0, 0, 0, 0};
