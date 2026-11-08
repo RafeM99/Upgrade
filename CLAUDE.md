@@ -11,6 +11,7 @@ Four Claudes work in this repo, one for each person on the team. Work with each 
 | Camilla | RafeM99 | claude-camilla | notes/camilla-claude.md |
 | Rafale | Jokerman200 | to be agreed (notes/rafale-mac.md is current) | notes/rafale-mac.md |
 | Rafale (cloud thread) | Jokerman200 | claude/project-thread-y8u0w2 | notes/rafale-cloud-claude.md |
+| Rafale (UI changes thread) | Jokerman200 | claude/project-thread-e2fqcf | notes/rafale-ui-claude.md |
 | Teammate 3 | add here | claude-<name> | notes/<name>-claude.md |
 | Teammate 4 | add here | claude-<name> | notes/<name>-claude.md |
 

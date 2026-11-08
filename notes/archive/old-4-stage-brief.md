@@ -1,3 +1,6 @@
+> OUTDATED. This is the first brief from the start of the jam (4 stages). The game now has 7 stages
+> and Gran's story: see CLAUDE.md, PLAY.md and the status files in notes/. Kept here for history only.
+
 # CLAUDE.md — "Upgrade" · Game Jam 2026 Project Brief
 
 You are helping a team build a game for **GameJam 2026**, a 24-hour game jam.

@@ -31,6 +31,9 @@ void Audio::init()
             hasMusic_[e] = true;
         }
     }
+    std::string bp = assetPath("audio/boss_loop.wav"), tp = assetPath("audio/melody_title.wav");
+    if (FileExists(bp.c_str())) { boss_ = LoadMusicStream(bp.c_str()); boss_.looping = true; hasBoss_ = true; }
+    if (FileExists(tp.c_str())) { title_ = LoadMusicStream(tp.c_str()); title_.looping = true; hasTitle_ = true; }
     era_ = 0;
     vol_[0] = 1;
     if (hasMusic_[0]) PlayMusicStream(music_[0]);
@@ -43,6 +46,8 @@ void Audio::shutdown()
         for (auto& kv : sfx_[e]) UnloadSound(kv.second);
         if (hasMusic_[e]) UnloadMusicStream(music_[e]);
     }
+    if (hasBoss_) UnloadMusicStream(boss_);
+    if (hasTitle_) UnloadMusicStream(title_);
     CloseAudioDevice();
     ready_ = false;
 }
@@ -58,6 +63,19 @@ void Audio::setEra(int era)
 void Audio::update(float dt)
 {
     if (!ready_) return;
+    // the two special tracks fade in over the stage music, and out again
+    auto fade = [&](Music& m, bool has, bool want, float& vol, float secs) {
+        if (!has) return;
+        vol += std::max(-dt / secs, std::min(dt / secs, (want ? 1.0f : 0.0f) - vol));
+        if (vol > 0 && !IsMusicStreamPlaying(m)) PlayMusicStream(m);
+        if (vol <= 0) { if (IsMusicStreamPlaying(m)) StopMusicStream(m); return; }
+        SetMusicVolume(m, vol * musicVolume_ * duck_);
+        UpdateMusicStream(m);
+    };
+    fade(boss_, hasBoss_, wantBoss_ && !wantTitle_, bossVol_, 1.0f);
+    fade(title_, hasTitle_, wantTitle_, titleVol_, 0.4f);
+    // stage music must be gone almost at once, or it plays over the title melody
+    const float special = std::max(bossVol_, std::min(1.0f, titleVol_ * 4.0f));
     for (int e = 0; e < 4; ++e) {
         if (!hasMusic_[e]) continue;
         float target = e == era_ ? 1.0f : 0.0f;
@@ -66,7 +84,7 @@ void Audio::update(float dt)
             if (IsMusicStreamPlaying(music_[e])) StopMusicStream(music_[e]);
             continue;
         }
-        SetMusicVolume(music_[e], vol_[e] * musicVolume_ * duck_);
+        SetMusicVolume(music_[e], vol_[e] * (1.0f - special) * musicVolume_ * duck_);
         UpdateMusicStream(music_[e]);
     }
 }

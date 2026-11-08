@@ -246,9 +246,19 @@ static void e4_sky(Scene& sc)
     const int W = sc.W, H = sc.H;
     const uint32_t bands[9] = {0x3c78cc, 0x4282d2, 0x4a8cd8, 0x5496de, 0x60a2e4, 0x6eaee8, 0x82bcec, 0x9ccaf0, 0xb6d8f2};
     const float edges[10] = {0, 0.1f, 0.19f, 0.27f, 0.34f, 0.40f, 0.46f, 0.52f, 0.58f, 1.0f};
+    // the bands meet in a dithered seam: over 6 rows each edge mixes the next band in with a 4 x 4 ordered
+    // matrix (a stepped gradient with no hard lines, still pixel art)
+    static const int bayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
     for (int i = 0; i < 9; ++i) {
         int y0 = (int)(H * edges[i]), y1 = (int)(H * edges[i + 1]);
         e4_rect(sc, 0, y0, W, y1 - y0, hex(bands[i]));
+        if (i == 0) continue;
+        for (int y = y0 - 3; y < y0 + 3; ++y) {
+            int d = y - (y0 - 3);   // 0..5, the row's share of the lower band
+            for (int x = 0; x < W; ++x)
+                if (((d * 2 + 1) * 16 / 12) > bayer[y & 3][x & 3]) e4_px(sc, x, y, hex(bands[i]));
+                else e4_px(sc, x, y, hex(bands[i - 1]));
+        }
     }
     // the sun: a pale stepped disc with a soft ring, blocks of 2
     float sx = W * 0.79f, sy = H * 0.22f;

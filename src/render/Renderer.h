@@ -34,7 +34,7 @@ private:
     int locShades_ = -1;
     Shader post_{}, world_{}, haze_{};
     int locHazeCol_ = -1, locHazeAmt_ = -1;
-    int locEra_ = -1, locTime_ = -1, locSize_ = -1, locOut_ = -1, locFlash_ = -1, locDesat_ = -1, locPal_ = -1;
+    int locEra_ = -1, locTime_ = -1, locSize_ = -1, locFlash_ = -1, locDesat_ = -1, locPal_ = -1;
     int locMosaic_ = -1, locGlitch_ = -1;
     int renderEra_ = 0;
     int oldEra_ = -1;                            // also drawn this frame (transition), or -1

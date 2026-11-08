@@ -55,9 +55,12 @@ Theme th;
 void setup(Game& g)
 {
     Rectangle r = g.renderer.screenRect();
-    S = r.height / 720.0f;
-    OX = r.x;
-    OY = r.y;
+    // the legacy screens are a 1280 x 720 page: as tall as the game image, unless that would make
+    // it wider than the image (a window narrower than 16:9), then as wide; centred either way.
+    // (On a 16:9 window this is exactly the image.)
+    S = std::min(r.height / 720.0f, r.width / 1280.0f);
+    OX = r.x + std::floor((r.width - 1280.0f * S) / 2);
+    OY = r.y + std::floor((r.height - 720.0f * S) / 2);
     X0 = (int)std::lround(r.x);
     Y0 = (int)std::lround(r.y);
     W = (int)std::lround(r.width);
@@ -77,11 +80,14 @@ void setup(Game& g)
         default: th.U = k; th.tb = atLeast1(k * 3 / 2); th.ts = k; th.bt = 2 * k; break;
         }
     } else {
-        const int s = std::max(1, (int)std::lround(r.height / 720.0f));
-        th.U = 2 * s;   // modern stages: 2 px lines
-        th.tb = 3 * s;
-        th.ts = 2 * s;
-        th.bt = 4 * s;
+        // proportional to the height (1080 gave scale 2 from a rounded 1.5, so the text was a third
+        // too big and the centre panel's lines overlapped): 720 -> 2/3/2/4, 1080 -> 3/5/3/6
+        const float hs = r.height / 720.0f;
+        auto sc = [hs](float v) { return std::max(1, (int)std::lround(v * hs)); };
+        th.U = sc(2);   // modern stages: 2 px lines
+        th.tb = sc(3);
+        th.ts = sc(2);
+        th.bt = sc(4);
     }
     // Player names use the small text size on every stage, so each player panel is just a line
     // of name and a line of chips.
@@ -351,10 +357,12 @@ int lineW(const Line& l)
     return l.empty() ? 0 : w - chipGap();
 }
 
+bool stripMode = false;   // set while the 1-bit/4-shade strip lays out
 std::vector<Line> detailLines(Game& g, const PView& v, int maxW)
 {
     std::vector<Line> out;
-    if (!v.joined) maxW = std::max(maxW, textW(T("p2_join_2"), th.ts));   // keep the join prompt on one line
+    // the join prompt stays on one line in the boxed layouts (they size to it); the strip has no room and wraps it, or it ran under the centre block
+    if (!v.joined && !stripMode) maxW = std::max(maxW, textW(T("p2_join_2"), th.ts));
     auto textLines = [&](const std::string& s) { for (auto& l : wrap(s, th.ts, maxW)) out.push_back({{l, false}}); };
     if (!v.joined) { textLines(T("p2_join_2")); return out; }
     if (v.faded) {
@@ -488,8 +496,10 @@ void centreBlock(Game& g, int x, int y, int w, int barH, Color pctCol)
         right = stX - centreSep();
     } else {
         int y2 = y + rh + centreRowGap();
-        txt(st, x, y2, th.ts, th.dim);
-        txt(sc, x + w - textW(sc, th.ts), y2, th.ts, th.fg);
+        // a narrow (4:3) window: the two would touch, so the second row drops one text size
+        const int ts2 = textW(st, th.ts) + textW(sc, th.ts) + 3 * th.ts <= w ? th.ts : std::max(1, th.ts - 1);
+        txt(st, x, y2 + (capH(th.ts) - capH(ts2)) / 2, ts2, th.dim);
+        txt(sc, x + w - textW(sc, ts2), y2 + (capH(th.ts) - capH(ts2)) / 2, ts2, th.fg);
     }
     txt(pct, right - textW(pct, th.ts), ty, th.ts, pctCol);
     const int barX = x + labW + lg;
@@ -499,6 +509,7 @@ void centreBlock(Game& g, int x, int y, int w, int barH, Color pctCol)
 // 1-bit and 4-shade: one full-width strip along the top.
 int stripLayout(Game& g, bool bottom)
 {
+    struct Mode { Mode() { stripMode = true; } ~Mode() { stripMode = false; } } mode;
     const int U = th.U, pad = 2 * U, side = 4 * U;
     PView a = view(g, 0), b = view(g, 1);
     std::string line2 = stageText(g) + "   " + scoreText(g);
@@ -879,7 +890,9 @@ void Hud::drawEnding(Game& g)
         float zoom = 1.0f + lt / slide * 0.08f;
         Texture2D tex = g.art.ending[i];
         Rectangle scr = g.renderer.screenRect();
-        float w = scr.width * zoom, h = scr.height * zoom;
+        // cover the game image without stretching the 16:9 picture (a 16:9 window: exactly the image)
+        float fit = std::max(scr.width / tex.width, scr.height / tex.height);
+        float w = tex.width * fit * zoom, h = tex.height * fit * zoom;
         DrawTexturePro(tex, Rectangle{0, 0, (float)tex.width, (float)tex.height},
                        Rectangle{scr.x - (w - scr.width) / 2, scr.y - (h - scr.height) / 2, w, h}, {0, 0}, 0, fade(WHITE, a));
         DrawRectangleRec(R(0, 600, 1280, 120), fade(BLACK, 0.5f * a));
