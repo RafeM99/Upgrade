@@ -124,7 +124,7 @@ quit = Quit to title
 pause_hint = Up/Down (or stick / d-pad) to choose, Enter or A to pick, B to go back
 
 credits_title = UPGRADE
-credits = Made in 24 hours for GameJam 2026\n\nCamilla\nRafale\nTeammate 3\nTeammate 4\n\nTheme: Time\n\nAll art and sound made in code
+credits = Made in 24 hours for GameJam 2026\n\nRafe\nRafael\nSai\nSai\nAkki\nSohan\n\nTheme: Time\n\nAll art and sound made in code
 thanks = Thank you for remembering with her.
 ending_continue = Press any button
 
