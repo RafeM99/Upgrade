@@ -300,7 +300,7 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
     case 0: {   // enter from the top right
         float k = ease(stateTime / 1.6f);
         x = fromX + (hoverX - fromX) * k;
-        y = fromY + (4.0f - fromY) * k;
+        y = fromY + (6.0f - fromY) * k;
         if (stateTime > 1.6f) { state = 1; stateTime = 0; }
         break;
     }
@@ -308,15 +308,15 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         if (kind == 0) {
             // the clock ticks: it jumps from place to place twice a second
             if (std::fmod(t, 0.5f) < dt) x += (hoverX + std::sin(t * 0.9f) * 3 - x) * 0.6f;
-            y = 4.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
+            y = 6.0f + (((int)(t * 2)) % 2 ? 0.3f : -0.3f);
         } else if (kind == 1) {
             // the shirt flutters wide and slow, like washing in the wind
             x += (hoverX + std::sin(t * 0.6f) * 5 - x) * 1.5f * dt;
-            y = 4.0f + std::sin(t * 1.3f) * 1.0f;
+            y = 6.0f + std::sin(t * 1.3f) * 1.0f;
         } else {
             // the train keeps up with the camera, so it never hangs back off screen
             x += (hoverX + std::sin(t * 0.9f) * 3 - x) * (kind == 4 ? 5.0f : 2.0f) * dt;
-            y = 4.0f + std::sin(t * 2.0f) * 0.6f;
+            y = 6.0f + std::sin(t * 2.0f) * 0.6f;
         }
         spawnTimer -= dt;
         if (spawnTimer <= 0 && era >= 1) { wantsSpawn = true; spawnTimer = (4.5f - era * 0.5f) * (kind == 5 ? 0.7f : 1.0f); }
@@ -363,7 +363,7 @@ void Boss::update(float dt, float camLeft, float camRight, const Level& level, c
         break;
     case 4: {   // rise again
         float k = ease(stateTime / 0.8f);
-        y = fromY + (4.0f - fromY) * k;
+        y = fromY + (6.0f - fromY) * k;
         x += (hoverX - x) * 1.5f * dt;
         if (stateTime > 0.8f) { state = 1; stateTime = 0; }
         break;
