@@ -1,5 +1,9 @@
 # Status from Rafale's "UI changes" Claude
 
+## 2026-11-08 run animation
+- Done: running body turn 0.18→0.38 rad off side view (less 'into the wall', turned toward camera); stride phase rate 3.4→2.6 per metre (longer strides); thigh swing 0.9→1.15.
+- Notes: Models3D.cpp drawPersonModel only; not viewed in motion.
+
 ## 2026-11-08 title music fix
 - Done: title melody now 44.1 kHz (was 48 kHz), silent intro trimmed, short fade-out at the loop seam; stage music is muted within 0.1 s on the title screen and the melody fades in over 0.4 s (was a 1.2 s overlap with the era music).
 - To do: raf to listen; cloud has no audio device.

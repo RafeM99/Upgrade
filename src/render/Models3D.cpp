@@ -1670,16 +1670,16 @@ void Models3D::drawPersonModel(Game& g, int p)
     bool running = pl.onGround && std::fabs(pl.vx) > 0.6f;
     float dtp = std::max(0.0f, std::min(0.1f, g.time - lastT_[p]));
     lastT_[p] = g.time;
-    if (running) runPhase_[p] += 3.4f * std::fabs(pl.vx) * dtp;
+    if (running) runPhase_[p] += 2.6f * std::fabs(pl.vx) * dtp;
     runBlend_[p] += std::max(-1.0f, std::min(1.0f, ((running ? 1.0f : 0.0f) - runBlend_[p]) * 9.0f * dtp));
-    float yawOff = 0.52f - 0.34f * runBlend_[p];
+    float yawOff = 0.52f - 0.14f * runBlend_[p];
     float yaw = pl.facing > 0 ? -yawOff : PI + yawOff;
     float ph = runPhase_[p] + p * 1.3f;
     float run = running ? std::min(1.0f, std::fabs(pl.vx) / 4.0f + 0.4f) : 0.0f;
     float s = std::sin(ph), c = std::cos(ph);
 
     // joint angles (radians); positive swings a limb forward (+X)
-    float thighF = 0.9f * s * run, thighB = -0.9f * s * run;
+    float thighF = 1.15f * s * run, thighB = -1.15f * s * run;
     float kneeF = -(0.25f + std::max(0.0f, -c) * 1.2f) * run, kneeB = -(0.25f + std::max(0.0f, c) * 1.2f) * run;
     float armF = -0.6f * s * run - 0.05f, armB = 0.6f * s * run - 0.05f;
     float elbow = 0.25f + 1.15f * run;
