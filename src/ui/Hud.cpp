@@ -646,18 +646,22 @@ int bossBar(Game& g, int top)
     fill(bx, by, bw, barH, tc);
     fill(bx, by, (int)(bw * k), barH, fc);
     if (th.era == 0) { fill(bx, by, bw, U, th.fg); fill(bx, by + barH - U, bw, U, th.fg); fill(bx, by, U, barH, th.fg); fill(bx + bw - U, by, U, barH, th.fg); }
-    if (g.boss.state == 3 && blink(g, 8) > 0) {
-        std::string hnt = T("boss_hint");
-        txt(hnt, (W - textW(hnt, th.ts)) / 2, y + h + 2 * U, th.ts, fade(th.era == 6 ? th.fg : (th.era == 1 ? th.fg : WHITE), blink(g, 8)));
-    }
+    // the hint and the power line each sit on a slim panel of their own: pale words straight
+    // over the sky could not be read
+    const int lp = 2 * U, lineH = capH(th.ts) + 2 * lp, lineStep = lineH + U;
+    auto line = [&](const std::string& s, int ly, Color c) {
+        int lw = snap(textW(s, th.ts) + 2 * lp + U - 1), lx = snap((W - lw) / 2);
+        panel(lx, ly, lw, lineH);
+        txt(s, lx + lp, ly + lp, th.ts, c);
+    };
+    if (g.boss.state == 3 && blink(g, 8) > 0)
+        line(T("boss_hint"), y + h + U, th.era == 6 ? th.fg : (th.era == 1 ? th.fg : WHITE));
     // the boss's time power: its warning, then its name
     if (g.powers.labelT > 0 && !g.powers.label.empty()) {
-        const std::string& pl = g.powers.label;
-        int py = y + h + 2 * U + capH(th.ts) + 3 * U;
         Color pc = th.era <= 1 ? th.fg : (th.era == 6 ? hexc(0x8a3ab0) : hexc(0xe0b0ff));
-        txt(pl, (W - textW(pl, th.ts)) / 2, py, th.ts, pc);
+        line(g.powers.label, y + h + U + lineStep, pc);
     }
-    return y + h + 2 * U + 2 * (capH(th.ts) + 3 * U);   // under the hint and power lines
+    return y + h + U + 2 * lineStep;   // under the hint and power lines
 }
 
 // A short message (stage name, memory slips, player 2 joins): a slim notice just under the top
