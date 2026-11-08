@@ -269,6 +269,11 @@ void Boss::start(float camX, int era, int hpBase, int hpPerEra, int kind_)
 {
     active = true;
     kind = kind_;
+    // Hitbox. The 3D Forgetting (stage 6) is a ball of wool with yarn hanging below; its box covers
+    // the ball (top) down to the strand tips, so it matches the model drawn in Models3D::drawForgetting
+    // (scale 1.1: ball 2.1 wide, strands to about 2.3 below its centre). The 2D bosses keep 2.4 x 2.2.
+    if (kind == 6) { w = 2.4f; h = 3.5f; }
+    else { w = 2.4f; h = 2.2f; }
     landed = false;
     defeated = false;
     maxHp = hp = hpBase + era * hpPerEra;
